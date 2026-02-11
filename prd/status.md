@@ -18,6 +18,7 @@
 - [x] App Selector Integration (Dedicated AppListScreen)
 - [x] Native UI Upgrade (Buttons + Dynamic Shame Copy)
 - [x] Focus Score Visualization (Animated Card with Rank Titles)
+- [x] Focus Score Detail Page (Tap-through analytics/explainer screen)
 - [x] Blocking Sync Fix (Schedules now properly enforce on Android)
 - [x] Native Persistence (SharedPreferences storage for service restarts)
 - [x] Loop Hardening (Timestamp-based event tracking)
@@ -37,13 +38,20 @@
 - [x] Outcome Enforcement (Native Stand-Down)
 - [x] Judgment Siren
 - [x] Account Management (Profile & Deletion)
+- [x] Global Nickname Editing (Profile bottom-sheet editor + Firestore update)
+- [x] Squad Topbar Copy Action (Copy squad code directly from Squad HUD)
 - [x] Focus Score Algorithm (Decay & Reward)
 - [x] Native Bridge Synchronization
 - [x] Firestore Rule Alignment
+- [x] Firebase Auth (Google Sign-In)
+- [x] Smart Onboarding Resume (Skip/rejoin flow based on squad + profile state)
+- [x] Onboarding UI Refinements (Input consistency, slider/time styling, copy interactions)
+- [x] Reality Check Cleanup (Centered duration + system-app filtering)
+- [x] Category Bulk Selection (Select/Deselect all by category header)
 
 ## In Progress
-- [ ] Firebase Auth (Google Sign-In)
-- [ ] The Reckoning Onboarding (Reality Check + Alias)
+- [ ] Onboarding Final Polish (copy tuning + micro-interactions)
+- [ ] Website Blocker Flow Consolidation (single-source bottom sheet behavior)
 - [x] Social Hard-Lock (Squad Invites)
 
 ## Backlog
