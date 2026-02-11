@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../home/focus_score_detail_screen.dart';
 
 class FocusScoreCard extends StatefulWidget {
   const FocusScoreCard({super.key});
@@ -46,10 +47,10 @@ class _FocusScoreCardState extends State<FocusScoreCard>
   }
 
   String get _rankTitle {
-    if (_score >= 900) return 'MONK MODE 🧘';
-    if (_score >= 700) return 'LOCKED IN 🔒';
-    if (_score >= 400) return 'MID 😐';
-    return 'COOKED 💀';
+    if (_score >= 900) return 'MONK MODE';
+    if (_score >= 700) return 'LOCKED IN';
+    if (_score >= 400) return 'MID';
+    return 'COOKED';
   }
 
   Color get _rankColor {
@@ -61,82 +62,100 @@ class _FocusScoreCardState extends State<FocusScoreCard>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppTheme.darkGrey, AppTheme.black],
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const FocusScoreDetailScreen()),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppTheme.darkGrey, AppTheme.black],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: _rankColor.withOpacity(0.3), width: 2),
+          boxShadow: _score >= 900
+              ? [
+                  BoxShadow(
+                    color: AppTheme.orange.withOpacity(0.3),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : [],
         ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _rankColor.withOpacity(0.3), width: 2),
-        boxShadow: _score >= 900
-            ? [
-                BoxShadow(
-                  color: AppTheme.orange.withOpacity(0.3),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                ),
-              ]
-            : [],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'FOCUS SCORE',
-            style: GoogleFonts.spaceGrotesk(
-              color: AppTheme.orange,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 3,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              AnimatedBuilder(
-                animation: _animation,
-                builder: (context, child) {
-                  return Text(
-                    '${_animation.value}',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'FOCUS SCORE',
                     style: GoogleFonts.spaceGrotesk(
-                      color: _rankColor,
-                      fontSize: 72,
-                      fontWeight: FontWeight.w900,
-                      height: 1,
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _rankTitle,
-                    style: GoogleFonts.spaceGrotesk(
-                      color: _rankColor,
-                      fontSize: 16,
+                      color: AppTheme.orange,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
+                      letterSpacing: 3,
                     ),
                   ),
-                  Text(
-                    '▲ 12% this week',
-                    style: GoogleFonts.jetBrainsMono(
-                      color: const Color(0xFF00FF00),
-                      fontSize: 10,
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: AppTheme.lightGrey.withOpacity(0.9),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                AnimatedBuilder(
+                  animation: _animation,
+                  builder: (context, child) {
+                    return Text(
+                      '${_animation.value}',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: _rankColor,
+                        fontSize: 72,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _rankTitle,
+                      style: GoogleFonts.spaceGrotesk(
+                        color: _rankColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
+                    Text(
+                      'UP 12% THIS WEEK',
+                      style: GoogleFonts.jetBrainsMono(
+                        color: const Color(0xFF00FF00),
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

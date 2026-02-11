@@ -67,19 +67,19 @@ class _PermissionScreenState extends State<PermissionScreen>
             children: [
               const SizedBox(height: 40),
               Text(
-                'GRANT GOD MODE',
+                'REVOKE IS BLIND.',
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.white,
+                  color: AppTheme.deepRed, // Make it alarming
                   letterSpacing: -1,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'REVOKE NEEDS DEEP ACCESS TO GUARD YOUR FOCUS.',
+                'YOU REVOKED OUR ACCESS. WE CANNOT SEE YOUR SINS.',
                 style: GoogleFonts.jetBrainsMono(
-                  color: AppTheme.orange,
+                  color: AppTheme.white,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
@@ -103,27 +103,12 @@ class _PermissionScreenState extends State<PermissionScreen>
               const Spacer(),
               SizedBox(
                 width: double.infinity,
-                height: 64,
                 child: ElevatedButton(
                   onPressed: (_hasUsageStats && _hasOverlay)
                       ? () => context.go('/home')
                       : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.white,
-                    foregroundColor: AppTheme.black,
-                    disabledBackgroundColor: AppTheme.darkGrey,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'CONTINUE',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                    ),
-                  ),
+                  style: AppTheme.primaryButtonStyle,
+                  child: const Text('RESTORE VISION'),
                 ),
               ),
             ],
@@ -179,22 +164,15 @@ class _PermissionScreenState extends State<PermissionScreen>
           ),
           const SizedBox(width: 16),
           if (isGranted)
-            const CircleAvatar(
-              backgroundColor: Colors.greenAccent,
-              child: Icon(Icons.check, color: AppTheme.black),
-            )
+            const Icon(Icons.check_circle, color: Colors.greenAccent)
           else
             ElevatedButton(
               onPressed: onGrant,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
+              style: AppTheme.secondaryButtonStyle.copyWith(
+                padding: const MaterialStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                backgroundColor: const MaterialStatePropertyAll(AppTheme.black),
               ),
               child: Text(
                 'GRANT',

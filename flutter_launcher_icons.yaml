@@ -1,0 +1,8 @@
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/branding/icon_source.png"
+  adaptive_icon_background: "#FF4500"
+  adaptive_icon_foreground: "assets/branding/icon_source.png"
+  remove_alpha_ios: true
+  min_sdk_android: 21

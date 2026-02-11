@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isCurrentSquadMember() {
+      return signedIn() &&
+        resource.data.memberIds is list &&
+        resource.data.memberIds.hasAny([request.auth.uid]);
+    }
+
+    function isResultingSquadMember() {
+      return signedIn() &&
+        request.resource.data.memberIds is list &&
+        request.resource.data.memberIds.hasAny([request.auth.uid]);
+    }
+
+    // User profiles
+    match /users/{userId} {
+      // Needed for squad HUD/scoreboards
+      allow read: if signedIn();
+
+      // Own profile management (create/update/delete account doc)
+      allow create, update, delete: if isSelf(userId);
+    }
+
+    // Squad collaboration
+    match /squads/{squadId} {
+      allow create, read: if signedIn();
+
+      // Allows joining/leaving/updating squad membership for authenticated users
+      // and supports deleting an emptied squad during account delete/leave flow.
+      allow update, delete: if isCurrentSquadMember() || isResultingSquadMember();
+    }
+
+    // Plea creation/voting
+    match /pleas/{pleaId} {
+      allow create, read, update: if signedIn();
+    }
+    
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

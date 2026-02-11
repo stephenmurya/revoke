@@ -27,6 +27,7 @@ class AppMonitorService : Service() {
     private var lastKnownForegroundPackage: String = ""
     private var lastLoggedApp: String = ""
     private var activeSchedules: java.util.concurrent.CopyOnWriteArrayList<org.json.JSONObject> = java.util.concurrent.CopyOnWriteArrayList()
+    private val tempUnlockedPackages = mutableMapOf<String, Long>()
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
@@ -90,14 +91,34 @@ class AppMonitorService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "com.revoke.app.SYNC_SCHEDULES") {
-            val schedulesJson = intent.getStringExtra("schedules")
-            if (schedulesJson != null) {
-                updateSchedules(schedulesJson)
+        when (intent?.action) {
+            "com.revoke.app.SYNC_SCHEDULES" -> {
+                val schedulesJson = intent.getStringExtra("schedules")
+                if (schedulesJson != null) {
+                    updateSchedules(schedulesJson)
+                }
+            }
+            "com.revoke.app.TEMP_UNLOCK" -> {
+                val pkg = intent.getStringExtra("packageName")
+                val mins = intent.getIntExtra("minutes", 5)
+                if (pkg != null) {
+                    val expiry = System.currentTimeMillis() + (mins * 60 * 1000)
+                    tempUnlockedPackages[pkg] = expiry
+                    android.util.Log.d("RevokeMonitor", "Temporarily unlocking $pkg for $mins minutes.")
+                }
             }
         }
         // Loop already started in onCreate()
         return START_STICKY
+    }
+
+    private fun checkTempUnlock(packageName: String): Boolean {
+        val expiry = tempUnlockedPackages[packageName] ?: return false
+        if (System.currentTimeMillis() > expiry) {
+            tempUnlockedPackages.remove(packageName)
+            return false
+        }
+        return true
     }
 
     private fun updateSchedules(json: String) {
@@ -187,7 +208,7 @@ class AppMonitorService : Service() {
                 val restrictedAppName = getRestrictedAppName(lastKnownForegroundPackage, shouldLogLogic)
                 if (restrictedAppName != null) {
                     if (shouldLogLogic) android.util.Log.d("RevokeMonitor", "Blocking $restrictedAppName")
-                    showBlockerOverlay(restrictedAppName)
+                    showBlockerOverlay(restrictedAppName, lastKnownForegroundPackage)
                 } else {
                     hideBlockerOverlay()
                 }
@@ -201,6 +222,10 @@ class AppMonitorService : Service() {
     }
 
     private fun getRestrictedAppName(packageName: String, shouldLog: Boolean): String? {
+        if (checkTempUnlock(packageName)) {
+            if (shouldLog) android.util.Log.d("RevokeLogic", "App $packageName is temporarily unlocked.")
+            return null
+        }
         val calendar = java.util.Calendar.getInstance()
         val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
         val modelDay = if (dayOfWeek == 1) 7 else dayOfWeek - 1
@@ -310,9 +335,65 @@ class AppMonitorService : Service() {
                     if (shouldLog && !isLauncher) android.util.Log.d("RevokeLogic", "Schedule $index: ✗ Time outside range")
                 }
             } else if (type == 1) { // UsageLimit
-                if (System.currentTimeMillis() / 1000 % 2 == 0L) {
+                val limitMinutes = when {
+                    schedule.has("limitMinutes") && !schedule.isNull("limitMinutes") ->
+                        schedule.optInt("limitMinutes", -1)
+                    schedule.has("durationMinutes") && !schedule.isNull("durationMinutes") ->
+                        schedule.optInt("durationMinutes", -1)
+                    schedule.has("durationSeconds") && !schedule.isNull("durationSeconds") -> {
+                        val seconds = schedule.optLong("durationSeconds", -1L)
+                        if (seconds <= 0L) -1 else (seconds / 60L).toInt()
+                    }
+                    else -> -1
+                }
+
+                if (limitMinutes <= 0) {
+                    if (shouldLog && !isLauncher) {
+                        android.util.Log.d("RevokeLogic", "Schedule $index: UsageLimit missing/invalid duration")
+                    }
+                    continue
+                }
+
+                val usageStatsManager =
+                    getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+                val startOfDay = java.util.Calendar.getInstance().apply {
+                    set(java.util.Calendar.HOUR_OF_DAY, 0)
+                    set(java.util.Calendar.MINUTE, 0)
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                val nowMs = System.currentTimeMillis()
+
+                val usageStats = usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    startOfDay,
+                    nowMs
+                )
+
+                var usedMs = 0L
+                if (usageStats != null) {
+                    for (stats in usageStats) {
+                        if (stats.packageName == packageName) {
+                            usedMs = stats.totalTimeInForeground
+                            break
+                        }
+                    }
+                }
+
+                val usedMinutes = usedMs / (1000L * 60L)
+                if (usedMinutes >= limitMinutes.toLong()) {
                     isBlocked = true
-                    android.util.Log.d("RevokeLogic", "Schedule $index: ✓ MATCH - UsageLimit (mock)")
+                    if (shouldLog && !isLauncher) {
+                        android.util.Log.d(
+                            "RevokeLogic",
+                            "Schedule $index: ✓ MATCH - UsageLimit reached ($usedMinutes/$limitMinutes min)"
+                        )
+                    }
+                } else if (shouldLog && !isLauncher) {
+                    android.util.Log.d(
+                        "RevokeLogic",
+                        "Schedule $index: ✗ UsageLimit not reached ($usedMinutes/$limitMinutes min)"
+                    )
                 }
             }
 
@@ -331,7 +412,7 @@ class AppMonitorService : Service() {
 
     private var currentBlockedApp: String? = null
 
-    private fun showBlockerOverlay(blockedAppName: String) {
+    private fun showBlockerOverlay(blockedAppName: String, packageNameStr: String) {
         // Prevent flicker: If already showing for the same app, do nothing
         if (overlayView != null && currentBlockedApp == blockedAppName) return
         
@@ -432,11 +513,11 @@ class AppMonitorService : Service() {
                     gravity = Gravity.BOTTOM
                 }
 
-                // ACCEPT FATE is now the PRIMARY action
+                // ACCEPT FATE is now the PRIMARY action (ORANGE)
                 val fateButton = android.widget.Button(context).apply {
                     text = "ACCEPT FATE"
                     setTextColor(android.graphics.Color.WHITE)
-                    setBackgroundColor(android.graphics.Color.parseColor("#FF4500"))
+                    setBackgroundColor(android.graphics.Color.parseColor("#FF4500")) // Orange
                     typeface = android.graphics.Typeface.DEFAULT_BOLD
                     transformationMethod = null 
                 }
@@ -449,16 +530,29 @@ class AppMonitorService : Service() {
                     hideBlockerOverlay()
                 }
 
-                // BEG FOR TIME is now the SECONDARY action
+                // BEG FOR TIME is now the SECONDARY action (DARK GREY)
                 val begButton = android.widget.Button(context).apply {
                     text = "BEG FOR TIME"
-                    setTextColor(android.graphics.Color.parseColor("#FF4500"))
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    setTextColor(android.graphics.Color.WHITE)
+                    setBackgroundColor(android.graphics.Color.parseColor("#121212")) // Dark Grey
                     typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                     transformationMethod = null
                 }
                 begButton.setOnClickListener {
-                    android.widget.Toast.makeText(context, "REQUEST DENIED.", android.widget.Toast.LENGTH_SHORT).show()
+                    // Send broadcast to MainActivity to trigger Flutter plea logic
+                    val intent = Intent("com.revoke.app.REQUEST_PLEA").apply {
+                        putExtra("appName", blockedAppName)
+                        putExtra("packageName", packageNameStr)
+                        setPackage(packageName)
+                    }
+                    sendBroadcast(intent)
+                    
+                    // UI Feedback
+                    begButton.text = "PLEA SENT..."
+                    begButton.isEnabled = false
+                    begButton.alpha = 0.5f
+                    
+                    android.widget.Toast.makeText(context, "Plea sent to the Squad.", android.widget.Toast.LENGTH_SHORT).show()
                 }
 
                 val btnParams = android.widget.LinearLayout.LayoutParams(

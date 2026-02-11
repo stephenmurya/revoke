@@ -28,6 +28,23 @@
 - [x] Premium Overlay Redesign (Gen Z HUD + High-fidelity UI)
 - [x] Smart Dashboard Cards (Real-time status + Time remaining context)
 - [x] High-fidelity Branding (Lock Vector + Home HUD)
+- [x] Squad Data Layer (User & Squad Models)
+- [x] Squad Service (Create/Join Logic)
+- [x] Squad HUD (Member List & Real-time Scores)
+- [x] Plea Data Engine (Firestore Logic)
+- [x] Native-to-Cloud Bridge (Plea Trigger)
+- [x] Judgment Day (Voting UI & Real-time Pleas)
+- [x] Outcome Enforcement (Native Stand-Down)
+- [x] Judgment Siren
+- [x] Account Management (Profile & Deletion)
+- [x] Focus Score Algorithm (Decay & Reward)
+- [x] Native Bridge Synchronization
+- [x] Firestore Rule Alignment
+
+## In Progress
+- [ ] Firebase Auth (Google Sign-In)
+- [ ] The Reckoning Onboarding (Reality Check + Alias)
+- [x] Social Hard-Lock (Squad Invites)
 
 ## Backlog
 - [ ] Vandalism Feature (Wallpaper changing)

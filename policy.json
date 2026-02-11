@@ -1,0 +1,20 @@
+[
+  {
+    "name": "delete-older-than-7-days",
+    "action": {
+      "type": "Delete"
+    },
+    "condition": {
+      "olderThan": "7d"
+    }
+  },
+  {
+    "name": "keep-most-recent-3",
+    "action": {
+      "type": "Keep"
+    },
+    "mostRecentVersions": {
+      "keepCount": 3
+    }
+  }
+]

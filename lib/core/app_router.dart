@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../features/navigation/main_shell.dart';
 import '../features/monitor/home_screen.dart';
-import '../features/social/squad_screen.dart';
+import '../features/squad/squad_screen.dart';
 import '../features/overlay/lock_screen.dart';
 import '../features/permissions/permission_screen.dart';
+import '../features/home/focus_score_detail_screen.dart';
+
+import '../core/services/auth_service.dart';
+import '../features/auth/onboarding_screen.dart';
+import '../features/splash/splash_screen.dart';
+import '../features/profile/profile_screen.dart';
 import 'native_bridge.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -12,26 +18,81 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 class AppRouter {
   static final router = GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/',
     navigatorKey: _rootNavigatorKey,
     redirect: (context, state) async {
-      final perms = await NativeBridge.checkPermissions();
-      final hasAll =
-          (perms['usage_stats'] ?? false) && (perms['overlay'] ?? false);
+      final user = AuthService.currentUser;
+      final isGoingToOnboarding = state.matchedLocation == '/onboarding';
+      final isSplash = state.matchedLocation == '/';
+      final isPermissions = state.matchedLocation == '/permissions';
+      final isShareSquadResume =
+          state.uri.queryParameters['step'] == 'share_squad';
 
-      final isGoingToPermissions = state.matchedLocation == '/permissions';
-
-      if (!hasAll && !isGoingToPermissions) {
-        return '/permissions';
+      if (user == null) {
+        if (isSplash || isGoingToOnboarding) return null;
+        return '/onboarding';
       }
 
-      if (hasAll && isGoingToPermissions) {
+      final userData = await AuthService.getUserData();
+      final squadId = (userData?['squadId'] as String?)?.trim();
+      final nickname = (userData?['nickname'] as String?)?.trim();
+      final hasSquad = squadId != null && squadId.isNotEmpty;
+      final hasNickname = nickname != null && nickname.isNotEmpty;
+
+      if (hasSquad && (isSplash || isGoingToOnboarding)) {
         return '/home';
       }
 
-      return null;
+      if (!hasSquad &&
+          hasNickname &&
+          isGoingToOnboarding &&
+          !isShareSquadResume) {
+        return '/onboarding?step=share_squad';
+      }
+
+      if (isSplash) {
+        if (hasSquad) return '/home';
+        if (hasNickname) return '/onboarding?step=share_squad';
+        return '/onboarding';
+      }
+
+      try {
+        final perms = await NativeBridge.checkPermissions();
+        final hasAll =
+            (perms['usage_stats'] ?? false) && (perms['overlay'] ?? false);
+
+        if (isPermissions) {
+          if (hasAll) {
+            if (hasSquad) return '/home';
+            if (hasNickname) return '/onboarding?step=share_squad';
+            return '/onboarding';
+          }
+          return null;
+        }
+
+        if (!hasAll) {
+          return '/permissions';
+        }
+
+        if (!hasSquad && hasNickname && !isGoingToOnboarding) {
+          return '/onboarding?step=share_squad';
+        }
+        if (!hasSquad && !hasNickname && !isGoingToOnboarding) {
+          return '/onboarding';
+        }
+
+        return null;
+      } catch (e) {
+        print("Router Error: $e");
+        return null;
+      }
     },
     routes: [
+      GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
+      GoRoute(
+        path: '/onboarding',
+        builder: (context, state) => const OnboardingScreen(),
+      ),
       GoRoute(
         path: '/permissions',
         builder: (context, state) => const PermissionScreen(),
@@ -55,6 +116,14 @@ class AppRouter {
       GoRoute(
         path: '/lock_screen',
         builder: (context, state) => const LockScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/focus-score',
+        builder: (context, state) => const FocusScoreDetailScreen(),
       ),
     ],
   );

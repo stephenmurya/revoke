@@ -11,6 +11,8 @@ import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.app.usage.UsageStatsManager
+import java.util.Calendar
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.revoke.app/overlay"
@@ -18,8 +20,18 @@ class MainActivity : FlutterActivity() {
 
     private val overlayReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == "com.revoke.app.SHOW_OVERLAY") {
-                methodChannel?.invokeMethod("showOverlay", null)
+            when (intent.action) {
+                "com.revoke.app.SHOW_OVERLAY" -> {
+                    methodChannel?.invokeMethod("showOverlay", null)
+                }
+                "com.revoke.app.REQUEST_PLEA" -> {
+                    val appName = intent.getStringExtra("appName")
+                    val packageName = intent.getStringExtra("packageName")
+                    methodChannel?.invokeMethod("requestPlea", mapOf(
+                        "appName" to appName,
+                        "packageName" to packageName
+                    ))
+                }
             }
         }
     }
@@ -67,6 +79,28 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(true)
                 }
+                "startService" -> {
+                    val perms = checkPermissions()
+                    val hasUsageStats = perms["usage_stats"] == true
+                    val hasOverlay = perms["overlay"] == true
+
+                    if (!hasUsageStats || !hasOverlay) {
+                        result.error(
+                            "PERMISSION_DENIED",
+                            "Usage Stats and Overlay permissions are required before starting service.",
+                            null
+                        )
+                        return@setMethodCallHandler
+                    }
+
+                    val intent = Intent(this, AppMonitorService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(intent)
+                    } else {
+                        startService(intent)
+                    }
+                    result.success(true)
+                }
                 "getAppDetails" -> {
                     val packageName = call.argument<String>("packageName")
                     if (packageName == null) {
@@ -94,6 +128,32 @@ class MainActivity : FlutterActivity() {
                         result.error("APP_NOT_FOUND", "Could not find app: $packageName", null)
                     }
                 }
+                "getRealityCheck" -> {
+                    Thread {
+                        val realityData = getRealityCheck()
+                        runOnUiThread {
+                            result.success(realityData)
+                        }
+                    }.start()
+                }
+                "temporaryUnlock" -> {
+                    val packageName = call.argument<String>("packageName")
+                    val minutes = call.argument<Int>("minutes") ?: 5
+                    if (packageName != null) {
+                        val intent = Intent(this, AppMonitorService::class.java)
+                        intent.action = "com.revoke.app.TEMP_UNLOCK"
+                        intent.putExtra("packageName", packageName)
+                        intent.putExtra("minutes", minutes)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(true)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "packageName is required", null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -101,10 +161,14 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        val filter = android.content.IntentFilter().apply {
+            addAction("com.revoke.app.SHOW_OVERLAY")
+            addAction("com.revoke.app.REQUEST_PLEA")
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            registerReceiver(overlayReceiver, android.content.IntentFilter("com.revoke.app.SHOW_OVERLAY"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(overlayReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            registerReceiver(overlayReceiver, android.content.IntentFilter("com.revoke.app.SHOW_OVERLAY"))
+            registerReceiver(overlayReceiver, filter)
         }
     }
 
@@ -115,6 +179,44 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             // Ignore
         }
+    }
+
+    private fun getRealityCheck(): Map<String, Any> {
+        val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val calendar = Calendar.getInstance()
+        val endTime = calendar.timeInMillis
+        calendar.add(Calendar.DAY_OF_YEAR, -7)
+        val startTime = calendar.timeInMillis
+
+        val stats = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            usageStatsManager.queryAndAggregateUsageStats(startTime, endTime)
+        } else {
+            emptyMap()
+        }
+        
+        var totalTimeMs = 0L
+        val appUsageList = mutableListOf<Map<String, Any>>()
+
+        for ((pkg, usage) in stats) {
+            val timeInForeground = usage.totalTimeInForeground
+            // Exclude common system apps and Revoke itself
+            if (timeInForeground > 30000 && pkg != packageName && !pkg.contains("launcher") && !pkg.contains("systemui")) {
+                totalTimeMs += timeInForeground
+                appUsageList.add(mapOf(
+                    "packageName" to pkg,
+                    "usageMs" to timeInForeground
+                ))
+            }
+        }
+
+        // Sort to get top 3
+        appUsageList.sortByDescending { it["usageMs"] as Long }
+        val topApps = appUsageList.take(3)
+
+        return mapOf(
+            "totalAvgDailyHours" to (totalTimeMs / (1000 * 60 * 60 * 7.0)),
+            "topApps" to topApps
+        )
     }
 
     private fun getInstalledApps(): List<Map<String, Any>> {

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/native_bridge.dart';
@@ -9,6 +8,8 @@ import '../../core/services/schedule_service.dart';
 import 'create_schedule_screen.dart';
 import 'widgets/focus_score_card.dart';
 import 'widgets/single_app_icon.dart';
+import '../../core/services/auth_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     NativeBridge.startService();
     _checkPermissions();
     _loadSchedules();
+    AuthService.validateSession();
 
     // Periodic check every 5 seconds while UI is open
     _permissionSubscription = Stream.periodic(const Duration(seconds: 5))
@@ -132,10 +134,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             child: Center(
                               child: Text(
                                 '⚠️ REVOKE IS BLIND. TAP TO FIX.',
-                                style: GoogleFonts.spaceGrotesk(
+                                style: AppTheme.bodyMedium.copyWith(
                                   color: AppTheme.white,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 14,
                                   letterSpacing: 1,
                                 ),
                               ),
@@ -164,10 +165,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     _buildSectionHeader('ACTIVE REGIMES'),
                                     Text(
                                       '${_schedules.where((s) => s.isActive).length}/${_schedules.length}',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        color: AppTheme.lightGrey,
-                                        fontSize: 12,
-                                      ),
+                                      style: AppTheme.bodySmall,
                                     ),
                                   ],
                                 ),
@@ -216,75 +214,47 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.shield_rounded,
-                  color: AppTheme.orange,
-                  size: 24,
-                ),
+              Image.asset(
+                'assets/branding/icon_source_primary_transparent.png',
+                width: 40,
+                height: 40,
+                fit: BoxFit.contain,
               ),
               const SizedBox(width: 12),
               Text(
                 'REVOKE',
-                style: GoogleFonts.spaceGrotesk(
-                  color: AppTheme.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
+                style: AppTheme.h3.copyWith(fontSize: 22, letterSpacing: -0.5),
               ),
             ],
           ),
-          Row(
-            children: [
-              Stack(
-                children: [
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.notifications_none_rounded,
-                      color: AppTheme.white,
-                      size: 28,
-                    ),
-                  ),
-                  Positioned(
-                    right: 12,
-                    top: 12,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.orange,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppTheme.orange.withOpacity(0.5),
-                    width: 1.5,
-                  ),
-                  image: const DecorationImage(
-                    image: NetworkImage(
-                      'https://api.dicebear.com/7.x/pixel-art/svg?seed=Revoke',
-                    ),
-                    fit: BoxFit.cover,
+          FutureBuilder<Map<String, dynamic>?>(
+            future: AuthService.getUserData(),
+            builder: (context, snapshot) {
+              final userData = snapshot.data;
+              return GestureDetector(
+                onTap: () => context.push('/profile'),
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: AppTheme.avatarBorderStyle,
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppTheme.darkGrey,
+                    backgroundImage: userData?['photoUrl'] != null
+                        ? CachedNetworkImageProvider(userData!['photoUrl'])
+                        : null,
+                    child: userData?['photoUrl'] == null
+                        ? Text(
+                            (userData?['fullName'] ?? "U")[0].toUpperCase(),
+                            style: AppTheme.bodyLarge.copyWith(
+                              color: AppTheme.orange,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
                   ),
                 ),
-              ),
-            ],
+              );
+            },
           ),
         ],
       ),
@@ -292,15 +262,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: GoogleFonts.spaceGrotesk(
-        color: AppTheme.orange,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 2,
-        fontSize: 12,
-      ),
-    );
+    return Text(title, style: AppTheme.labelSmall);
   }
 
   bool _isCurrentlyBlocking(ScheduleModel s) {
@@ -388,7 +350,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: schedule.isActive
-                ? (isBlocking ? AppTheme.orange : Colors.green.withOpacity(0.5))
+                ? (isBlocking
+                      ? AppTheme.orange
+                      : AppTheme.trendUp.withOpacity(0.5))
                 : Colors.transparent,
             width: 2,
           ),
@@ -399,15 +363,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Text(
-                    schedule.name,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
-                  ),
-                ),
+                Expanded(child: Text(schedule.name, style: AppTheme.h3)),
                 Switch(
                   value: schedule.isActive,
                   activeColor: AppTheme.black,
@@ -428,7 +384,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     color: schedule.isActive
                         ? (isBlocking
                               ? AppTheme.orange.withOpacity(0.1)
-                              : Colors.green.withOpacity(0.1))
+                              : AppTheme.trendUp.withOpacity(0.1))
                         : AppTheme.black.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -436,12 +392,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     schedule.isActive
                         ? (isBlocking ? "⛔ ACTIVE" : "✅ STANDING BY")
                         : "💤 INACTIVE",
-                    style: GoogleFonts.jetBrainsMono(
+                    style: AppTheme.labelSmall.copyWith(
                       color: schedule.isActive
-                          ? (isBlocking ? AppTheme.orange : Colors.green)
-                          : AppTheme.lightGrey,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                          ? (isBlocking ? AppTheme.orange : AppTheme.trendUp)
+                          : AppTheme.grey,
                     ),
                   ),
                 ),
@@ -449,10 +403,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 Expanded(
                   child: Text(
                     _getTimeRemaining(schedule),
-                    style: GoogleFonts.jetBrainsMono(
-                      color: AppTheme.lightGrey,
-                      fontSize: 11,
-                    ),
+                    style: AppTheme.bodySmall,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -467,10 +418,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   schedule.type == ScheduleType.timeBlock
                       ? "TIME BLOCK"
                       : "USAGE LIMIT",
-                  style: GoogleFonts.jetBrainsMono(
-                    color: AppTheme.lightGrey.withOpacity(0.5),
-                    fontSize: 10,
-                    letterSpacing: 1,
+                  style: AppTheme.labelSmall.copyWith(
+                    color: AppTheme.grey.withOpacity(0.5),
                   ),
                 ),
               ],
@@ -532,10 +481,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildEmptyLabel(String text) {
     return Text(
       text,
-      style: GoogleFonts.jetBrainsMono(
-        color: AppTheme.lightGrey.withOpacity(0.5),
-        fontSize: 12,
-      ),
+      style: AppTheme.bodySmall.copyWith(color: AppTheme.grey.withOpacity(0.5)),
     );
   }
 
@@ -545,7 +491,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: Center(
         child: Text(
           'TAP + TO START THE GRIND',
-          style: GoogleFonts.jetBrainsMono(color: AppTheme.lightGrey),
+          style: AppTheme.bodyMedium.copyWith(color: AppTheme.grey),
         ),
       ),
     );

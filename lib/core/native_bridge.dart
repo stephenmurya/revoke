@@ -1,5 +1,8 @@
 import 'package:flutter/services.dart';
 
+import './services/auth_service.dart';
+import './services/squad_service.dart';
+
 class NativeBridge {
   static const MethodChannel _channel = MethodChannel('com.revoke.app/overlay');
   static Function()? onShowOverlay;
@@ -8,6 +11,25 @@ class NativeBridge {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'showOverlay') {
         onShowOverlay?.call();
+      } else if (call.method == 'requestPlea') {
+        final appName = call.arguments?['appName'] as String? ?? "Unknown App";
+        final packageName = call.arguments?['packageName'] as String? ?? "";
+        final uid = AuthService.currentUser?.uid;
+        if (uid != null) {
+          final userData = await AuthService.getUserData();
+          final squadId = userData?['squadId'];
+          final nickname = userData?['nickname'];
+
+          if (squadId != null) {
+            await SquadService.createPlea(
+              uid: uid,
+              userName: nickname ?? "A Member",
+              squadId: squadId,
+              appName: appName,
+              packageName: packageName,
+            );
+          }
+        }
       }
     });
   }
@@ -55,5 +77,21 @@ class NativeBridge {
   /// Syncs schedules with the native Android service.
   static Future<void> syncSchedules(String jsonSchedules) async {
     await _channel.invokeMethod('syncSchedules', {'schedules': jsonSchedules});
+  }
+
+  /// Fetches usage stats for the last 7 days.
+  static Future<Map<String, dynamic>> getRealityCheck() async {
+    final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+      'getRealityCheck',
+    );
+    return Map<String, dynamic>.from(result);
+  }
+
+  /// Temporarily unlocks an app for a specific duration.
+  static Future<void> temporaryUnlock(String packageName, int minutes) async {
+    await _channel.invokeMethod('temporaryUnlock', {
+      'packageName': packageName,
+      'minutes': minutes,
+    });
   }
 }

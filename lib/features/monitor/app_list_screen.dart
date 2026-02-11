@@ -94,9 +94,12 @@ class _AppListScreenState extends State<AppListScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: TextField(
                     controller: _searchController,
-                    decoration: const InputDecoration(
+                    decoration: AppTheme.defaultInputDecoration(
                       hintText: 'SEARCH APPS...',
-                      prefixIcon: Icon(Icons.search, color: AppTheme.orange),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: AppTheme.orange,
+                      ),
                     ),
                   ),
                 ),
@@ -197,11 +200,27 @@ class _AppListScreenState extends State<AppListScreen> {
         final category = sortedCategories[index];
         final apps = categorized[category]!;
         return ExpansionTile(
-          title: Text(
-            category.label,
-            style: GoogleFonts.spaceGrotesk(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.orange,
+          title: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _toggleCategorySelection(apps),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    category.label,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.orange,
+                    ),
+                  ),
+                ),
+                Text(
+                  _allAppsSelectedInCategory(apps)
+                      ? 'DESELECT ALL'
+                      : 'SELECT ALL',
+                  style: AppTheme.bodySmall.copyWith(color: AppTheme.lightGrey),
+                ),
+              ],
             ),
           ),
           children: apps
@@ -209,8 +228,9 @@ class _AppListScreenState extends State<AppListScreen> {
                 (app) => CheckboxListTile(
                   value: _selectedPackages.contains(app.packageName),
                   onChanged: (v) {
+                    if (v == null) return;
                     setState(() {
-                      if (v!) {
+                      if (v) {
                         _selectedPackages.add(app.packageName);
                       } else {
                         _selectedPackages.remove(app.packageName);
@@ -248,5 +268,24 @@ class _AppListScreenState extends State<AppListScreen> {
       categorized.putIfAbsent(app.category, () => []).add(app);
     }
     return categorized;
+  }
+
+  bool _allAppsSelectedInCategory(List<AppInfo> apps) {
+    if (apps.isEmpty) return false;
+    return apps.every((app) => _selectedPackages.contains(app.packageName));
+  }
+
+  void _toggleCategorySelection(List<AppInfo> apps) {
+    if (apps.isEmpty) return;
+    final shouldSelectAll = !_allAppsSelectedInCategory(apps);
+    setState(() {
+      for (final app in apps) {
+        if (shouldSelectAll) {
+          _selectedPackages.add(app.packageName);
+        } else {
+          _selectedPackages.remove(app.packageName);
+        }
+      }
+    });
   }
 }

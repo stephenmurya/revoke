@@ -104,11 +104,8 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
             TextField(
               controller: _nameController,
               style: GoogleFonts.jetBrainsMono(fontSize: 18),
-              decoration: InputDecoration(
+              decoration: AppTheme.defaultInputDecoration(
                 hintText: 'e.g., DEEP WORK',
-                hintStyle: GoogleFonts.jetBrainsMono(
-                  color: AppTheme.lightGrey.withOpacity(0.3),
-                ),
               ),
             ),
             const SizedBox(height: 32),
