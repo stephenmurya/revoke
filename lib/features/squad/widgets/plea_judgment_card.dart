@@ -5,10 +5,31 @@ import '../../../core/models/plea_model.dart';
 import '../../../core/services/squad_service.dart';
 import '../../../core/services/auth_service.dart';
 
-class PleaJudgmentCard extends StatelessWidget {
+class PleaJudgmentCard extends StatefulWidget {
   final PleaModel plea;
 
   const PleaJudgmentCard({super.key, required this.plea});
+
+  @override
+  State<PleaJudgmentCard> createState() => _PleaJudgmentCardState();
+}
+
+class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
+  @override
+  void initState() {
+    super.initState();
+    _markAttendance();
+  }
+
+  Future<void> _markAttendance() async {
+    final uid = AuthService.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await SquadService.joinPleaSession(widget.plea.id, uid);
+    } catch (_) {
+      // Attendance is best-effort and should not block judgment UI.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,21 +80,41 @@ class PleaJudgmentCard extends StatelessWidget {
               ),
               children: [
                 TextSpan(
-                  text: plea.userName.toUpperCase(),
+                  text: widget.plea.userName.toUpperCase(),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.orange,
                   ),
                 ),
-                const TextSpan(text: " is begging for 5 minutes of "),
                 TextSpan(
-                  text: plea.appName.toUpperCase(),
+                  text:
+                      " is begging for ${widget.plea.durationMinutes} minutes on ",
+                ),
+                TextSpan(
+                  text: widget.plea.appName.toUpperCase(),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const TextSpan(text: ".\n\nWhat is the verdict?"),
               ],
             ),
           ),
+          if (widget.plea.reason.trim().isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.darkGrey,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.white.withOpacity(0.08)),
+              ),
+              child: Text(
+                '"${widget.plea.reason.trim()}"',
+                textAlign: TextAlign.center,
+                style: AppTheme.bodyMedium.copyWith(color: AppTheme.lightGrey),
+              ),
+            ),
+          ],
           const SizedBox(height: 32),
           Row(
             children: [
@@ -113,7 +154,7 @@ class PleaJudgmentCard extends StatelessWidget {
   Future<void> _vote(BuildContext context, String? uid, bool vote) async {
     if (uid == null) return;
     try {
-      await SquadService.voteOnPlea(plea.id, uid, vote);
+      await SquadService.voteOnPlea(widget.plea.id, uid, vote);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(

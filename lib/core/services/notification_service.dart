@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -20,6 +21,19 @@ class NotificationService {
       );
 
   static bool _initialized = false;
+  static void Function(String pleaId)? _onPleaJudgementTap;
+  static String? _pendingPleaId;
+
+  static void registerPleaJudgementTapHandler(
+    void Function(String pleaId) handler,
+  ) {
+    _onPleaJudgementTap = handler;
+    final pending = _pendingPleaId;
+    if (pending != null && pending.isNotEmpty) {
+      _pendingPleaId = null;
+      handler(pending);
+    }
+  }
 
   static Future<void> initialize() async {
     if (_initialized) return;
@@ -28,6 +42,7 @@ class NotificationService {
     await _requestPermissions();
     await _initializeLocalNotifications();
     _listenForegroundMessages();
+    await _listenTapEvents();
   }
 
   static Future<void> _requestPermissions() async {
@@ -53,7 +68,12 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _localNotifications.initialize(initSettings);
+    await _localNotifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (response) {
+        _handleLocalNotificationTap(response.payload);
+      },
+    );
 
     final androidPlugin = _localNotifications
         .resolvePlatformSpecificImplementation<
@@ -91,8 +111,49 @@ class NotificationService {
         'FCM_DEBUG: Foreground plea detected. id=${message.messageId} data=${message.data}',
       );
 
-      await _showForegroundNotification(title: title, body: body);
+      await _showForegroundNotification(
+        title: title,
+        body: body,
+        data: message.data,
+      );
     });
+  }
+
+  static Future<void> _listenTapEvents() async {
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleRemoteNotificationTap);
+
+    final initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) {
+      _handleRemoteNotificationTap(initialMessage);
+    }
+  }
+
+  static void _handleRemoteNotificationTap(RemoteMessage message) {
+    final type = message.data['type']?.toString().trim().toLowerCase();
+    final pleaId = message.data['pleaId']?.toString().trim();
+    if (type == 'plea_judgement' && pleaId != null && pleaId.isNotEmpty) {
+      _dispatchPleaTap(pleaId);
+    }
+  }
+
+  static void _handleLocalNotificationTap(String? payload) {
+    if (payload == null || payload.trim().isEmpty) return;
+    try {
+      final decoded = jsonDecode(payload) as Map<String, dynamic>;
+      final type = decoded['type']?.toString().trim().toLowerCase();
+      final pleaId = decoded['pleaId']?.toString().trim();
+      if (type == 'plea_judgement' && pleaId != null && pleaId.isNotEmpty) {
+        _dispatchPleaTap(pleaId);
+      }
+    } catch (_) {}
+  }
+
+  static void _dispatchPleaTap(String pleaId) {
+    if (_onPleaJudgementTap != null) {
+      _onPleaJudgementTap!(pleaId);
+      return;
+    }
+    _pendingPleaId = pleaId;
   }
 
   static bool _isPleaMessage(RemoteMessage message) {
@@ -119,6 +180,7 @@ class NotificationService {
   static Future<void> _showForegroundNotification({
     required String title,
     required String body,
+    Map<String, dynamic>? data,
   }) async {
     const androidDetails = AndroidNotificationDetails(
       'squad_alerts',
@@ -137,7 +199,20 @@ class NotificationService {
       iOS: iosDetails,
     );
 
+    String? payload;
+    final type = data?['type']?.toString().trim().toLowerCase();
+    final pleaId = data?['pleaId']?.toString().trim();
+    if (type == 'plea_judgement' && pleaId != null && pleaId.isNotEmpty) {
+      payload = jsonEncode({'type': 'plea_judgement', 'pleaId': pleaId});
+    }
+
     final notificationId = Random().nextInt(1 << 31);
-    await _localNotifications.show(notificationId, title, body, details);
+    await _localNotifications.show(
+      notificationId,
+      title,
+      body,
+      details,
+      payload: payload,
+    );
   }
 }

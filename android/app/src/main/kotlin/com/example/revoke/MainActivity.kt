@@ -17,6 +17,8 @@ import java.util.Calendar
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.revoke.app/overlay"
     private var methodChannel: MethodChannel? = null
+    private var overlayReceiverRegistered = false
+    private var pendingPleaPayload: Map<String, String?>? = null
 
     private val overlayReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -27,18 +29,40 @@ class MainActivity : FlutterActivity() {
                 "com.revoke.app.REQUEST_PLEA" -> {
                     val appName = intent.getStringExtra("appName")
                     val packageName = intent.getStringExtra("packageName")
-                    methodChannel?.invokeMethod("requestPlea", mapOf(
-                        "appName" to appName,
-                        "packageName" to packageName
-                    ))
+                    dispatchPleaRequest(appName, packageName)
                 }
             }
+        }
+    }
+
+    private fun dispatchPleaRequest(appName: String?, packageName: String?) {
+        val payload = mapOf(
+            "appName" to appName,
+            "packageName" to packageName
+        )
+        if (methodChannel == null) {
+            pendingPleaPayload = payload
+            return
+        }
+        methodChannel?.invokeMethod("requestPlea", payload)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent?.action == "com.revoke.app.REQUEST_PLEA") {
+            val appName = intent.getStringExtra("appName")
+            val packageName = intent.getStringExtra("packageName")
+            dispatchPleaRequest(appName, packageName)
         }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        pendingPleaPayload?.let {
+            methodChannel?.invokeMethod("requestPlea", it)
+            pendingPleaPayload = null
+        }
+        handleIncomingIntent(intent)
         methodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "checkPermissions" -> {
@@ -159,8 +183,20 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        registerOverlayReceiverIfNeeded()
+        handleIncomingIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun registerOverlayReceiverIfNeeded() {
+        if (overlayReceiverRegistered) return
         val filter = android.content.IntentFilter().apply {
             addAction("com.revoke.app.SHOW_OVERLAY")
             addAction("com.revoke.app.REQUEST_PLEA")
@@ -170,12 +206,16 @@ class MainActivity : FlutterActivity() {
         } else {
             registerReceiver(overlayReceiver, filter)
         }
+        overlayReceiverRegistered = true
     }
 
-    override fun onPause() {
-        super.onPause()
+    override fun onDestroy() {
+        super.onDestroy()
         try {
-            unregisterReceiver(overlayReceiver)
+            if (overlayReceiverRegistered) {
+                unregisterReceiver(overlayReceiver)
+                overlayReceiverRegistered = false
+            }
         } catch (e: Exception) {
             // Ignore
         }

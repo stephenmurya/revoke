@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -9,6 +11,7 @@ class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  static StreamSubscription<String>? _tokenRefreshSub;
 
   static User? get currentUser => _auth.currentUser;
 
@@ -114,6 +117,38 @@ class AuthService {
     }
   }
 
+  static Future<void> initializeMessagingTokenSync() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null && token.isNotEmpty) {
+        await _firestore.collection('users').doc(user.uid).set({
+          'fcmToken': token,
+          'lastLogin': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('AUTH_DEBUG: Failed to sync initial FCM token: $e');
+    }
+
+    _tokenRefreshSub ??= FirebaseMessaging.instance.onTokenRefresh.listen((
+      token,
+    ) async {
+      final refreshedUser = _auth.currentUser;
+      if (refreshedUser == null || token.isEmpty) return;
+      try {
+        await _firestore.collection('users').doc(refreshedUser.uid).set({
+          'fcmToken': token,
+          'lastLogin': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (e) {
+        print('AUTH_DEBUG: Failed to sync refreshed FCM token: $e');
+      }
+    });
+  }
+
   static Future<void> updateNickname(String nickname) async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -136,6 +171,8 @@ class AuthService {
 
   static Future<void> signOut() async {
     _redirectToAuthFlow();
+    await _tokenRefreshSub?.cancel();
+    _tokenRefreshSub = null;
 
     try {
       await _googleSignIn.disconnect();

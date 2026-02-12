@@ -21,6 +21,18 @@ service cloud.firestore {
         request.resource.data.memberIds.hasAny([request.auth.uid]);
     }
 
+    function currentUserSquadId() {
+      return signedIn()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.squadId
+        : null;
+    }
+
+    function canAccessPleaData(pleaData) {
+      return signedIn() &&
+        pleaData.squadId is string &&
+        currentUserSquadId() == pleaData.squadId;
+    }
+
     // User profiles
     match /users/{userId} {
       // Needed for squad HUD/scoreboards
@@ -41,7 +53,16 @@ service cloud.firestore {
 
     // Plea creation/voting
     match /pleas/{pleaId} {
-      allow create, read, update: if signedIn();
+      allow create: if signedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        canAccessPleaData(request.resource.data);
+      allow read, update: if canAccessPleaData(resource.data);
+
+      // Session chat messages
+      match /messages/{messageId} {
+        allow create, read: if signedIn() &&
+          canAccessPleaData(get(/databases/$(database)/documents/pleas/$(pleaId)).data);
+      }
     }
     
     // Default deny all other access

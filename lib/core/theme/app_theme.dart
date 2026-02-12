@@ -259,6 +259,85 @@ class RevokeTheme {
 
   static TextStyle get monoLabel => AppTheme.labelSmall;
 
+  static BoxDecoration get chatBubbleUser => BoxDecoration(
+    color: AppTheme.orange,
+    borderRadius: BorderRadius.circular(16),
+  );
+
+  static BoxDecoration get chatBubbleOther => BoxDecoration(
+    color: AppTheme.darkGrey,
+    border: Border.all(color: AppTheme.white.withOpacity(0.08), width: 1),
+    borderRadius: BorderRadius.circular(16),
+  );
+
+  static BoxDecoration get warningBanner => BoxDecoration(
+    color: AppTheme.orange,
+    borderRadius: BorderRadius.circular(14),
+    border: Border.all(color: AppTheme.black, width: 2),
+    boxShadow: [
+      BoxShadow(
+        color: AppTheme.orange.withOpacity(0.35),
+        blurRadius: 14,
+        spreadRadius: 1,
+      ),
+    ],
+  );
+
+  static TextStyle get warningBannerText => AppTheme.bodyMedium.copyWith(
+    color: AppTheme.black,
+    fontWeight: FontWeight.bold,
+    letterSpacing: 1.2,
+  );
+
+  static BoxDecoration get tribunalScoreboard => BoxDecoration(
+    color: AppTheme.black,
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: AppTheme.white, width: 2),
+    boxShadow: [
+      BoxShadow(
+        color: AppTheme.white.withOpacity(0.12),
+        blurRadius: 10,
+        spreadRadius: 1,
+      ),
+    ],
+  );
+
+  static ButtonStyle brutalistButton({
+    required bool isSelected,
+    bool isDanger = false,
+  }) {
+    final bgColor = isSelected
+        ? (isDanger ? AppTheme.deepRed : AppTheme.orange)
+        : AppTheme.black;
+    final fgColor = isSelected
+        ? AppTheme.white
+        : (isDanger ? AppTheme.deepRed : AppTheme.orange);
+    final borderColor = isSelected
+        ? (isDanger ? AppTheme.deepRed : AppTheme.orange)
+        : (isDanger ? AppTheme.deepRed : AppTheme.orange);
+
+    return ElevatedButton.styleFrom(
+      backgroundColor: bgColor,
+      foregroundColor: fgColor,
+      textStyle: GoogleFonts.spaceGrotesk(
+        fontWeight: FontWeight.w900,
+        fontSize: 15,
+        letterSpacing: 1.5,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: borderColor, width: 2.5),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+      elevation: 0,
+    );
+  }
+
   static InputDecoration get nicknameInputDecoration =>
       AppTheme.defaultInputDecoration(hintText: "E.G. TERMINATOR");
+}
+
+class TribunalTheme {
+  static const Color rejectColor = Color(0xFFFF3131); // Brutal Red
+  static const Color approveColor = Color(0xFFB7FF00); // Acid Green
 }

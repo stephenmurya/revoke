@@ -26,8 +26,10 @@ class AppMonitorService : Service() {
     private var overlayView: android.view.View? = null
     private var lastKnownForegroundPackage: String = ""
     private var lastLoggedApp: String = ""
+    private var lastUsageStatsFallbackAt: Long = 0L
     private var activeSchedules: java.util.concurrent.CopyOnWriteArrayList<org.json.JSONObject> = java.util.concurrent.CopyOnWriteArrayList()
     private val tempUnlockedPackages = mutableMapOf<String, Long>()
+    private val usageStatsFallbackIntervalMs = 12_000L
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
@@ -116,8 +118,11 @@ class AppMonitorService : Service() {
         val expiry = tempUnlockedPackages[packageName] ?: return false
         if (System.currentTimeMillis() > expiry) {
             tempUnlockedPackages.remove(packageName)
+            android.util.Log.d("RevokeMonitor", "Temp unlock expired for $packageName")
             return false
         }
+        val remainingMs = expiry - System.currentTimeMillis()
+        android.util.Log.d("RevokeMonitor", "Temp unlock active for $packageName (${remainingMs / 1000}s left)")
         return true
     }
 
@@ -179,8 +184,13 @@ class AppMonitorService : Service() {
             }
         }
 
-        // Fallback: If no events found, check queryUsageStats for recently used apps
-        if (!foundViaEvents || lastKnownForegroundPackage.isEmpty()) {
+        // Fallback: queryUsageStats is heavier, so run it at a lower cadence.
+        val shouldRunUsageStatsFallback =
+            (!foundViaEvents || lastKnownForegroundPackage.isEmpty()) &&
+            (now - lastUsageStatsFallbackAt >= usageStatsFallbackIntervalMs)
+
+        if (shouldRunUsageStatsFallback) {
+            lastUsageStatsFallbackAt = now
             val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 1000 * 60 * 15, now)
             if (stats != null && stats.isNotEmpty()) {
                 var latestStats: android.app.usage.UsageStats? = null
@@ -190,8 +200,11 @@ class AppMonitorService : Service() {
                     }
                 }
                 if (latestStats != null && (now - latestStats!!.lastTimeUsed) < 1000 * 60 * 5) {
-                    lastKnownForegroundPackage = latestStats!!.packageName
-                    android.util.Log.d("RevokeMonitor", "Found via stats: $lastKnownForegroundPackage")
+                    val resolvedPackage = latestStats!!.packageName
+                    if (resolvedPackage != lastKnownForegroundPackage) {
+                        lastKnownForegroundPackage = resolvedPackage
+                        android.util.Log.d("RevokeMonitor", "Found via stats: $lastKnownForegroundPackage")
+                    }
                 }
             }
         }
@@ -539,20 +552,22 @@ class AppMonitorService : Service() {
                     transformationMethod = null
                 }
                 begButton.setOnClickListener {
-                    // Send broadcast to MainActivity to trigger Flutter plea logic
-                    val intent = Intent("com.revoke.app.REQUEST_PLEA").apply {
+                    val intent = Intent(this@AppMonitorService, MainActivity::class.java).apply {
+                        action = "com.revoke.app.REQUEST_PLEA"
                         putExtra("appName", blockedAppName)
                         putExtra("packageName", packageNameStr)
-                        setPackage(packageName)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     }
-                    sendBroadcast(intent)
+                    startActivity(intent)
                     
                     // UI Feedback
-                    begButton.text = "PLEA SENT..."
+                    begButton.text = "OPENING PLEA..."
                     begButton.isEnabled = false
                     begButton.alpha = 0.5f
                     
-                    android.widget.Toast.makeText(context, "Plea sent to the Squad.", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, "Open Revoke to send your plea.", android.widget.Toast.LENGTH_SHORT).show()
                 }
 
                 val btnParams = android.widget.LinearLayout.LayoutParams(

@@ -3,9 +3,11 @@ import 'package:go_router/go_router.dart';
 import '../features/navigation/main_shell.dart';
 import '../features/monitor/home_screen.dart';
 import '../features/squad/squad_screen.dart';
+import '../features/squad/tribunal_screen.dart';
 import '../features/overlay/lock_screen.dart';
 import '../features/permissions/permission_screen.dart';
 import '../features/home/focus_score_detail_screen.dart';
+import '../features/plea/plea_compose_screen.dart';
 
 import '../core/services/auth_service.dart';
 import '../features/auth/onboarding_screen.dart';
@@ -118,12 +120,35 @@ class AppRouter {
         builder: (context, state) => const LockScreen(),
       ),
       GoRoute(
+        path: '/plea-compose',
+        builder: (context, state) {
+          final extra = state.extra as Map?;
+          final appName = (extra?['appName'] as String?)?.trim();
+          final packageName = (extra?['packageName'] as String?)?.trim();
+          if (appName == null ||
+              appName.isEmpty ||
+              packageName == null ||
+              packageName.isEmpty) {
+            return const HomeScreen();
+          }
+          return BegForTimeScreen(appName: appName, packageName: packageName);
+        },
+      ),
+      GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
         path: '/focus-score',
         builder: (context, state) => const FocusScoreDetailScreen(),
+      ),
+      GoRoute(
+        path: '/tribunal/:pleaId',
+        builder: (context, state) {
+          final pleaId = (state.pathParameters['pleaId'] ?? '').trim();
+          if (pleaId.isEmpty) return const SquadScreen();
+          return TribunalScreen(pleaId: pleaId);
+        },
       ),
     ],
   );

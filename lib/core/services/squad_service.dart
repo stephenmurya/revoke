@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/plea_message_model.dart';
 import '../models/user_model.dart';
 import '../models/plea_model.dart';
 import 'scoring_service.dart';
@@ -37,14 +38,10 @@ class SquadService {
       });
 
       // 2. Update the User document (using set + merge to ensure it exists)
-      transaction.set(
-        userRef,
-        {
-          'squadId': squadRef.id,
-          'squadCode': squadCode,
-        },
-        SetOptions(merge: true),
-      );
+      transaction.set(userRef, {
+        'squadId': squadRef.id,
+        'squadCode': squadCode,
+      }, SetOptions(merge: true));
     });
   }
 
@@ -127,6 +124,8 @@ class SquadService {
     required String squadId,
     required String appName,
     required String packageName,
+    required int durationMinutes,
+    required String reason,
   }) async {
     final docRef = _firestore.collection('pleas').doc();
     await docRef.set({
@@ -135,8 +134,12 @@ class SquadService {
       'squadId': squadId,
       'appName': appName,
       'packageName': packageName,
+      'durationMinutes': durationMinutes,
+      'reason': reason,
+      'participants': [],
+      'voteCounts': {'accept': 0, 'reject': 0},
       'votes': {},
-      'status': 'pending',
+      'status': 'active',
       'createdAt': FieldValue.serverTimestamp(),
     });
     await ScoringService.applyBeggarsTax(uid);
@@ -149,59 +152,100 @@ class SquadService {
     String voterUid,
     bool vote,
   ) async {
+    final voteChoice = vote ? 'accept' : 'reject';
+    return voteOnPleaChoice(pleaId, voterUid, voteChoice);
+  }
+
+  static Future<void> voteOnPleaChoice(
+    String pleaId,
+    String voterUid,
+    String voteChoice,
+  ) async {
+    final normalizedVote = voteChoice.trim().toLowerCase();
+    if (normalizedVote != 'accept' && normalizedVote != 'reject') {
+      throw Exception('INVALID VOTE');
+    }
+
     final pleaRef = _firestore.collection('pleas').doc(pleaId);
     String? requesterUid;
     String? finalStatus;
 
-    return _firestore.runTransaction((transaction) async {
-      final pleaSnap = await transaction.get(pleaRef);
-      if (!pleaSnap.exists) throw Exception("PLEA NOT FOUND.");
+    return _firestore
+        .runTransaction((transaction) async {
+          final pleaSnap = await transaction.get(pleaRef);
+          if (!pleaSnap.exists) throw Exception("PLEA NOT FOUND.");
 
-      requesterUid = pleaSnap.get('userId') as String;
-      final squadId = pleaSnap.get('squadId') as String;
-      final votes = Map<String, bool>.from(pleaSnap.get('votes') as Map? ?? {});
+          final pleaData = pleaSnap.data() ?? <String, dynamic>{};
+          requesterUid = pleaSnap.get('userId') as String;
+          final participants =
+              List<String>.from(pleaData['participants'] as List? ?? const [])
+                  .map((uid) => uid.trim())
+                  .where((uid) => uid.isNotEmpty)
+                  .toSet()
+                  .toList();
+          final rawVotes = Map<String, dynamic>.from(
+            pleaData['votes'] as Map? ?? const {},
+          );
+          final votes = <String, String>{};
+          rawVotes.forEach((uid, rawVote) {
+            if (rawVote is bool) {
+              votes[uid] = rawVote ? 'accept' : 'reject';
+              return;
+            }
+            if (rawVote is String) {
+              final normalized = rawVote.trim().toLowerCase();
+              if (normalized == 'accept' || normalized == 'reject') {
+                votes[uid] = normalized;
+              }
+            }
+          });
 
-      // Update the vote
-      votes[voterUid] = vote;
-      transaction.update(pleaRef, {'votes': votes});
+          if (!participants.contains(voterUid)) {
+            participants.add(voterUid);
+          }
 
-      // Check majority logic
-      // Get squad size
-      final squadSnap = await _firestore
-          .collection('squads')
-          .doc(squadId)
-          .get();
-      if (!squadSnap.exists) return;
+          votes[voterUid] = normalizedVote;
 
-      final memberIds = List<String>.from(squadSnap.get('memberIds') as List);
-      final totalVoters = memberIds.length - 1; // Exclude beggar
+          votes.removeWhere((uid, _) => !participants.contains(uid));
 
-      if (totalVoters <= 0) {
-        // Fallback for single person (though unlikely in a squad)
-        transaction.update(pleaRef, {'status': 'approved'});
-        return;
-      }
+          final acceptVotes = participants
+              .where((uid) => votes[uid] == 'accept')
+              .length;
+          final rejectVotes = participants
+              .where((uid) => votes[uid] == 'reject')
+              .length;
+          final allParticipantsVoted =
+              participants.isNotEmpty &&
+              participants.every((uid) => votes.containsKey(uid));
 
-      final trueVotes = votes.values.where((v) => v == true).length;
-      final falseVotes = votes.values.where((v) => v == false).length;
-      final majority = (totalVoters / 2).floor() + 1;
+          final updates = <String, dynamic>{
+            'participants': participants,
+            'votes': votes,
+            'voteCounts': {'accept': acceptVotes, 'reject': rejectVotes},
+          };
 
-      if (trueVotes >= majority) {
-        transaction.update(pleaRef, {'status': 'approved'});
-        finalStatus = 'approved';
-      } else if (falseVotes >= majority) {
-        transaction.update(pleaRef, {'status': 'rejected'});
-        finalStatus = 'rejected';
-      }
-    }).then((_) async {
-      if (requesterUid == null || finalStatus == null) return;
+          // Attendance rule: finalize only when every attendee has voted.
+          if (allParticipantsVoted) {
+            // Tie-breaker: reject on tie.
+            final resolvedStatus = acceptVotes > rejectVotes
+                ? 'approved'
+                : 'rejected';
+            updates['status'] = resolvedStatus;
+            updates['resolvedAt'] = FieldValue.serverTimestamp();
+            finalStatus = resolvedStatus;
+          }
 
-      if (finalStatus == 'rejected') {
-        await ScoringService.applyRejectedPleaPenalty(requesterUid!);
-      }
+          transaction.update(pleaRef, updates);
+        })
+        .then((_) async {
+          if (requesterUid == null || finalStatus == null) return;
 
-      await ScoringService.syncFocusScore(requesterUid!);
-    });
+          if (finalStatus == 'rejected') {
+            await ScoringService.applyRejectedPleaPenalty(requesterUid!);
+          }
+
+          await ScoringService.syncFocusScore(requesterUid!);
+        });
   }
 
   /// Returns a stream of approved pleas for a specific user.
@@ -218,7 +262,7 @@ class SquadService {
         });
   }
 
-  /// Returns a stream of active (pending) pleas for a squad.
+  /// Returns a stream of active pleas for a squad.
   static Stream<List<PleaModel>> getActivePleasStream(String squadId) {
     final normalizedSquadId = squadId.trim();
     if (normalizedSquadId.isEmpty) {
@@ -228,12 +272,14 @@ class SquadService {
       return Stream.value(const <PleaModel>[]);
     }
 
-    print('PLEA_DEBUG: Listening for active pleas in squadId=$normalizedSquadId');
+    print(
+      'PLEA_DEBUG: Listening for active pleas in squadId=$normalizedSquadId',
+    );
 
     return _firestore
         .collection('pleas')
         .where('squadId', isEqualTo: normalizedSquadId)
-        .where('status', isEqualTo: 'pending')
+        .where('status', isEqualTo: 'active')
         .snapshots()
         .map((snapshot) {
           for (final change in snapshot.docChanges) {
@@ -252,6 +298,74 @@ class SquadService {
 
           return snapshot.docs
               .map((doc) => PleaModel.fromJson(doc.data(), doc.id))
+              .toList();
+        });
+  }
+
+  static Stream<PleaModel?> getPleaStream(String pleaId) {
+    final normalizedPleaId = pleaId.trim();
+    if (normalizedPleaId.isEmpty) return Stream.value(null);
+
+    return _firestore.collection('pleas').doc(normalizedPleaId).snapshots().map(
+      (snapshot) {
+        if (!snapshot.exists || snapshot.data() == null) return null;
+        return PleaModel.fromJson(snapshot.data()!, snapshot.id);
+      },
+    );
+  }
+
+  static Future<void> joinPleaSession(String pleaId, String uid) async {
+    final normalizedUid = uid.trim();
+    if (normalizedUid.isEmpty) return;
+    await _firestore.collection('pleas').doc(pleaId).set({
+      'participants': FieldValue.arrayUnion([normalizedUid]),
+    }, SetOptions(merge: true));
+  }
+
+  static Future<String> sendPleaMessage({
+    required String pleaId,
+    required String senderId,
+    required String senderName,
+    required String text,
+  }) async {
+    final normalizedText = text.trim();
+    if (normalizedText.isEmpty) {
+      throw Exception('MESSAGE CANNOT BE EMPTY.');
+    }
+
+    final messagesRef = _firestore
+        .collection('pleas')
+        .doc(pleaId)
+        .collection('messages');
+    final messageRef = messagesRef.doc();
+    await messageRef.set({
+      'senderId': senderId,
+      'senderName': senderName,
+      'text': normalizedText,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    return messageRef.id;
+  }
+
+  static Future<void> markPleaForDeletion(String pleaId) async {
+    final normalizedPleaId = pleaId.trim();
+    if (normalizedPleaId.isEmpty) return;
+    await _firestore.collection('pleas').doc(normalizedPleaId).set({
+      'markedForDeletion': true,
+      'deletionMarkedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static Stream<List<PleaMessageModel>> getPleaMessagesStream(String pleaId) {
+    return _firestore
+        .collection('pleas')
+        .doc(pleaId)
+        .collection('messages')
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => PleaMessageModel.fromJson(doc.data(), doc.id))
               .toList();
         });
   }

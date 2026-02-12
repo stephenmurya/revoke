@@ -1,11 +1,9 @@
 import 'package:flutter/services.dart';
 
-import './services/auth_service.dart';
-import './services/squad_service.dart';
-
 class NativeBridge {
   static const MethodChannel _channel = MethodChannel('com.revoke.app/overlay');
   static Function()? onShowOverlay;
+  static Function(String appName, String packageName)? onRequestPlea;
 
   static void setupOverlayListener() {
     _channel.setMethodCallHandler((call) async {
@@ -14,22 +12,7 @@ class NativeBridge {
       } else if (call.method == 'requestPlea') {
         final appName = call.arguments?['appName'] as String? ?? "Unknown App";
         final packageName = call.arguments?['packageName'] as String? ?? "";
-        final uid = AuthService.currentUser?.uid;
-        if (uid != null) {
-          final userData = await AuthService.getUserData();
-          final squadId = userData?['squadId'];
-          final nickname = userData?['nickname'];
-
-          if (squadId != null) {
-            await SquadService.createPlea(
-              uid: uid,
-              userName: nickname ?? "A Member",
-              squadId: squadId,
-              appName: appName,
-              packageName: packageName,
-            );
-          }
-        }
+        onRequestPlea?.call(appName, packageName);
       }
     });
   }

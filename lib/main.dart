@@ -13,6 +13,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await NotificationService.initialize();
+  await AuthService.initializeMessagingTokenSync();
   NativeBridge.setupOverlayListener();
   ScoringService.initializePeriodicSync();
   runApp(const RevokeApp());
@@ -31,6 +32,15 @@ class RevokeApp extends StatelessWidget {
       }
       AppRouter.router.push('/lock_screen');
     };
+    NativeBridge.onRequestPlea = (appName, packageName) {
+      AppRouter.router.go(
+        '/plea-compose',
+        extra: {'appName': appName, 'packageName': packageName},
+      );
+    };
+    NotificationService.registerPleaJudgementTapHandler((pleaId) {
+      AppRouter.router.go('/tribunal/$pleaId');
+    });
 
     // Global listener for approved pleas (Stand-down logic)
     final uid = AuthService.currentUser?.uid;
@@ -39,8 +49,21 @@ class RevokeApp extends StatelessWidget {
       SquadService.getUserApprovedPleasStream(uid).listen((pleas) {
         for (var plea in pleas) {
           if (!processedPleas.contains(plea.id)) {
-            // Trigger native stand-down for 5 minutes
-            NativeBridge.temporaryUnlock(plea.packageName, 5);
+            final packageName = plea.packageName.trim();
+            final grantedMinutes = plea.durationMinutes > 0
+                ? plea.durationMinutes
+                : 5;
+
+            if (packageName.isNotEmpty) {
+              print(
+                'PLEA_DEBUG: Applying approved unlock plea=${plea.id} package=$packageName minutes=$grantedMinutes',
+              );
+              NativeBridge.temporaryUnlock(packageName, grantedMinutes);
+            } else {
+              print(
+                'PLEA_DEBUG: Skipping approved unlock plea=${plea.id} due to empty packageName',
+              );
+            }
             processedPleas.add(plea.id);
           }
         }
@@ -52,12 +75,8 @@ class RevokeApp extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.data == null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            final currentLocation = AppRouter
-                .router
-                .routeInformationProvider
-                .value
-                .uri
-                .path;
+            final currentLocation =
+                AppRouter.router.routeInformationProvider.value.uri.path;
             if (currentLocation != '/onboarding') {
               AppRouter.router.go('/onboarding');
             }

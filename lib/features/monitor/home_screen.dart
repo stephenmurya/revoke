@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _isMissingPermissions = false;
   StreamSubscription? _permissionSubscription;
+  late Future<Map<String, dynamic>?> _userDataFuture;
 
   @override
   void initState() {
@@ -30,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     NativeBridge.setupOverlayListener();
     NativeBridge.startService();
+    _userDataFuture = AuthService.getUserData();
     _checkPermissions();
     _loadSchedules();
     AuthService.validateSession();
@@ -53,15 +55,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _checkPermissions();
       _loadSchedules();
+      _userDataFuture = AuthService.getUserData();
     }
   }
 
   Future<void> _checkPermissions() async {
     final perms = await NativeBridge.checkPermissions();
-    if (mounted) {
+    final nextMissing =
+        !(perms['usage_stats'] ?? false) || !(perms['overlay'] ?? false);
+    if (!mounted) return;
+    if (nextMissing != _isMissingPermissions) {
       setState(() {
-        _isMissingPermissions =
-            !(perms['usage_stats'] ?? false) || !(perms['overlay'] ?? false);
+        _isMissingPermissions = nextMissing;
       });
     }
   }
@@ -228,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
           FutureBuilder<Map<String, dynamic>?>(
-            future: AuthService.getUserData(),
+            future: _userDataFuture,
             builder: (context, snapshot) {
               final userData = snapshot.data;
               return GestureDetector(

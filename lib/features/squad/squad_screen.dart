@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/auth_service.dart';
@@ -91,6 +92,47 @@ class SquadScreen extends StatelessWidget {
                           ),
                         ],
                       ),
+                    ),
+                    StreamBuilder<List<PleaModel>>(
+                      stream: SquadService.getActivePleasStream(
+                        normalizedSquadId,
+                      ),
+                      builder: (context, liveSnapshot) {
+                        if (!liveSnapshot.hasData ||
+                            liveSnapshot.data!.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final livePlea = liveSnapshot.data!.firstWhere(
+                          (p) => p.status == 'active',
+                          orElse: () => liveSnapshot.data!.first,
+                        );
+
+                        if (livePlea.status != 'active') {
+                          return const SizedBox.shrink();
+                        }
+
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                          child: GestureDetector(
+                            onTap: () =>
+                                context.push('/tribunal/${livePlea.id}'),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: RevokeTheme.warningBanner,
+                              child: Text(
+                                'LIVE TRIBUNAL IN PROGRESS',
+                                textAlign: TextAlign.center,
+                                style: RevokeTheme.warningBannerText,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                     Expanded(
                       child: StreamBuilder<List<UserModel>>(
