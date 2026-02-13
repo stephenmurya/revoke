@@ -19,12 +19,15 @@ class TribunalScreen extends StatefulWidget {
 
 class _TribunalScreenState extends State<TribunalScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _messageScrollController = ScrollController();
   bool _sending = false;
   bool _voting = false;
   String _senderName = 'Member';
   String? _resolvedStatusHandled;
   bool _showVerdictOverlay = false;
   String _verdictText = '';
+  int _lastMessageCount = 0;
+  PleaMessageModel? _replyingTo;
 
   @override
   void initState() {
@@ -35,6 +38,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
   @override
   void dispose() {
     _messageController.dispose();
+    _messageScrollController.dispose();
     super.dispose();
   }
 
@@ -69,6 +73,8 @@ class _TribunalScreenState extends State<TribunalScreen> {
         text: text,
       );
       _messageController.clear();
+      _replyingTo = null;
+      _scrollMessagesToBottom();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -77,6 +83,35 @@ class _TribunalScreenState extends State<TribunalScreen> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  void _scrollMessagesToBottom({bool animated = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_messageScrollController.hasClients) return;
+      final target = _messageScrollController.position.maxScrollExtent;
+      if (animated) {
+        _messageScrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _messageScrollController.jumpTo(target);
+      }
+    });
+  }
+
+  void _setReplyTarget(PleaMessageModel message) {
+    setState(() {
+      _replyingTo = message;
+    });
+  }
+
+  void _clearReplyTarget() {
+    if (_replyingTo == null) return;
+    setState(() {
+      _replyingTo = null;
+    });
   }
 
   Future<void> _setVote(String voteChoice) async {
@@ -145,96 +180,103 @@ class _TribunalScreenState extends State<TribunalScreen> {
     final approveLeading = approveCount > rejectCount;
 
     final rejectBg = rejectLeading
-        ? TribunalTheme.rejectColor
-        : TribunalTheme.rejectColor.withOpacity(0.14);
+        ? AppSemanticColors.reject
+        : AppSemanticColors.reject.withValues(alpha: 0.14);
     final approveBg = approveLeading
-        ? TribunalTheme.approveColor
-        : TribunalTheme.approveColor.withOpacity(0.14);
+        ? AppSemanticColors.approve
+        : AppSemanticColors.approve.withValues(alpha: 0.14);
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      padding: const EdgeInsets.all(14),
-      decoration: RevokeTheme.tribunalScoreboard,
+      margin: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: AppTheme.tribunalScoreboardDecoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'THE TRIBUNAL',
-            style: AppTheme.labelSmall.copyWith(color: AppTheme.orange),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${plea.userName} requests ${plea.durationMinutes} mins on ${plea.appName}',
-            style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+            '${plea.userName} asks ${plea.durationMinutes}m on ${plea.appName}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTheme.smBold.copyWith(
+              color: AppSemanticColors.primaryText,
+            ),
           ),
           if (plea.reason.trim().isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 2),
             Text(
               '"${plea.reason.trim()}"',
-              style: AppTheme.bodySmall.copyWith(color: AppTheme.lightGrey),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.smRegular.copyWith(
+                color: AppSemanticColors.secondaryText,
+              ),
             ),
           ],
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: rejectBg,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: TribunalTheme.rejectColor,
-                      width: 2,
-                    ),
+                    border: Border.all(color: AppSemanticColors.reject),
                   ),
-                  child: Column(
+                  child: Row(
                     children: [
-                      Text(
-                        'REJECT',
-                        style: AppTheme.labelSmall.copyWith(
-                          color: TribunalTheme.rejectColor,
-                        ),
+                      const Icon(
+                        Icons.close_rounded,
+                        size: 14,
+                        color: AppSemanticColors.reject,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '[$rejectCount]',
-                        style: AppTheme.h2.copyWith(
-                          color: TribunalTheme.rejectColor,
-                          fontFamily: 'monospace',
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'REJECT [$rejectCount]',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.xsBold.copyWith(
+                            color: AppSemanticColors.rejectText,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: approveBg,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: TribunalTheme.approveColor,
-                      width: 2,
-                    ),
+                    border: Border.all(color: AppSemanticColors.approve),
                   ),
-                  child: Column(
+                  child: Row(
                     children: [
-                      Text(
-                        'APPROVE',
-                        style: AppTheme.labelSmall.copyWith(
-                          color: TribunalTheme.approveColor,
-                        ),
+                      const Icon(
+                        Icons.check_rounded,
+                        size: 14,
+                        color: AppSemanticColors.approve,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '[$approveCount]',
-                        style: AppTheme.h2.copyWith(
-                          color: TribunalTheme.approveColor,
-                          fontFamily: 'monospace',
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'APPROVE [$approveCount]',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.xsBold.copyWith(
+                            color: AppSemanticColors.approveText,
+                          ),
                         ),
                       ),
                     ],
@@ -253,11 +295,11 @@ class _TribunalScreenState extends State<TribunalScreen> {
     final currentUid = AuthService.currentUser?.uid;
 
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('THE TRIBUNAL'),
+        title: Text('The Tribunal', style: AppTheme.h2),
       ),
       body: StreamBuilder<PleaModel?>(
         stream: SquadService.getPleaStream(widget.pleaId),
@@ -266,14 +308,14 @@ class _TribunalScreenState extends State<TribunalScreen> {
             return Center(
               child: Text(
                 'ACCESS DENIED',
-                style: AppTheme.h3.copyWith(color: AppTheme.deepRed),
+                style: AppTheme.h3.copyWith(color: AppSemanticColors.errorText),
               ),
             );
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: AppTheme.orange),
+              child: CircularProgressIndicator(color: AppSemanticColors.accent),
             );
           }
 
@@ -282,7 +324,9 @@ class _TribunalScreenState extends State<TribunalScreen> {
             return Center(
               child: Text(
                 'SESSION NOT FOUND',
-                style: AppTheme.h3.copyWith(color: AppTheme.orange),
+                style: AppTheme.h3.copyWith(
+                  color: AppSemanticColors.accentText,
+                ),
               ),
             );
           }
@@ -290,7 +334,9 @@ class _TribunalScreenState extends State<TribunalScreen> {
           _handleResolutionLifecycle(plea);
 
           final userVote = currentUid == null ? null : plea.votes[currentUid];
-          final canVote = currentUid != null && plea.status == 'active';
+          final isRequester = currentUid != null && currentUid == plea.userId;
+          final canVote =
+              currentUid != null && plea.status == 'active' && !isRequester;
           final voteLocked = !canVote || _voting;
 
           return Stack(
@@ -307,25 +353,30 @@ class _TribunalScreenState extends State<TribunalScreen> {
                             child: Text(
                               'ACCESS DENIED OR CHAT ERROR.',
                               style: AppTheme.bodyMedium.copyWith(
-                                color: AppTheme.deepRed,
+                                color: AppSemanticColors.errorText,
                               ),
                             ),
                           );
                         }
 
                         final messages = msgSnapshot.data ?? const [];
+                        if (messages.length != _lastMessageCount) {
+                          _lastMessageCount = messages.length;
+                          _scrollMessagesToBottom();
+                        }
                         if (messages.isEmpty) {
                           return Center(
                             child: Text(
                               'NO MESSAGES YET',
                               style: AppTheme.bodySmall.copyWith(
-                                color: AppTheme.grey,
+                                color: AppSemanticColors.mutedText,
                               ),
                             ),
                           );
                         }
 
                         return ListView.builder(
+                          controller: _messageScrollController,
                           padding: const EdgeInsets.all(16),
                           itemCount: messages.length,
                           itemBuilder: (context, index) {
@@ -335,37 +386,46 @@ class _TribunalScreenState extends State<TribunalScreen> {
                               alignment: isMine
                                   ? Alignment.centerRight
                                   : Alignment.centerLeft,
-                              child: Container(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 280,
-                                ),
-                                margin: const EdgeInsets.only(bottom: 10),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                decoration: isMine
-                                    ? RevokeTheme.chatBubbleUser
-                                    : RevokeTheme.chatBubbleOther,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (!isMine)
+                              child: GestureDetector(
+                                onHorizontalDragEnd: (details) {
+                                  if (details.primaryVelocity != null &&
+                                      details.primaryVelocity! > 220) {
+                                    _setReplyTarget(message);
+                                  }
+                                },
+                                child: Container(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 280,
+                                  ),
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  decoration: isMine
+                                      ? AppTheme.chatBubbleUserDecoration
+                                      : AppTheme.chatBubbleOtherDecoration,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (!isMine)
+                                        Text(
+                                          message.senderName,
+                                          style: AppTheme.labelSmall.copyWith(
+                                            color: AppSemanticColors.accentText,
+                                          ),
+                                        ),
                                       Text(
-                                        message.senderName.toUpperCase(),
-                                        style: AppTheme.labelSmall.copyWith(
-                                          color: AppTheme.orange,
+                                        message.text,
+                                        style: AppTheme.bodyMedium.copyWith(
+                                          color: isMine
+                                              ? AppSemanticColors.inverseText
+                                              : AppSemanticColors.primaryText,
                                         ),
                                       ),
-                                    Text(
-                                      message.text,
-                                      style: AppTheme.bodyMedium.copyWith(
-                                        color: isMine
-                                            ? AppTheme.black
-                                            : AppTheme.white,
-                                      ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
@@ -380,57 +440,130 @@ class _TribunalScreenState extends State<TribunalScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       child: Column(
                         children: [
+                          if (!isRequester) ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: voteLocked
+                                        ? null
+                                        : () => _setVote('accept'),
+                                    style: AppTheme.tribunalVoteButtonStyle(
+                                      isSelected: userVote == 'accept',
+                                    ),
+                                    child: const Text('Approve'),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: voteLocked
+                                        ? null
+                                        : () => _setVote('reject'),
+                                    style: AppTheme.tribunalVoteButtonStyle(
+                                      isSelected: userVote == 'reject',
+                                      isDanger: true,
+                                    ),
+                                    child: const Text('Reject'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+                          if (_replyingTo != null) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppSemanticColors.surface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: AppSemanticColors.approve,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.reply_rounded,
+                                    size: 16,
+                                    color: AppSemanticColors.approve,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Replying to ${_replyingTo!.senderName}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTheme.labelSmall.copyWith(
+                                            color: AppSemanticColors.approve,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _replyingTo!.text,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTheme.bodySmall.copyWith(
+                                            color:
+                                                AppSemanticColors.secondaryText,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: _clearReplyTarget,
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      color: AppSemanticColors.mutedText,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Expanded(
-                                child: ElevatedButton(
-                                  onPressed: voteLocked
-                                      ? null
-                                      : () => _setVote('accept'),
-                                  style: RevokeTheme.brutalistButton(
-                                    isSelected: userVote == 'accept',
-                                  ),
-                                  child: const Text('APPROVE'),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: voteLocked
-                                      ? null
-                                      : () => _setVote('reject'),
-                                  style: RevokeTheme.brutalistButton(
-                                    isSelected: userVote == 'reject',
-                                    isDanger: true,
-                                  ),
-                                  child: const Text('REJECT'),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _messageController,
-                                  decoration: AppTheme.defaultInputDecoration(
-                                    hintText: 'Type your argument...',
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              ElevatedButton(
-                                onPressed: _sending ? null : _sendMessage,
-                                style: AppTheme.primaryButtonStyle.copyWith(
-                                  padding: const WidgetStatePropertyAll(
-                                    EdgeInsets.symmetric(
-                                      vertical: 16,
-                                      horizontal: 16,
+                                child: SizedBox(
+                                  height: 56,
+                                  child: TextField(
+                                    controller: _messageController,
+                                    textCapitalization:
+                                        TextCapitalization.sentences,
+                                    decoration: AppTheme.defaultInputDecoration(
+                                      hintText: 'Type your argument...',
                                     ),
                                   ),
                                 ),
-                                child: const Icon(Icons.send_rounded),
+                              ),
+                              const SizedBox(width: 10),
+                              SizedBox(
+                                height: 56,
+                                child: ElevatedButton(
+                                  onPressed: _sending ? null : _sendMessage,
+                                  style: AppTheme.primaryButtonStyle.copyWith(
+                                    padding: const WidgetStatePropertyAll(
+                                      EdgeInsets.symmetric(horizontal: 18),
+                                    ),
+                                    minimumSize: const WidgetStatePropertyAll(
+                                      Size(56, 56),
+                                    ),
+                                  ),
+                                  child: const Icon(Icons.send_rounded),
+                                ),
                               ),
                             ],
                           ),
@@ -443,14 +576,14 @@ class _TribunalScreenState extends State<TribunalScreen> {
               if (_showVerdictOverlay)
                 Positioned.fill(
                   child: Container(
-                    color: AppTheme.black.withOpacity(0.92),
+                    color: AppSemanticColors.background.withValues(alpha: 0.92),
                     alignment: Alignment.center,
                     child: Text(
                       _verdictText,
                       style: AppTheme.h1.copyWith(
                         color: _verdictText.contains('REJECTED')
-                            ? AppTheme.deepRed
-                            : AppTheme.orange,
+                            ? AppSemanticColors.errorText
+                            : AppSemanticColors.accentText,
                         letterSpacing: 2,
                       ),
                     ),

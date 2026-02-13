@@ -11,17 +11,33 @@ class MainShell extends StatelessWidget {
   Widget build(BuildContext context) {
     // Get the current location to determine which tab is active
     final String location = GoRouterState.of(context).uri.toString();
-    int selectedIndex = location == '/home' ? 0 : 1;
+    int selectedIndex = 0;
+    if (location.startsWith('/squad')) {
+      selectedIndex = 1;
+    } else if (location.startsWith('/analytics')) {
+      selectedIndex = 2;
+    } else if (location.startsWith('/controls')) {
+      selectedIndex = 3;
+    }
 
     return Scaffold(
       body: child,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: selectedIndex,
         onTap: (index) {
-          if (index == 0) {
-            context.go('/home');
-          } else {
-            context.go('/squad');
+          switch (index) {
+            case 0:
+              context.go('/home');
+              break;
+            case 1:
+              context.go('/squad');
+              break;
+            case 2:
+              context.go('/analytics');
+              break;
+            case 3:
+              context.go('/controls');
+              break;
           }
         },
         items: [
@@ -30,7 +46,7 @@ class MainShell extends StatelessWidget {
             activeIcon: PhosphorIcon(
               PhosphorIcons.monitor(PhosphorIconsStyle.fill),
             ),
-            label: 'Controls',
+            label: 'Regimes',
           ),
           BottomNavigationBarItem(
             icon: PhosphorIcon(PhosphorIcons.users()),
@@ -38,6 +54,16 @@ class MainShell extends StatelessWidget {
               PhosphorIcons.users(PhosphorIconsStyle.fill),
             ),
             label: 'The Squad',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart_rounded),
+            activeIcon: Icon(Icons.bar_chart_rounded),
+            label: 'Analytics',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.settings_outlined),
+            activeIcon: Icon(Icons.settings),
+            label: 'Controls',
           ),
         ],
       ),

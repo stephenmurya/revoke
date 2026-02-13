@@ -95,11 +95,11 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('BEG FOR TIME', style: AppTheme.h3),
+        title: Text('Beg for time', style: AppTheme.h3),
       ),
       body: SafeArea(
         child: FutureBuilder<Map<String, dynamic>>(
@@ -118,10 +118,12 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
                       width: 108,
                       height: 108,
                       decoration: BoxDecoration(
-                        color: AppTheme.darkGrey,
+                        color: AppSemanticColors.surface,
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: AppTheme.white.withOpacity(0.08),
+                          color: AppSemanticColors.primaryText.withValues(
+                            alpha: 0.08,
+                          ),
                           width: 1.5,
                         ),
                       ),
@@ -131,18 +133,18 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
                           : const Icon(
                               Icons.apps_rounded,
                               size: 56,
-                              color: AppTheme.orange,
+                              color: AppSemanticColors.accent,
                             ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    widget.appName.toUpperCase(),
+                    widget.appName,
                     textAlign: TextAlign.center,
-                    style: AppTheme.h2.copyWith(fontSize: 22),
+                    style: AppTheme.xlMedium,
                   ),
                   const SizedBox(height: 24),
-                  Text('TIME REQUEST', style: AppTheme.labelSmall),
+                  Text('Time request', style: AppTheme.labelSmall),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -150,16 +152,19 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
                     children: _durationOptions.map((minutes) {
                       final selected = _selectedMinutes == minutes;
                       return ChoiceChip(
-                        label: Text('$minutes mins'.toUpperCase()),
+                        label: Text('$minutes mins'),
                         selected: selected,
-                        labelStyle: AppTheme.bodySmall.copyWith(
-                          color: selected ? AppTheme.black : AppTheme.white,
-                          fontWeight: FontWeight.bold,
+                        labelStyle: AppTheme.smBold.copyWith(
+                          color: selected
+                              ? AppSemanticColors.onAccentText
+                              : AppSemanticColors.primaryText,
                         ),
-                        selectedColor: AppTheme.orange,
-                        backgroundColor: AppTheme.darkGrey,
+                        selectedColor: AppSemanticColors.accent,
+                        backgroundColor: AppSemanticColors.surface,
                         side: BorderSide(
-                          color: selected ? AppTheme.orange : AppTheme.white,
+                          color: selected
+                              ? AppSemanticColors.accent
+                              : AppSemanticColors.primaryText,
                         ),
                         onSelected: (_) {
                           setState(() => _selectedMinutes = minutes);
@@ -173,7 +178,7 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
                     maxLines: 4,
                     maxLength: 180,
                     decoration: AppTheme.defaultInputDecoration(
-                      labelText: 'WHY DO YOU NEED MORE TIME?',
+                      labelText: 'Why do you need more time?',
                       hintText: 'Tell your squad exactly why...',
                     ),
                   ),
@@ -181,13 +186,13 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
                   ElevatedButton(
                     onPressed: _submitting ? null : _submitPlea,
                     style: AppTheme.primaryButtonStyle,
-                    child: Text(_submitting ? 'SENDING...' : 'BEG FOR TIME'),
+                    child: Text(_submitting ? 'Sending...' : 'Beg for time'),
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(
                     onPressed: _submitting ? null : () => context.go('/home'),
                     style: AppTheme.secondaryButtonStyle,
-                    child: const Text('CANCEL PLEA'),
+                    child: const Text('Cancel plea'),
                   ),
                 ],
               ),

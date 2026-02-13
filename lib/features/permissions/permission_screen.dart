@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/native_bridge.dart';
 import '../../core/theme/app_theme.dart';
@@ -58,7 +57,7 @@ class _PermissionScreenState extends State<PermissionScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -67,38 +66,35 @@ class _PermissionScreenState extends State<PermissionScreen>
             children: [
               const SizedBox(height: 40),
               Text(
-                'REVOKE IS BLIND.',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.deepRed, // Make it alarming
-                  letterSpacing: -1,
+                'Revoke is blind.',
+                style: AppTheme.h1.copyWith(
+                  color: AppSemanticColors.danger,
+                  letterSpacing: -0.4,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'YOU REVOKED OUR ACCESS. WE CANNOT SEE YOUR SINS.',
-                style: GoogleFonts.jetBrainsMono(
-                  color: AppTheme.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                'You revoked our access. We cannot see your activity.',
+                style: AppTheme.bodySmall.copyWith(
+                  color: AppSemanticColors.primaryText,
                 ),
               ),
               const SizedBox(height: 48),
               _buildPermissionCard(
-                title: 'USAGE ACCESS',
-                description: 'REQUIRED TO SEE WHEN YOU OPEN RESTRICTED APPS.',
+                title: 'Usage access',
+                description:
+                    'Required to detect when restricted apps are opened.',
                 isGranted: _hasUsageStats,
                 onGrant: () => NativeBridge.requestUsageStats(),
-                color: AppTheme.orange,
+                color: AppSemanticColors.accent,
               ),
               const SizedBox(height: 20),
               _buildPermissionCard(
-                title: 'DRAW OVER APPS',
-                description: 'REQUIRED TO BLOCK THE SCREEN.',
+                title: 'Draw over apps',
+                description: 'Required to show the block screen overlay.',
                 isGranted: _hasOverlay,
                 onGrant: () => NativeBridge.requestOverlay(),
-                color: AppTheme.orange,
+                color: AppSemanticColors.accent,
               ),
               const Spacer(),
               SizedBox(
@@ -108,7 +104,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                       ? () => context.go('/home')
                       : null,
                   style: AppTheme.primaryButtonStyle,
-                  child: const Text('RESTORE VISION'),
+                  child: const Text('Restore vision'),
                 ),
               ),
             ],
@@ -128,12 +124,12 @@ class _PermissionScreenState extends State<PermissionScreen>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.darkGrey,
+        color: AppSemanticColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isGranted
               ? Colors.greenAccent
-              : AppTheme.white.withOpacity(0.1),
+              : AppSemanticColors.primaryText.withValues(alpha: 0.1),
           width: 2,
         ),
       ),
@@ -143,20 +139,12 @@ class _PermissionScreenState extends State<PermissionScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.white,
-                  ),
-                ),
+                Text(title, style: AppTheme.h3),
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    color: AppTheme.lightGrey,
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppSemanticColors.secondaryText,
                   ),
                 ),
               ],
@@ -164,23 +152,17 @@ class _PermissionScreenState extends State<PermissionScreen>
           ),
           const SizedBox(width: 16),
           if (isGranted)
-            const Icon(Icons.check_circle, color: Colors.greenAccent)
+            const Icon(Icons.check_circle, color: AppSemanticColors.success)
           else
             ElevatedButton(
               onPressed: onGrant,
               style: AppTheme.secondaryButtonStyle.copyWith(
-                padding: const MaterialStatePropertyAll(
+                padding: const WidgetStatePropertyAll(
                   EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
-                backgroundColor: const MaterialStatePropertyAll(AppTheme.black),
+                backgroundColor: const WidgetStatePropertyAll(AppSemanticColors.background),
               ),
-              child: Text(
-                'GRANT',
-                style: GoogleFonts.spaceGrotesk(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
-              ),
+              child: Text('Grant', style: AppTheme.baseBold),
             ),
         ],
       ),

@@ -20,7 +20,7 @@ class RevokeProgressBar extends StatelessWidget {
             height: 4,
             margin: const EdgeInsets.symmetric(horizontal: 2),
             decoration: BoxDecoration(
-              color: index <= currentStep ? AppTheme.orange : AppTheme.darkGrey,
+              color: index <= currentStep ? AppSemanticColors.accent : AppSemanticColors.surface,
               borderRadius: BorderRadius.circular(2),
             ),
           ),

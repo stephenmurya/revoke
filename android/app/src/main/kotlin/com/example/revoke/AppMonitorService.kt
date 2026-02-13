@@ -18,6 +18,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import org.json.JSONObject
 
 class AppMonitorService : Service() {
 
@@ -46,6 +47,7 @@ class AppMonitorService : Service() {
             updateSchedules(savedSchedules)
             android.util.Log.d("RevokeMonitor", "Loaded ${activeSchedules.size} persisted schedules")
         }
+        loadTempUnlocks()
         
         startForegroundService()
         
@@ -106,6 +108,7 @@ class AppMonitorService : Service() {
                 if (pkg != null) {
                     val expiry = System.currentTimeMillis() + (mins * 60 * 1000)
                     tempUnlockedPackages[pkg] = expiry
+                    persistTempUnlocks()
                     android.util.Log.d("RevokeMonitor", "Temporarily unlocking $pkg for $mins minutes.")
                 }
             }
@@ -118,12 +121,49 @@ class AppMonitorService : Service() {
         val expiry = tempUnlockedPackages[packageName] ?: return false
         if (System.currentTimeMillis() > expiry) {
             tempUnlockedPackages.remove(packageName)
+            persistTempUnlocks()
             android.util.Log.d("RevokeMonitor", "Temp unlock expired for $packageName")
             return false
         }
         val remainingMs = expiry - System.currentTimeMillis()
         android.util.Log.d("RevokeMonitor", "Temp unlock active for $packageName (${remainingMs / 1000}s left)")
         return true
+    }
+
+    private fun loadTempUnlocks() {
+        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+        val raw = prefs.getString("temp_unlocks", null) ?: return
+        val now = System.currentTimeMillis()
+        try {
+            val json = JSONObject(raw)
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val pkg = keys.next()
+                val expiry = json.optLong(pkg, 0L)
+                if (expiry > now) {
+                    tempUnlockedPackages[pkg] = expiry
+                }
+            }
+            persistTempUnlocks()
+        } catch (_: Exception) {
+            tempUnlockedPackages.clear()
+        }
+    }
+
+    private fun persistTempUnlocks() {
+        val now = System.currentTimeMillis()
+        val json = JSONObject()
+        val iterator = tempUnlockedPackages.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry.value > now) {
+                json.put(entry.key, entry.value)
+            } else {
+                iterator.remove()
+            }
+        }
+        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+        prefs.edit().putString("temp_unlocks", json.toString()).apply()
     }
 
     private fun updateSchedules(json: String) {

@@ -23,7 +23,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _isMissingPermissions = false;
   StreamSubscription? _permissionSubscription;
+  StreamSubscription? _temporaryApprovalSubscription;
   late Future<Map<String, dynamic>?> _userDataFuture;
+  Set<String> _temporaryApprovedPackages = const <String>{};
 
   @override
   void initState() {
@@ -33,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     NativeBridge.startService();
     _userDataFuture = AuthService.getUserData();
     _checkPermissions();
+    _refreshTemporaryApprovals();
     _loadSchedules();
     AuthService.validateSession();
 
@@ -41,12 +44,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         .listen((_) {
           _checkPermissions();
         });
+
+    _temporaryApprovalSubscription = Stream.periodic(const Duration(seconds: 5))
+        .listen((_) {
+          _refreshTemporaryApprovals();
+        });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _permissionSubscription?.cancel();
+    _temporaryApprovalSubscription?.cancel();
     super.dispose();
   }
 
@@ -54,6 +63,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _checkPermissions();
+      _refreshTemporaryApprovals();
       _loadSchedules();
       _userDataFuture = AuthService.getUserData();
     }
@@ -71,16 +81,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _refreshTemporaryApprovals() async {
+    try {
+      final active = await NativeBridge.getTemporaryApprovedPackages();
+      final next = active
+          .map((pkg) => pkg.trim())
+          .where((pkg) => pkg.isNotEmpty)
+          .toSet();
+      if (!mounted) return;
+      if (next.length == _temporaryApprovedPackages.length &&
+          next.containsAll(_temporaryApprovedPackages)) {
+        return;
+      }
+      setState(() {
+        _temporaryApprovedPackages = next;
+      });
+    } catch (_) {
+      // No-op: indicator is cosmetic and should not break home rendering.
+    }
+  }
+
   Future<void> _loadSchedules() async {
     setState(() => _isLoading = true);
-
-    final schedules = await ScheduleService.getSchedules();
-
-    if (mounted) {
-      setState(() {
-        _schedules = schedules;
-        _isLoading = false;
-      });
+    try {
+      final schedules = await ScheduleService.getSchedules();
+      if (mounted) {
+        setState(() {
+          _schedules = schedules;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _schedules = const [];
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -114,15 +151,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       body: SafeArea(
         child: _isLoading
             ? const Center(
-                child: CircularProgressIndicator(color: AppTheme.orange),
+                child: CircularProgressIndicator(color: AppSemanticColors.accent),
               )
             : RefreshIndicator(
                 onRefresh: _loadSchedules,
-                color: AppTheme.orange,
+                color: AppSemanticColors.accent,
                 child: CustomScrollView(
                   slivers: [
                     if (_isMissingPermissions)
@@ -133,15 +170,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             _checkPermissions();
                           },
                           child: Container(
-                            color: AppTheme.deepRed,
+                            color: AppSemanticColors.danger,
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Center(
                               child: Text(
-                                '⚠️ REVOKE IS BLIND. TAP TO FIX.',
-                                style: AppTheme.bodyMedium.copyWith(
-                                  color: AppTheme.white,
-                                  fontWeight: FontWeight.bold,
+                                'Revoke is blind. Tap to fix.',
+                                style: AppTheme.baseBold.copyWith(
+                                  color: AppSemanticColors.primaryText,
                                   letterSpacing: 1,
                                 ),
                               ),
@@ -170,7 +206,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     _buildSectionHeader('ACTIVE REGIMES'),
                                     Text(
                                       '${_schedules.where((s) => s.isActive).length}/${_schedules.length}',
-                                      style: AppTheme.bodySmall,
+                                      style: AppTheme.smMedium.copyWith(
+                                        color: AppSemanticColors.secondaryText,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -205,8 +243,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           );
           _loadSchedules();
         },
-        backgroundColor: AppTheme.orange,
-        child: const Icon(Icons.add, color: AppTheme.black, size: 40),
+        backgroundColor: AppSemanticColors.accent,
+        child: const Icon(Icons.add, color: AppSemanticColors.background, size: 40),
       ),
     );
   }
@@ -221,14 +259,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             children: [
               Image.asset(
                 'assets/branding/icon_source_primary_transparent.png',
-                width: 40,
-                height: 40,
+                width: 32,
+                height: 32,
                 fit: BoxFit.contain,
               ),
               const SizedBox(width: 12),
               Text(
                 'REVOKE',
-                style: AppTheme.h3.copyWith(fontSize: 22, letterSpacing: -0.5),
+                style: AppTheme.xxlMedium.copyWith(
+                  color: AppSemanticColors.secondaryText,
+                  letterSpacing: -0.5,
+                ),
               ),
             ],
           ),
@@ -243,16 +284,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   decoration: AppTheme.avatarBorderStyle,
                   child: CircleAvatar(
                     radius: 20,
-                    backgroundColor: AppTheme.darkGrey,
+                    backgroundColor: AppSemanticColors.surface,
                     backgroundImage: userData?['photoUrl'] != null
                         ? CachedNetworkImageProvider(userData!['photoUrl'])
                         : null,
                     child: userData?['photoUrl'] == null
                         ? Text(
                             (userData?['fullName'] ?? "U")[0].toUpperCase(),
-                            style: AppTheme.bodyLarge.copyWith(
-                              color: AppTheme.orange,
-                              fontWeight: FontWeight.bold,
+                            style: AppTheme.lgBold.copyWith(
+                              color: AppSemanticColors.accentText,
                             ),
                           )
                         : null,
@@ -267,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildSectionHeader(String title) {
-    return Text(title, style: AppTheme.labelSmall);
+    return Text(title, style: AppTheme.smBold.copyWith(color: AppSemanticColors.accent));
   }
 
   bool _isCurrentlyBlocking(ScheduleModel s) {
@@ -335,6 +375,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildScheduleCard(ScheduleModel schedule) {
     final isBlocking = _isCurrentlyBlocking(schedule);
+    final hasTemporaryApproval = schedule.targetApps.any(
+      _temporaryApprovedPackages.contains,
+    );
+    final cardBorderColor = hasTemporaryApproval
+        ? AppSemanticColors.approve
+        : (schedule.isActive
+              ? (isBlocking
+                    ? AppSemanticColors.accent
+                    : AppSemanticColors.success.withOpacity(0.5))
+              : Colors.transparent);
+    final cardBorderWidth = hasTemporaryApproval ? 1.0 : 2.0;
 
     return GestureDetector(
       onTap: () async {
@@ -351,16 +402,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: AppTheme.darkGrey,
+          color: AppSemanticColors.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: schedule.isActive
-                ? (isBlocking
-                      ? AppTheme.orange
-                      : AppTheme.trendUp.withOpacity(0.5))
-                : Colors.transparent,
-            width: 2,
-          ),
+          border: Border.all(color: cardBorderColor, width: cardBorderWidth),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,8 +415,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 Expanded(child: Text(schedule.name, style: AppTheme.h3)),
                 Switch(
                   value: schedule.isActive,
-                  activeColor: AppTheme.black,
-                  activeTrackColor: AppTheme.orange,
+                  activeColor: AppSemanticColors.background,
+                  activeTrackColor: AppSemanticColors.accent,
                   onChanged: (v) => _onToggleSchedule(schedule),
                 ),
               ],
@@ -388,9 +432,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   decoration: BoxDecoration(
                     color: schedule.isActive
                         ? (isBlocking
-                              ? AppTheme.orange.withOpacity(0.1)
-                              : AppTheme.trendUp.withOpacity(0.1))
-                        : AppTheme.black.withOpacity(0.2),
+                              ? AppSemanticColors.accent.withOpacity(0.1)
+                              : AppSemanticColors.success.withOpacity(0.1))
+                        : AppSemanticColors.background.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -399,8 +443,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         : "💤 INACTIVE",
                     style: AppTheme.labelSmall.copyWith(
                       color: schedule.isActive
-                          ? (isBlocking ? AppTheme.orange : AppTheme.trendUp)
-                          : AppTheme.grey,
+                          ? (isBlocking ? AppSemanticColors.accent : AppSemanticColors.success)
+                          : AppSemanticColors.mutedText,
                     ),
                   ),
                 ),
@@ -424,7 +468,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ? "TIME BLOCK"
                       : "USAGE LIMIT",
                   style: AppTheme.labelSmall.copyWith(
-                    color: AppTheme.grey.withOpacity(0.5),
+                    color: AppSemanticColors.mutedText.withOpacity(0.5),
                   ),
                 ),
               ],
@@ -447,7 +491,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             child: Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.darkGrey, width: 2),
+                border: Border.all(
+                  color: _temporaryApprovedPackages.contains(icons[i])
+                      ? AppSemanticColors.approve
+                      : AppSemanticColors.surface,
+                  width: _temporaryApprovedPackages.contains(icons[i]) ? 1 : 2,
+                ),
               ),
               child: ClipOval(
                 child: SingleAppIcon(packageName: icons[i], size: 28),
@@ -473,8 +522,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             margin: const EdgeInsets.only(right: 12),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.darkGrey,
+              color: AppSemanticColors.surface,
               borderRadius: BorderRadius.circular(12),
+              border: _temporaryApprovedPackages.contains(packageName)
+                  ? Border.all(color: AppSemanticColors.approve, width: 1)
+                  : null,
             ),
             child: SingleAppIcon(packageName: packageName, size: 32),
           );
@@ -486,7 +538,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildEmptyLabel(String text) {
     return Text(
       text,
-      style: AppTheme.bodySmall.copyWith(color: AppTheme.grey.withOpacity(0.5)),
+      style: AppTheme.bodySmall.copyWith(
+        color: AppSemanticColors.mutedText.withValues(alpha: 0.5),
+      ),
     );
   }
 
@@ -496,7 +550,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: Center(
         child: Text(
           'TAP + TO START THE GRIND',
-          style: AppTheme.bodyMedium.copyWith(color: AppTheme.grey),
+          style: AppTheme.bodyMedium.copyWith(
+            color: AppSemanticColors.mutedText,
+          ),
         ),
       ),
     );

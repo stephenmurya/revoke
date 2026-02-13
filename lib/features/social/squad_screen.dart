@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 
 class SquadScreen extends StatelessWidget {
   const SquadScreen({super.key});
@@ -7,10 +8,7 @@ class SquadScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'THE SQUAD',
-          style: Theme.of(context).textTheme.headlineLarge,
-        ),
+        title: Text('The Squad', style: AppTheme.h2),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -18,16 +16,15 @@ class SquadScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.groups, size: 64, color: Colors.white),
+            const Icon(Icons.groups, size: 64, color: AppSemanticColors.primaryText),
             const SizedBox(height: 16),
-            Text(
-              'NO SQUAD MEMBERS YET',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
+            Text('No squad members yet', style: AppTheme.bodyLarge),
             const SizedBox(height: 8),
             Text(
-              'YOU ARE SURVIVING ALONE',
-              style: Theme.of(context).textTheme.bodyMedium,
+              'You are surviving alone',
+              style: AppTheme.bodyMedium.copyWith(
+                color: AppSemanticColors.secondaryText,
+              ),
             ),
           ],
         ),

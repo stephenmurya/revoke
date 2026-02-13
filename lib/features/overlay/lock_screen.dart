@@ -7,19 +7,19 @@ class LockScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.lock_rounded, size: 80, color: AppTheme.orange),
+              const Icon(Icons.lock_rounded, size: 80, color: AppSemanticColors.accent),
               const SizedBox(height: 24),
               Text(
                 'COOKED',
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                  color: AppTheme.orange,
+                style: AppTheme.size4xlBold.copyWith(
+                  color: AppSemanticColors.accentText,
                   letterSpacing: 4.0,
                 ),
               ),
@@ -27,9 +27,9 @@ class LockScreen extends StatelessWidget {
               Text(
                 'YOUR TIME IS UP. GO TOUCH GRASS.',
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: AppTheme.lgBold.copyWith(
+                  color: AppSemanticColors.primaryText,
+                ),
               ),
               const SizedBox(height: 48),
               ElevatedButton(

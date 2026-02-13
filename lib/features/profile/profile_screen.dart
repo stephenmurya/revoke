@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -30,33 +32,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
-        backgroundColor: AppTheme.black,
+        backgroundColor: AppSemanticColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.white),
+          icon: const Icon(
+            Icons.arrow_back,
+            color: AppSemanticColors.primaryText,
+          ),
           onPressed: () => context.pop(),
         ),
-        title: Text("PROFILE", style: AppTheme.h3.copyWith(letterSpacing: 2)),
-        centerTitle: true,
+        title: Text("Account & Profile", style: AppTheme.xlMedium),
       ),
       body: FutureBuilder<Map<String, dynamic>?>(
         future: _userDataFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: AppTheme.orange),
+              child: CircularProgressIndicator(color: AppSemanticColors.accent),
             );
           }
 
           final userData = snapshot.data;
           if (userData == null) {
-            return const Center(
-              child: Text(
-                "USER NOT FOUND",
-                style: TextStyle(color: AppTheme.white),
-              ),
+            return Center(
+              child: Text("USER NOT FOUND", style: AppTheme.bodyLarge),
             );
           }
 
@@ -72,16 +73,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   decoration: AppTheme.avatarBorderStyle,
                   child: CircleAvatar(
                     radius: 60,
-                    backgroundColor: AppTheme.darkGrey,
+                    backgroundColor: AppSemanticColors.surface,
                     backgroundImage: userData['photoUrl'] != null
                         ? CachedNetworkImageProvider(userData['photoUrl'])
                         : null,
                     child: userData['photoUrl'] == null
                         ? Text(
                             (userData['fullName'] ?? "?")[0].toUpperCase(),
-                            style: AppTheme.h1.copyWith(
-                              color: AppTheme.orange,
-                              fontSize: 48,
+                            style: AppTheme.size5xlBold.copyWith(
+                              color: AppSemanticColors.accentText,
                             ),
                           )
                         : null,
@@ -133,19 +133,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.darkGrey,
+        color: AppSemanticColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.white.withOpacity(0.05)),
+        border: Border.all(
+          color: AppSemanticColors.primaryText.withValues(alpha: 0.05),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: AppTheme.labelSmall.copyWith(letterSpacing: 1.5)),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: AppTheme.bodyLarge.copyWith(fontWeight: FontWeight.w500),
-          ),
+          Text(value, style: AppTheme.lgMedium),
         ],
       ),
     );
@@ -161,9 +160,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: AppTheme.darkGrey,
+            color: AppSemanticColors.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.white.withOpacity(0.05)),
+            border: Border.all(
+              color: AppSemanticColors.primaryText.withValues(alpha: 0.05),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,13 +179,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Expanded(
                     child: Text(
                       value,
-                      style: AppTheme.bodyLarge.copyWith(
-                        fontWeight: FontWeight.w500,
+                      style: AppTheme.lgMedium.copyWith(
+                        color: AppSemanticColors.primaryText,
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.edit_rounded, color: AppTheme.orange),
+                  const Icon(
+                    Icons.edit_rounded,
+                    color: AppSemanticColors.accent,
+                  ),
                 ],
               ),
             ],
@@ -199,7 +203,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final newNickname = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.darkGrey,
+      backgroundColor: AppSemanticColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -266,21 +270,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _handleLogout(BuildContext context) async {
-    await AuthService.signOut();
-    if (context.mounted) {
-      context.go('/onboarding');
-    }
+  void _handleLogout(BuildContext context) {
+    context.go('/onboarding?force_auth=1');
+    unawaited(AuthService.signOut().catchError((_) {}));
   }
 
   void _showDeleteConfirmation(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: AppTheme.black,
+        backgroundColor: AppSemanticColors.background,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: AppTheme.deepRed, width: 2),
+          side: const BorderSide(color: AppSemanticColors.danger, width: 2),
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -291,7 +293,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 const Icon(
                   Icons.warning_amber_rounded,
-                  color: AppTheme.deepRed,
+                  color: AppSemanticColors.danger,
                   size: 64,
                 ),
                 const SizedBox(height: 20),
@@ -305,7 +307,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   "This action is irreversible. Your focus scores, squad history, and presence will be purged from the archives.",
                   textAlign: TextAlign.center,
                   style: AppTheme.bodyMedium.copyWith(
-                    color: AppTheme.grey,
+                    color: AppSemanticColors.mutedText,
                     height: 1.5,
                   ),
                 ),
@@ -324,10 +326,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: ElevatedButton(
                         onPressed: () async {
                           Navigator.pop(context);
-                          await AuthService.deleteAccount();
-                          if (context.mounted) {
-                            context.go('/onboarding');
-                          }
+                          context.go('/onboarding?force_auth=1');
+                          unawaited(
+                            AuthService.deleteAccount().catchError((_) {}),
+                          );
                         },
                         style: AppTheme.dangerButtonStyle,
                         child: const Text("PURGE"),

@@ -19,7 +19,7 @@ class AuthService {
 
   static void _redirectToAuthFlow() {
     try {
-      AppRouter.router.go('/onboarding');
+      AppRouter.router.go('/onboarding?force_auth=1');
     } catch (_) {
       // Router might not be ready during app bootstrap; ignore safely.
     }
@@ -106,7 +106,6 @@ class AuthService {
       final snapshot = await userDoc.get();
       if (!snapshot.exists || snapshot.data()?['focusScore'] == null) {
         await userDoc.set({
-          'nickname': user.displayName?.split(' ').first ?? 'Warden',
           'focusScore': 500,
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
@@ -171,6 +170,7 @@ class AuthService {
 
   static Future<void> signOut() async {
     _redirectToAuthFlow();
+    AppRouter.clearSessionCaches();
     await _tokenRefreshSub?.cancel();
     _tokenRefreshSub = null;
 
@@ -199,22 +199,81 @@ class AuthService {
     if (user == null) return;
 
     _redirectToAuthFlow();
+    AppRouter.clearSessionCaches();
 
-    final userData = await getUserData();
-    final squadId = userData?['squadId'] as String?;
+    await _tokenRefreshSub?.cancel();
+    _tokenRefreshSub = null;
 
-    // 1. Remove from squad if applicable
-    if (squadId != null) {
-      await SquadService.leaveSquad(user.uid, squadId);
+    final uid = user.uid;
+    final userRef = _firestore.collection('users').doc(uid);
+
+    try {
+      final userData = await getUserData();
+      final squadId = (userData?['squadId'] as String?)?.trim();
+
+      // 1. Remove from squad if applicable
+      if (squadId != null && squadId.isNotEmpty) {
+        await SquadService.leaveSquad(uid, squadId);
+      }
+
+      // 2. Delete known user sub-collections
+      await _deleteSubcollection(userRef, 'regimes');
+
+      // 3. Delete user document
+      await userRef.delete();
+
+      // 4. Delete Firebase Auth user (reauth if required)
+      await _deleteAuthUserWithReauth(user);
+    } finally {
+      try {
+        await _googleSignIn.disconnect();
+      } catch (_) {}
+      await _auth.signOut();
+    }
+  }
+
+  static Future<void> _deleteSubcollection(
+    DocumentReference<Map<String, dynamic>> userRef,
+    String subcollection,
+  ) async {
+    final snapshot = await userRef.collection(subcollection).get();
+    if (snapshot.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final doc in snapshot.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  static Future<void> _deleteAuthUserWithReauth(User user) async {
+    try {
+      await user.delete();
+      return;
+    } on FirebaseAuthException catch (e) {
+      if (e.code != 'requires-recent-login') {
+        rethrow;
+      }
     }
 
-    // 2. Delete user document
-    await _firestore.collection('users').doc(user.uid).delete();
+    await _googleSignIn.initialize(
+      serverClientId:
+          '70325101052-aae5kl5ie7npv94dqtgrktur0ql1ln01.apps.googleusercontent.com',
+    );
 
-    // 3. Delete from Firebase Auth
+    final googleUser = await _googleSignIn.authenticate();
+
+    final googleAuth = googleUser.authentication;
+    final idToken = googleAuth.idToken;
+    if (idToken == null) {
+      throw FirebaseAuthException(
+        code: 'reauth-failed',
+        message: 'Missing Google ID token for re-authentication.',
+      );
+    }
+
+    final credential = GoogleAuthProvider.credential(idToken: idToken);
+    await user.reauthenticateWithCredential(credential);
     await user.delete();
-
-    // 4. Clean up Google Sign-In
-    await signOut();
   }
 }

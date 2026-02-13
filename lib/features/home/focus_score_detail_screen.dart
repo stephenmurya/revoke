@@ -31,9 +31,9 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
-        backgroundColor: AppTheme.black,
+        backgroundColor: AppSemanticColors.background,
         elevation: 0,
         title: Text('FOCUS SCORE', style: AppTheme.h3),
       ),
@@ -47,7 +47,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
             title: 'BLOCKED APP ATTEMPTS',
             value: '${(_score * 0.32).round()}',
             subtitle: 'Each failed launch strengthens your score.',
-            color: AppTheme.orange,
+            color: AppSemanticColors.accent,
           ),
           const SizedBox(height: 12),
           _buildMetricCard(
@@ -55,7 +55,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
             title: 'CONSISTENCY',
             value: '${(_scoreProgress * 100).round()}%',
             subtitle: 'Daily discipline keeps your trend alive.',
-            color: AppTheme.trendUp,
+            color: AppSemanticColors.success,
           ),
           const SizedBox(height: 12),
           _buildMetricCard(
@@ -63,7 +63,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
             title: 'SQUAD JUDGMENTS',
             value: '${((_score / 100).round()).clamp(0, 10)}',
             subtitle: 'Plea outcomes and squad decisions impact rank.',
-            color: AppTheme.deepRed,
+            color: AppSemanticColors.reject,
           ),
           const SizedBox(height: 18),
           _buildBands(),
@@ -76,23 +76,32 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.darkGrey,
+        color: AppSemanticColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.orange.withOpacity(0.3)),
+        border: Border.all(
+          color: AppSemanticColors.accent.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('LIVE SCORE', style: AppTheme.labelSmall),
           const SizedBox(height: 8),
-          Text('$_score', style: AppTheme.h1.copyWith(fontSize: 56)),
+          Text(
+            '$_score',
+            style: AppTheme.size5xlBold.copyWith(
+              color: AppSemanticColors.primaryText,
+            ),
+          ),
           const SizedBox(height: 12),
           LinearProgressIndicator(
             value: _scoreProgress,
             minHeight: 10,
             borderRadius: BorderRadius.circular(6),
-            backgroundColor: AppTheme.black,
-            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.orange),
+            backgroundColor: AppSemanticColors.background,
+            valueColor: const AlwaysStoppedAnimation<Color>(
+              AppSemanticColors.accent,
+            ),
           ),
           const SizedBox(height: 10),
           Row(
@@ -117,9 +126,9 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.darkGrey,
+        color: AppSemanticColors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [
@@ -146,7 +155,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.darkGrey,
+        color: AppSemanticColors.surface,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -154,10 +163,10 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
         children: [
           Text('RANK BANDS', style: AppTheme.labelSmall),
           const SizedBox(height: 12),
-          _band('900-1000', 'MONK MODE', AppTheme.orange),
-          _band('700-899', 'LOCKED IN', AppTheme.white),
-          _band('400-699', 'MID', AppTheme.lightGrey),
-          _band('0-399', 'COOKED', AppTheme.deepRed),
+          _band('900-1000', 'MONK MODE', AppSemanticColors.accent),
+          _band('700-899', 'LOCKED IN', AppSemanticColors.primaryText),
+          _band('400-699', 'MID', AppSemanticColors.secondaryText),
+          _band('0-399', 'COOKED', AppSemanticColors.reject),
         ],
       ),
     );

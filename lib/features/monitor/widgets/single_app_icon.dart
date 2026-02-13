@@ -16,7 +16,7 @@ class SingleAppIcon extends StatelessWidget {
       builder: (context, snapshot) {
         // Handle errors gracefully - show fallback icon instead of error
         if (snapshot.hasError) {
-          return Icon(Icons.android, size: size, color: AppTheme.lightGrey);
+          return Icon(Icons.android, size: size, color: AppSemanticColors.secondaryText);
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -25,7 +25,7 @@ class SingleAppIcon extends StatelessWidget {
             height: size,
             child: const CircularProgressIndicator(
               strokeWidth: 2,
-              color: AppTheme.orange,
+              color: AppSemanticColors.accent,
             ),
           );
         }
@@ -36,12 +36,12 @@ class SingleAppIcon extends StatelessWidget {
             width: size,
             height: size,
             errorBuilder: (context, error, stackTrace) {
-              return Icon(Icons.android, size: size, color: AppTheme.lightGrey);
+              return Icon(Icons.android, size: size, color: AppSemanticColors.secondaryText);
             },
           );
         }
 
-        return Icon(Icons.android, size: size, color: AppTheme.lightGrey);
+        return Icon(Icons.android, size: size, color: AppSemanticColors.secondaryText);
       },
     );
   }

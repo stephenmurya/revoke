@@ -77,4 +77,12 @@ class NativeBridge {
       'minutes': minutes,
     });
   }
+
+  /// Returns package names currently under temporary tribunal approval.
+  static Future<List<String>> getTemporaryApprovedPackages() async {
+    final List<dynamic> result = await _channel.invokeMethod(
+      'getTemporaryApprovals',
+    );
+    return result.map((e) => e.toString()).toList();
+  }
 }

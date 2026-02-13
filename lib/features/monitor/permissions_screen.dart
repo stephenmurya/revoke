@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/native_bridge.dart';
+import '../../core/theme/app_theme.dart';
 
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({super.key});
@@ -85,7 +86,7 @@ class _PermissionsScreenState extends State<PermissionsScreen>
         title: Text(title),
         subtitle: Text(description),
         trailing: isGranted
-            ? const Icon(Icons.check_circle, color: Colors.green)
+            ? const Icon(Icons.check_circle, color: AppSemanticColors.success)
             : ElevatedButton(onPressed: onPressed, child: const Text('Grant')),
       ),
     );

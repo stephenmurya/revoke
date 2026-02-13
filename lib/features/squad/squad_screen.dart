@@ -11,20 +11,276 @@ import 'widgets/plea_judgment_card.dart';
 
 class SquadScreen extends StatelessWidget {
   const SquadScreen({super.key});
+  static const String _squadCodePrefix = 'REV-';
+  static const int _squadCodeTotalLength = 7;
+  static const int _squadCodeSuffixLength = 3;
+
+  String _formatSquadCodeInput(String raw) {
+    final cleaned = raw.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    String suffix = cleaned.startsWith('REV') ? cleaned.substring(3) : cleaned;
+    if (suffix.length > _squadCodeSuffixLength) {
+      suffix = suffix.substring(0, _squadCodeSuffixLength);
+    }
+    final formatted = '$_squadCodePrefix$suffix';
+    if (formatted.length > _squadCodeTotalLength) {
+      return formatted.substring(0, _squadCodeTotalLength);
+    }
+    return formatted;
+  }
+
+  Future<void> _showSquadHudSheet(
+    BuildContext context,
+    String squadCode,
+  ) async {
+    final shouldTransfer = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppSemanticColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          top: false,
+          child: FractionallySizedBox(
+            heightFactor: 0.48,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.max,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text('SQUAD DIRECTIVES', style: AppTheme.h3),
+                  const SizedBox(height: 14),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(24),
+                    onTap: () async {
+                      await Clipboard.setData(ClipboardData(text: squadCode));
+                      if (!sheetContext.mounted) return;
+                      ScaffoldMessenger.of(sheetContext)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text('SQUAD CODE COPIED'),
+                            duration: Duration(milliseconds: 1200),
+                          ),
+                        );
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: AppSemanticColors.background,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: AppSemanticColors.accent.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'YOUR SQUAD CODE',
+                            textAlign: TextAlign.center,
+                            style: AppTheme.labelSmall.copyWith(
+                              color: AppSemanticColors.mutedText,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              squadCode,
+                              textAlign: TextAlign.center,
+                              style: AppTheme.squadCodeInput.copyWith(
+                                color: AppSemanticColors.accent,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'TAP TO COPY',
+                            textAlign: TextAlign.center,
+                            style: AppTheme.labelSmall.copyWith(
+                              color: AppSemanticColors.secondaryText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop(true);
+                      },
+                      style: AppTheme.secondaryButtonStyle,
+                      child: const Text('TRANSFER TO NEW SQUAD'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (shouldTransfer == true && context.mounted) {
+      await _showTransferSheet(context, squadCode);
+    }
+  }
+
+  Future<void> _showTransferSheet(
+    BuildContext context,
+    String currentSquadCode,
+  ) async {
+    String transferCode = _squadCodePrefix;
+    final squadCodeFormatter = TextInputFormatter.withFunction((
+      oldValue,
+      newValue,
+    ) {
+      final formatted = _formatSquadCodeInput(newValue.text);
+      return TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(offset: formatted.length),
+      );
+    });
+    bool isTransferring = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppSemanticColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setModalState) {
+            final normalizedCurrent = currentSquadCode.trim().toUpperCase();
+            final normalizedTarget = transferCode.trim().toUpperCase();
+            final canSubmit =
+                normalizedTarget.length == _squadCodeTotalLength &&
+                normalizedTarget != normalizedCurrent &&
+                !isTransferring;
+
+            final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text('INITIATE TRANSFER', style: AppTheme.h3),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Transferring will remove you from your current squad. If you are the last member, this squad will be deleted.',
+                      textAlign: TextAlign.center,
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppSemanticColors.secondaryText,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      initialValue: _squadCodePrefix,
+                      autofocus: true,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[a-zA-Z0-9-]'),
+                        ),
+                        LengthLimitingTextInputFormatter(_squadCodeTotalLength),
+                        squadCodeFormatter,
+                      ],
+                      textCapitalization: TextCapitalization.characters,
+                      textAlign: TextAlign.center,
+                      style: AppTheme.squadCodeInput,
+                      onChanged: (value) {
+                        setModalState(() {
+                          transferCode = value;
+                        });
+                      },
+                      decoration: AppTheme.defaultInputDecoration(
+                        hintText: 'REV-XXX',
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: canSubmit
+                            ? () async {
+                                final uid = AuthService.currentUser?.uid;
+                                if (uid == null) return;
+
+                                setModalState(() => isTransferring = true);
+                                try {
+                                  await SquadService.joinSquad(
+                                    uid,
+                                    transferCode,
+                                  );
+                                  if (!sheetContext.mounted) return;
+                                  Navigator.of(sheetContext).pop();
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context)
+                                    ..hideCurrentSnackBar()
+                                    ..showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'TRANSFER COMPLETE: ALLEGIANCE UPDATED',
+                                        ),
+                                      ),
+                                    );
+                                  context.go('/squad');
+                                } catch (e) {
+                                  if (!sheetContext.mounted) return;
+                                  ScaffoldMessenger.of(sheetContext)
+                                    ..hideCurrentSnackBar()
+                                    ..showSnackBar(
+                                      SnackBar(content: Text(e.toString())),
+                                    );
+                                } finally {
+                                  if (sheetContext.mounted) {
+                                    setModalState(() => isTransferring = false);
+                                  }
+                                }
+                              }
+                            : null,
+                        style: AppTheme.primaryButtonStyle,
+                        child: Text(
+                          isTransferring
+                              ? 'PROCESSING TRANSFER...'
+                              : 'INITIATE TRANSFER',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final currentUid = AuthService.currentUser?.uid;
 
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       body: SafeArea(
         child: FutureBuilder<Map<String, dynamic>?>(
           future: AuthService.getUserData(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(
-                child: CircularProgressIndicator(color: AppTheme.orange),
+                child: CircularProgressIndicator(color: AppSemanticColors.accent),
               );
             }
 
@@ -47,50 +303,43 @@ class SquadScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () {
+                            final normalizedCode = squadCode?.trim();
+                            if (normalizedCode == null ||
+                                normalizedCode.isEmpty) {
+                              return;
+                            }
+                            _showSquadHudSheet(context, normalizedCode);
+                          },
+                          child: Row(
                             children: [
-                              Text("SQUAD HUD", style: AppTheme.h1),
-                              Text(
-                                "SQUAD CODE: ${squadCode ?? '--- ---'}",
-                                style: AppTheme.bodyMedium.copyWith(
-                                  color: AppTheme.orange,
-                                  fontWeight: FontWeight.bold,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text("SQUAD HUD", style: AppTheme.xxlMedium),
+                                    Text(
+                                      "SQUAD CODE: ${squadCode ?? '--- ---'}",
+                                      style: AppTheme.smMedium.copyWith(
+                                        color: AppSemanticColors.accentText,
+                                      ),
+                                    ),
+                                  ],
                                 ),
+                              ),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: AppSemanticColors.accent,
+                                size: 18,
                               ),
                             ],
                           ),
-                          IconButton(
-                            onPressed:
-                                (squadCode == null || squadCode.trim().isEmpty)
-                                ? null
-                                : () async {
-                                    await Clipboard.setData(
-                                      ClipboardData(text: squadCode),
-                                    );
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context)
-                                      ..hideCurrentSnackBar()
-                                      ..showSnackBar(
-                                        const SnackBar(
-                                          content: Text("SQUAD CODE COPIED"),
-                                          duration: Duration(
-                                            milliseconds: 1200,
-                                          ),
-                                        ),
-                                      );
-                                  },
-                            icon: const Icon(
-                              Icons.copy_rounded,
-                              color: AppTheme.orange,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                     StreamBuilder<List<PleaModel>>(
@@ -123,11 +372,11 @@ class SquadScreen extends StatelessWidget {
                                 horizontal: 16,
                                 vertical: 14,
                               ),
-                              decoration: RevokeTheme.warningBanner,
+                              decoration: AppTheme.warningBannerDecoration,
                               child: Text(
                                 'LIVE TRIBUNAL IN PROGRESS',
                                 textAlign: TextAlign.center,
-                                style: RevokeTheme.warningBannerText,
+                                style: AppTheme.warningBannerTextStyle,
                               ),
                             ),
                           ),
@@ -144,7 +393,9 @@ class SquadScreen extends StatelessWidget {
                             return Center(
                               child: Text(
                                 "ERROR: ${streamSnapshot.error}",
-                                style: const TextStyle(color: Colors.red),
+                                style: AppTheme.baseMedium.copyWith(
+                                  color: AppSemanticColors.errorText,
+                                ),
                               ),
                             );
                           }
@@ -153,7 +404,7 @@ class SquadScreen extends StatelessWidget {
                               ConnectionState.waiting) {
                             return const Center(
                               child: CircularProgressIndicator(
-                                color: AppTheme.orange,
+                                color: AppSemanticColors.accent,
                               ),
                             );
                           }
@@ -220,7 +471,7 @@ class SquadScreen extends StatelessWidget {
 
                     // Show the first available plea for judgment
                     return Container(
-                      color: AppTheme.black.withOpacity(0.8),
+                      color: AppSemanticColors.background.withValues(alpha: 0.8),
                       child: Center(
                         child: PleaJudgmentCard(plea: activePleas.first),
                       ),
@@ -242,12 +493,12 @@ class SquadScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.darkGrey,
+        color: AppSemanticColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isCooked
-              ? AppTheme.orange.withOpacity(0.5)
-              : AppTheme.white.withOpacity(0.05),
+              ? AppSemanticColors.accent.withOpacity(0.5)
+              : AppSemanticColors.primaryText.withOpacity(0.05),
           width: 2,
         ),
       ),
@@ -260,16 +511,25 @@ class SquadScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  member.nickname?.toUpperCase() ?? "UNKNOWN",
-                  style: AppTheme.h3.copyWith(fontSize: 18),
+                  member.nickname != null ? member.nickname![0].toUpperCase() + member.nickname!.substring(1) : "UNKNOWN",
+                  style: AppTheme.lgMedium.copyWith(
+                    color: AppSemanticColors.primaryText,
+                  ),
                 ),
                 Text(
                   member.fullName ?? member.email ?? "",
-                  style: AppTheme.bodySmall,
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppSemanticColors.mutedText,
+                  ),
                 ),
                 if (isCooked) ...[
-                  const SizedBox(height: 4),
-                  Text("⚠️ COOKED", style: AppTheme.labelSmall),
+                  const SizedBox(height: 0),
+                  Text(
+                    "Cooked",
+                    style: AppTheme.smBold.copyWith(
+                      color: AppSemanticColors.accentText,
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -279,13 +539,17 @@ class SquadScreen extends StatelessWidget {
             children: [
               Text(
                 member.focusScore.toString(),
-                style: AppTheme.h2.copyWith(
-                  color: isCooked ? AppTheme.orange : AppTheme.white,
+                style: AppTheme.xlMedium.copyWith(
+                  color: isCooked
+                      ? AppSemanticColors.accentText
+                      : AppSemanticColors.primaryText,
                 ),
               ),
               Text(
-                "FOCUS",
-                style: AppTheme.labelSmall.copyWith(color: AppTheme.grey),
+                "FOCUS SCORE",
+                style: AppTheme.xsRegular.copyWith(
+                  color: AppSemanticColors.mutedText,
+                ),
               ),
             ],
           ),
@@ -299,16 +563,16 @@ class SquadScreen extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: isPulse ? AppTheme.orange : Colors.transparent,
+          color: isPulse ? AppSemanticColors.accent : Colors.transparent,
           width: 2,
         ),
       ),
       child: CircleAvatar(
         radius: 24,
-        backgroundColor: AppTheme.black,
+        backgroundColor: AppSemanticColors.background,
         backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
         child: photoUrl == null
-            ? const Icon(Icons.person, color: AppTheme.lightGrey)
+            ? const Icon(Icons.person, color: AppSemanticColors.secondaryText)
             : null,
       ),
     );
@@ -327,7 +591,7 @@ class SquadScreen extends StatelessWidget {
           children: [
             const Icon(
               Icons.group_off_rounded,
-              color: AppTheme.darkGrey,
+              color: AppSemanticColors.surface,
               size: 80,
             ),
             const SizedBox(height: 24),

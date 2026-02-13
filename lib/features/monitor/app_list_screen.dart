@@ -3,7 +3,6 @@ import '../../core/theme/app_theme.dart';
 import '../../core/services/app_discovery_service.dart';
 import '../../core/utils/app_categorizer.dart';
 import 'dart:typed_data';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppListScreen extends StatefulWidget {
   final Set<String> initialSelection;
@@ -47,12 +46,9 @@ class _AppListScreenState extends State<AppListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
-        title: Text(
-          'SELECT APPS',
-          style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold),
-        ),
+        title: Text('Select apps', style: AppTheme.h3),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
@@ -60,9 +56,8 @@ class _AppListScreenState extends State<AppListScreen> {
             onPressed: () => Navigator.pop(context, _selectedPackages),
             child: Text(
               'DONE',
-              style: GoogleFonts.spaceGrotesk(
-                color: AppTheme.orange,
-                fontWeight: FontWeight.bold,
+              style: AppTheme.baseMedium.copyWith(
+                color: AppSemanticColors.accentText,
               ),
             ),
           ),
@@ -73,15 +68,13 @@ class _AppListScreenState extends State<AppListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const CircularProgressIndicator(color: AppTheme.orange),
+                  const CircularProgressIndicator(color: AppSemanticColors.accent),
                   const SizedBox(height: 16),
                   Text(
-                    'SCANNING APPS...',
-                    style: GoogleFonts.spaceGrotesk(
-                      color: AppTheme.orange,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
+                    'Scanning apps...',
+                    style: AppTheme.baseMedium.copyWith(
+                      color: AppSemanticColors.accentText,
+                      letterSpacing: 0.4,
                     ),
                   ),
                 ],
@@ -95,10 +88,10 @@ class _AppListScreenState extends State<AppListScreen> {
                   child: TextField(
                     controller: _searchController,
                     decoration: AppTheme.defaultInputDecoration(
-                      hintText: 'SEARCH APPS...',
+                      hintText: 'Search for apps...',
                       prefixIcon: const Icon(
                         Icons.search,
-                        color: AppTheme.orange,
+                        color: AppSemanticColors.accent,
                       ),
                     ),
                   ),
@@ -137,22 +130,20 @@ class _AppListScreenState extends State<AppListScreen> {
                               if (app.icon != null)
                                 Image.memory(
                                   Uint8List.fromList(app.icon!),
-                                  width: 20,
-                                  height: 20,
+                                  width: 24,
+                                  height: 24,
                                 )
                               else
                                 const Icon(
                                   Icons.android,
-                                  size: 20,
-                                  color: AppTheme.white,
+                                  size: 24,
+                                  color: AppSemanticColors.mutedText,
                                 ),
                               const SizedBox(width: 8),
                               Text(
                                 app.name,
-                                style: GoogleFonts.jetBrainsMono(
-                                  color: AppTheme.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                                style: AppTheme.smBold.copyWith(
+                                  color: AppSemanticColors.primaryText,
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -165,7 +156,7 @@ class _AppListScreenState extends State<AppListScreen> {
                                 child: const Icon(
                                   Icons.close,
                                   size: 16,
-                                  color: AppTheme.white,
+                                  color: AppSemanticColors.secondaryText,
                                 ),
                               ),
                             ],
@@ -178,8 +169,8 @@ class _AppListScreenState extends State<AppListScreen> {
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: () => _loadApps(forceRefresh: true),
-                    color: AppTheme.orange,
-                    backgroundColor: AppTheme.darkGrey,
+                    color: AppSemanticColors.accent,
+                    backgroundColor: AppSemanticColors.surface,
                     child: _buildAppList(),
                   ),
                 ),
@@ -208,17 +199,18 @@ class _AppListScreenState extends State<AppListScreen> {
                 Expanded(
                   child: Text(
                     category.label,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.orange,
+                    style: AppTheme.baseMedium.copyWith(
+                      color: AppSemanticColors.secondaryText,
                     ),
                   ),
                 ),
                 Text(
                   _allAppsSelectedInCategory(apps)
-                      ? 'DESELECT ALL'
-                      : 'SELECT ALL',
-                  style: AppTheme.bodySmall.copyWith(color: AppTheme.lightGrey),
+                      ? 'Deselect all'
+                      : 'Select all',
+                  style: AppTheme.smMedium.copyWith(
+                    color: AppSemanticColors.mutedText,
+                  ),
                 ),
               ],
             ),
@@ -237,19 +229,16 @@ class _AppListScreenState extends State<AppListScreen> {
                       }
                     });
                   },
-                  title: Text(
-                    app.name,
-                    style: GoogleFonts.jetBrainsMono(fontSize: 14),
-                  ),
+                  title: Text(app.name, style: AppTheme.bodyMedium),
                   secondary: app.icon != null
                       ? Image.memory(
                           Uint8List.fromList(app.icon!),
                           width: 32,
                           height: 32,
                         )
-                      : const Icon(Icons.android, color: AppTheme.lightGrey),
-                  activeColor: AppTheme.orange,
-                  checkColor: AppTheme.black,
+                      : const Icon(Icons.android, color: AppSemanticColors.secondaryText),
+                  activeColor: AppSemanticColors.accent,
+                  checkColor: AppSemanticColors.background,
                 ),
               )
               .toList(),

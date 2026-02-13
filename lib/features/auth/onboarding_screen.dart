@@ -246,14 +246,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ..showSnackBar(
         SnackBar(
           content: Text(
-            "CODE COPIED TO CLIPBOARD.",
-            style: AppTheme.bodyMedium.copyWith(
-              color: AppTheme.black,
-              fontWeight: FontWeight.bold,
+            "Code copied to clipboard.",
+            style: AppTheme.baseBold.copyWith(
+              color: AppSemanticColors.onAccentText,
               letterSpacing: 0.8,
             ),
           ),
-          backgroundColor: AppTheme.orange,
+          backgroundColor: AppSemanticColors.accent,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
           duration: const Duration(milliseconds: 1200),
@@ -300,7 +299,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       body: Stack(
         children: [
           SafeArea(
@@ -342,9 +341,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           if (_isLoading)
             Container(
-              color: AppTheme.black.withOpacity(0.8),
+              color: AppSemanticColors.background.withOpacity(0.8),
               child: const Center(
-                child: CircularProgressIndicator(color: AppTheme.orange),
+                child: CircularProgressIndicator(color: AppSemanticColors.accent),
               ),
             ),
         ],
@@ -365,11 +364,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             "WE NEED ACCESS TO YOUR SOUL\n(AND YOUR SCREEN TIME DATA 🙃)",
             textAlign: TextAlign.center,
-            style: AppTheme.bodyMedium.copyWith(color: AppTheme.grey),
+            style: AppTheme.bodyMedium.copyWith(
+              color: AppSemanticColors.mutedText,
+            ),
           ),
           const Spacer(),
           _buildPrimaryButton(
-            label: "SIGN IN WITH GOOGLE",
+            label: "Sign in with Google",
             onPressed: () async {
               setState(() => _isLoading = true);
               try {
@@ -383,7 +384,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         content: Text(
                           "Sign-in failed. Please check your internet and Google account.",
                         ),
-                        backgroundColor: AppTheme.deepRed,
+                        backgroundColor: AppSemanticColors.danger,
                       ),
                     );
                   }
@@ -393,7 +394,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text("Error: $e"),
-                      backgroundColor: AppTheme.deepRed,
+                      backgroundColor: AppSemanticColors.danger,
                       duration: const Duration(seconds: 10),
                     ),
                   );
@@ -420,13 +421,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             onChanged: (v) => _nickname = v,
             onSubmitted: (_) => _submitNickname(),
             textInputAction: TextInputAction.done,
-            textCapitalization: TextCapitalization.characters,
             textAlign: TextAlign.center,
             style: AppTheme.h2,
-            decoration: RevokeTheme.nicknameInputDecoration,
+            decoration: AppTheme.nicknameInputDecoration,
           ),
           const Spacer(),
-          _buildPrimaryButton(label: "CONTINUE", onPressed: _submitNickname),
+          _buildPrimaryButton(label: "Continue", onPressed: _submitNickname),
         ],
       ),
     );
@@ -443,21 +443,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         children: [
           const Spacer(),
           _buildPermissionTile(
-            "USAGE ACCESS",
+            "Usage Access",
             "Required to see app usage.",
             _hasUsageStats,
             () => NativeBridge.requestUsageStats(),
           ),
           const SizedBox(height: 16),
           _buildPermissionTile(
-            "DRAW OVER APPS",
+            "Draw Over Apps",
             "Required to block you.",
             _hasOverlay,
             () => NativeBridge.requestOverlay(),
           ),
           const Spacer(),
           _buildPrimaryButton(
-            label: "CONTINUE",
+            label: "Continue",
             onPressed: allGranted ? _nextPage : null,
           ),
         ],
@@ -475,9 +475,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             "${_estimatedHours.toStringAsFixed(1)} HOURS",
             textAlign: TextAlign.center, // Centered
-            style: AppTheme.h1.copyWith(
-              color: RevokeTheme.accentTimeColor,
-              fontSize: 64,
+            style: AppTheme.size5xlBold.copyWith(
+              color: AppSemanticColors.accentText,
             ),
           ),
           const SizedBox(height: 32),
@@ -522,7 +521,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             "${actualHours.toStringAsFixed(1)} HOURS DAILY",
             textAlign: TextAlign.center,
-            style: AppTheme.h2.copyWith(color: AppTheme.orange, fontSize: 48),
+            style: AppTheme.size5xlMedium.copyWith(
+              color: AppSemanticColors.accentText,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -531,8 +532,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 : "Surprisingly disciplined.\nFor now.",
             textAlign: TextAlign.center,
             style: AppTheme.bodyLarge.copyWith(
-              color: isCooked ? AppTheme.trendDown : AppTheme.trendUp,
-              fontWeight: FontWeight.bold,
+              color: isCooked
+                  ? AppSemanticColors.errorText
+                  : AppSemanticColors.success,
             ),
           ),
           const Spacer(),
@@ -543,14 +545,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppTheme.darkGrey,
+                color: AppSemanticColors.surface,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
                   const Icon(
                     Icons.apps_rounded,
-                    color: AppTheme.orange,
+                    color: AppSemanticColors.accent,
                     size: 20,
                   ),
                   const SizedBox(width: 12),
@@ -560,8 +562,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           .split('.')
                           .last
                           .toUpperCase(),
-                      style: AppTheme.bodyMedium.copyWith(
-                        fontWeight: FontWeight.bold,
+                      style: AppTheme.baseBold.copyWith(
+                        color: AppSemanticColors.primaryText,
                       ),
                     ),
                   ),
@@ -589,15 +591,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             "${_goalHours.toStringAsFixed(1)} HOURS",
             textAlign: TextAlign.center,
-            style: AppTheme.h1.copyWith(
-              color: RevokeTheme.accentTimeColor,
-              fontSize: 64,
+            style: AppTheme.size5xlBold.copyWith(
+              color: AppSemanticColors.accentText,
             ),
           ),
           const SizedBox(height: 16),
           Text(
             "DAILY LIMIT",
-            style: AppTheme.labelSmall.copyWith(color: AppTheme.grey),
+            style: AppTheme.labelSmall.copyWith(
+              color: AppSemanticColors.mutedText,
+            ),
           ),
           const SizedBox(height: 32),
           SliderTheme(
@@ -649,18 +652,18 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   child: Ink(
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
-                      color: AppTheme.darkGrey,
+                      color: AppSemanticColors.surface,
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: AppTheme.orange.withOpacity(0.3),
+                        color: AppSemanticColors.accent.withOpacity(0.3),
                       ),
                     ),
                     child: Column(
                       children: [
                         Text(
                           "YOUR SQUAD CODE",
-                          style: AppTheme.labelSmall.copyWith(
-                            color: AppTheme.grey,
+                          style: AppTheme.smMedium.copyWith(
+                            color: AppSemanticColors.mutedText,
                           ),
                         ),
                         FittedBox(
@@ -673,15 +676,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             child: Text(
                               _squadCode ?? "--- ---",
                               textWidthBasis: TextWidthBasis.parent,
-                              style: RevokeTheme.codeStyle,
+                              style: AppTheme.squadCodeInput,
                             ),
                           ),
                         ),
                         const SizedBox(height: 10),
                         Text(
                           "TAP ANYWHERE TO COPY",
-                          style: RevokeTheme.monoLabel.copyWith(
-                            color: AppTheme.lightGrey.withOpacity(0.8),
+                          style: AppTheme.xsMedium.copyWith(
+                            color: AppSemanticColors.secondaryText.withOpacity(0.8),
                           ),
                         ),
                       ],
@@ -691,7 +694,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             ),
             const SizedBox(height: 32),
-            TextButton.icon(
+            _buildSecondaryIconButton(
               onPressed: _squadCode == null
                   ? null
                   : () {
@@ -699,22 +702,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         "Join my Revoke Squad and watch my screen time: $_squadCode",
                       );
                     },
-              icon: const Icon(Icons.share_rounded, color: AppTheme.orange),
-              label: Text(
-                "SHARE INVITE LINK",
-                style: AppTheme.bodyMedium.copyWith(color: AppTheme.orange),
-              ),
+              icon: Icons.share_rounded,
+              label: "Share Invite Code",
             ),
             const SizedBox(height: 16),
-            TextButton(
+            _buildSecondaryButton(
               onPressed: () => setState(() => _isJoiningMode = true),
-              child: Text(
-                "I HAVE A CODE",
-                style: AppTheme.bodyMedium.copyWith(
-                  color: AppTheme.grey,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
+              label: "I Have a Code",
             ),
           ] else ...[
             TextField(
@@ -759,12 +753,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               },
             ),
             const SizedBox(height: 16),
-            TextButton(
+            _buildSecondaryButton(
               onPressed: () => setState(() => _isJoiningMode = false),
-              child: Text(
-                "BACK TO INVITE",
-                style: AppTheme.bodyMedium.copyWith(color: AppTheme.grey),
-              ),
+              label: "BACK TO INVITE",
             ),
           ],
           const Spacer(),
@@ -793,14 +784,19 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             header,
             textAlign: TextAlign.center,
-            style: AppTheme.h1.copyWith(fontSize: 40, height: 1.1),
+            style: AppTheme.size4xlBold.copyWith(
+              color: AppSemanticColors.primaryText,
+              height: 1.1,
+            ),
           ),
           if (subtext != null) ...[
             const SizedBox(height: 16),
             Text(
               subtext,
               textAlign: TextAlign.center,
-              style: AppTheme.bodyMedium.copyWith(color: AppTheme.grey),
+              style: AppTheme.bodyMedium.copyWith(
+                color: AppSemanticColors.mutedText,
+              ),
             ),
           ],
           const SizedBox(height: 24),
@@ -818,10 +814,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.darkGrey,
+        color: AppSemanticColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isGranted ? AppTheme.trendUp : AppTheme.white.withOpacity(0.1),
+          color: isGranted
+              ? AppSemanticColors.success
+              : AppSemanticColors.primaryText.withValues(alpha: 0.1),
         ),
       ),
       child: ListTile(
@@ -829,16 +827,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         title: Text(title, style: AppTheme.h3),
         subtitle: Text(desc, style: AppTheme.bodySmall),
         trailing: isGranted
-            ? const Icon(Icons.check_circle, color: AppTheme.trendUp)
+            ? const Icon(Icons.check_circle, color: AppSemanticColors.success)
             : ElevatedButton(
                 onPressed: onTap,
                 style: AppTheme.secondaryButtonStyle.copyWith(
-                  padding: const MaterialStatePropertyAll(
+                  padding: const WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
-                  backgroundColor: const MaterialStatePropertyAll(
-                    AppTheme.black,
-                  ),
+                  backgroundColor: const WidgetStatePropertyAll(AppSemanticColors.background),
                 ),
                 child: const Text("GRANT"),
               ),
@@ -860,12 +856,41 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
+  Widget _buildSecondaryButton({
+    required VoidCallback? onPressed,
+    required String label,
+    bool fullWidth = false,
+  }) {
+    final button = ElevatedButton(
+      onPressed: onPressed,
+      style: AppTheme.secondaryButtonStyle,
+      child: Text(label),
+    );
+    if (!fullWidth) return button;
+    return SizedBox(width: double.infinity, child: button);
+  }
+
+  Widget _buildSecondaryIconButton({
+    required VoidCallback? onPressed,
+    required IconData icon,
+    required String label,
+    bool fullWidth = false,
+  }) {
+    final button = ElevatedButton.icon(
+      onPressed: onPressed,
+      style: AppTheme.secondaryButtonStyle,
+      icon: Icon(icon),
+      label: Text(label),
+    );
+    if (!fullWidth) return button;
+    return SizedBox(width: double.infinity, child: button);
+  }
+
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
-      style: AppTheme.labelSmall.copyWith(
-        color: AppTheme.orange.withOpacity(0.7),
-        fontSize: 14,
+      style: AppTheme.baseBold.copyWith(
+        color: AppSemanticColors.accentText.withValues(alpha: 0.7),
       ),
     );
   }

@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../theme/app_theme.dart';
 
 class NotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
@@ -191,7 +191,7 @@ class NotificationService {
       playSound: true,
       sound: RawResourceAndroidNotificationSound('lookatthisdude'),
       icon: 'notification_icon',
-      color: Color(0xFFFF4500),
+      color: AppSemanticColors.accent,
     );
     const iosDetails = DarwinNotificationDetails(presentSound: true);
     const details = NotificationDetails(

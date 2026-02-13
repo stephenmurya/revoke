@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../home/focus_score_detail_screen.dart';
@@ -47,17 +46,17 @@ class _FocusScoreCardState extends State<FocusScoreCard>
   }
 
   String get _rankTitle {
-    if (_score >= 900) return 'MONK MODE';
-    if (_score >= 700) return 'LOCKED IN';
+    if (_score >= 900) return 'Monk mode';
+    if (_score >= 700) return 'Locked in';
     if (_score >= 400) return 'MID';
-    return 'COOKED';
+    return 'Cooked';
   }
 
   Color get _rankColor {
-    if (_score >= 900) return AppTheme.orange;
-    if (_score >= 700) return AppTheme.white;
-    if (_score >= 400) return AppTheme.lightGrey;
-    return const Color(0xFFFF0000);
+    if (_score >= 900) return AppSemanticColors.accentText;
+    if (_score >= 700) return AppSemanticColors.primaryText;
+    if (_score >= 400) return AppSemanticColors.secondaryText;
+    return AppSemanticColors.errorText;
   }
 
   @override
@@ -75,14 +74,17 @@ class _FocusScoreCardState extends State<FocusScoreCard>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [AppTheme.darkGrey, AppTheme.black],
+            colors: [AppSemanticColors.surface, AppSemanticColors.background],
           ),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: _rankColor.withOpacity(0.3), width: 2),
+          border: Border.all(
+            color: _rankColor.withValues(alpha: 0.3),
+            width: 2,
+          ),
           boxShadow: _score >= 900
               ? [
                   BoxShadow(
-                    color: AppTheme.orange.withOpacity(0.3),
+                    color: AppSemanticColors.accent.withValues(alpha: 0.3),
                     blurRadius: 20,
                     spreadRadius: 2,
                   ),
@@ -97,18 +99,16 @@ class _FocusScoreCardState extends State<FocusScoreCard>
                 Expanded(
                   child: Text(
                     'FOCUS SCORE',
-                    style: GoogleFonts.spaceGrotesk(
-                      color: AppTheme.orange,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 3,
+                    style: AppTheme.smBold.copyWith(
+                      color: AppSemanticColors.accentText,
+                      letterSpacing: 0,
                     ),
                   ),
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: AppTheme.lightGrey.withOpacity(0.9),
+                  color: AppSemanticColors.secondaryText.withValues(alpha: 0.9),
                 ),
               ],
             ),
@@ -122,10 +122,8 @@ class _FocusScoreCardState extends State<FocusScoreCard>
                   builder: (context, child) {
                     return Text(
                       '${_animation.value}',
-                      style: GoogleFonts.spaceGrotesk(
+                      style: AppTheme.size5xlBold.copyWith(
                         color: _rankColor,
-                        fontSize: 72,
-                        fontWeight: FontWeight.w900,
                         height: 1,
                       ),
                     );
@@ -137,17 +135,12 @@ class _FocusScoreCardState extends State<FocusScoreCard>
                   children: [
                     Text(
                       _rankTitle,
-                      style: GoogleFonts.spaceGrotesk(
-                        color: _rankColor,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppTheme.lgBold.copyWith(color: _rankColor),
                     ),
                     Text(
-                      'UP 12% THIS WEEK',
-                      style: GoogleFonts.jetBrainsMono(
-                        color: const Color(0xFF00FF00),
-                        fontSize: 10,
+                      'Up 12% this week',
+                      style: AppTheme.smRegular.copyWith(
+                        color: AppSemanticColors.success,
                       ),
                     ),
                   ],

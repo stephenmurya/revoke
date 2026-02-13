@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../core/models/schedule_model.dart';
 import '../../core/services/schedule_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -49,19 +48,19 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
     if (_nameController.text.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('ENTER A NAME')));
+      ).showSnackBar(const SnackBar(content: Text('Enter a name')));
       return;
     }
     if (_selectedPackages.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('SELECT APPS')));
+      ).showSnackBar(const SnackBar(content: Text('Select apps')));
       return;
     }
 
     final schedule = ScheduleModel(
       id: widget.existingSchedule?.id ?? const Uuid().v4(),
-      name: _nameController.text.toUpperCase(),
+      name: _nameController.text.trim(),
       type: _selectedType,
       targetApps: _selectedPackages.toList(),
       days: _selectedDays,
@@ -80,18 +79,23 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
         title: Text(
-          widget.existingSchedule == null ? 'NEW REGIME' : 'EDIT REGIME',
-          style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold),
+          widget.existingSchedule == null ? 'New regime' : 'Edit regime',
+          style: AppTheme.h3,
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          IconButton(
+          TextButton(
             onPressed: _save,
-            icon: const Icon(Icons.check, color: AppTheme.orange),
+            child: Text(
+              'SAVE REGIME',
+              style: AppTheme.baseMedium.copyWith(
+                color: AppSemanticColors.accentText,
+              ),
+            ),
           ),
         ],
       ),
@@ -100,17 +104,17 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildLabel('NAME'),
+            _buildLabel('Name'),
             TextField(
               controller: _nameController,
-              style: GoogleFonts.jetBrainsMono(fontSize: 18),
+              style: AppTheme.bodyLarge,
               decoration: AppTheme.defaultInputDecoration(
-                hintText: 'e.g., DEEP WORK',
+                hintText: 'e.g., Deep work',
               ),
             ),
             const SizedBox(height: 32),
 
-            _buildLabel('TYPE'),
+            _buildLabel('Type'),
             Row(
               children: [
                 _buildTypeButton(ScheduleType.timeBlock),
@@ -121,14 +125,13 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
             const SizedBox(height: 32),
 
             if (_selectedType == ScheduleType.timeBlock) ...[
-              _buildLabel('BLOCKING HOURS'),
+              _buildLabel('Blocking hours'),
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
-                  'Apps will be BLOCKED during this time',
-                  style: GoogleFonts.jetBrainsMono(
-                    color: AppTheme.orange.withOpacity(0.7),
-                    fontSize: 12,
+                  'Apps will be blocked during this time',
+                  style: AppTheme.smRegular.copyWith(
+                    color: AppSemanticColors.mutedText,
                   ),
                 ),
               ),
@@ -136,7 +139,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                 children: [
                   Expanded(
                     child: _buildTimePicker(
-                      'BLOCK FROM',
+                      'Block from',
                       _startTime,
                       (t) => setState(() => _startTime = t),
                     ),
@@ -144,7 +147,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: _buildTimePicker(
-                      'BLOCK UNTIL',
+                      'Block until',
                       _endTime,
                       (t) => setState(() => _endTime = t),
                     ),
@@ -152,7 +155,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                 ],
               ),
             ] else ...[
-              _buildLabel('DAILY LIMIT'),
+              _buildLabel('Daily limit'),
               Row(
                 children: [
                   _buildDurationPicker(
@@ -173,11 +176,11 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
             ],
             const SizedBox(height: 32),
 
-            _buildLabel('ACTIVE DAYS'),
+            _buildLabel('Active days'),
             _buildDaySelector(),
             const SizedBox(height: 32),
 
-            _buildLabel('TARGET APPS'),
+            _buildLabel('Target apps'),
             ElevatedButton.icon(
               onPressed: () async {
                 final result = await Navigator.push<Set<String>>(
@@ -189,15 +192,12 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                 );
                 if (result != null) setState(() => _selectedPackages = result);
               },
-              icon: const Icon(Icons.apps),
-              label: Text(
-                'SELECT TARGET APPS',
-                style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold),
-              ),
+              icon: const Icon(Icons.apps, color: AppSemanticColors.accent),
+              label: Text('Select target apps', style: AppTheme.lgMedium.copyWith(color: AppSemanticColors.accent)),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 56),
-                backgroundColor: AppTheme.darkGrey,
-                side: const BorderSide(color: AppTheme.orange, width: 1),
+                backgroundColor: AppSemanticColors.surface,
+                side: const BorderSide(color: AppSemanticColors.accent, width: 1),
               ),
             ),
             const SizedBox(height: 16),
@@ -213,7 +213,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppTheme.darkGrey,
+                        color: AppSemanticColors.surface,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: SingleAppIcon(packageName: pkg, size: 24),
@@ -232,12 +232,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text,
-        style: GoogleFonts.spaceGrotesk(
-          color: AppTheme.orange,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 2,
-        ),
+        style: AppTheme.smMedium.copyWith(color: AppSemanticColors.accentText),
       ),
     );
   }
@@ -250,15 +245,16 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: active ? AppTheme.orange : AppTheme.darkGrey,
+            color: active ? AppSemanticColors.accent : AppSemanticColors.surface,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Text(
             type.label,
             textAlign: TextAlign.center,
-            style: GoogleFonts.spaceGrotesk(
-              color: active ? AppTheme.black : AppTheme.white,
-              fontWeight: FontWeight.bold,
+            style: active ? AppTheme.baseBold.copyWith(
+              color: AppSemanticColors.onAccentText,
+            ) : AppTheme.baseMedium.copyWith(
+              color: AppSemanticColors.primaryText,
             ),
           ),
         ),
@@ -282,25 +278,18 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppTheme.darkGrey,
+          color: AppSemanticColors.surface,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
           children: [
             Text(
               label,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 10,
-                color: AppTheme.lightGrey,
+              style: AppTheme.bodySmall.copyWith(
+                color: AppSemanticColors.secondaryText,
               ),
             ),
-            Text(
-              time.format(context),
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(time.format(context), style: AppTheme.lgBold),
           ],
         ),
       ),
@@ -317,19 +306,19 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: AppTheme.darkGrey,
+          color: AppSemanticColors.surface,
           borderRadius: BorderRadius.circular(10),
         ),
         child: DropdownButton<int>(
           value: value,
           underline: const SizedBox(),
           isExpanded: true,
-          dropdownColor: AppTheme.darkGrey,
+          dropdownColor: AppSemanticColors.surface,
           items: List.generate(
             max,
             (i) => DropdownMenuItem(
               value: i,
-              child: Text('$i $label', style: GoogleFonts.jetBrainsMono()),
+              child: Text('$i $label', style: AppTheme.bodyMedium),
             ),
           ),
           onChanged: (v) => onChanged(v!),
@@ -348,25 +337,29 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         return GestureDetector(
           onTap: () {
             setState(() {
-              if (selected)
+              if (selected) {
                 _selectedDays.remove(day);
-              else
+              } else {
                 _selectedDays.add(day);
+              }
             });
           },
           child: Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: selected ? AppTheme.orange : AppTheme.darkGrey,
+              color: selected ? AppSemanticColors.accent : AppSemanticColors.surface,
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
             child: Text(
               shortDays[index],
-              style: GoogleFonts.spaceGrotesk(
-                color: selected ? AppTheme.black : AppTheme.white,
-                fontWeight: FontWeight.bold,
+              style: selected ? AppTheme.baseBold.copyWith(
+                color: selected
+                    ? AppSemanticColors.onAccentText
+                    : AppSemanticColors.primaryText,
+              ) : AppTheme.baseMedium.copyWith(
+                color: AppSemanticColors.primaryText,
               ),
             ),
           ),

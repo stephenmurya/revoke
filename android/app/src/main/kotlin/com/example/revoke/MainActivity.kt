@@ -13,6 +13,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.app.usage.UsageStatsManager
 import java.util.Calendar
+import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.revoke.app/overlay"
@@ -177,6 +178,9 @@ class MainActivity : FlutterActivity() {
                     } else {
                         result.error("INVALID_ARGUMENT", "packageName is required", null)
                     }
+                }
+                "getTemporaryApprovals" -> {
+                    result.success(getTemporaryApprovals())
                 }
                 else -> result.notImplemented()
             }
@@ -351,5 +355,35 @@ class MainActivity : FlutterActivity() {
             "usage_stats" to usageStats,
             "overlay" to overlay
         )
+    }
+
+    private fun getTemporaryApprovals(): List<String> {
+        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+        val raw = prefs.getString("temp_unlocks", null) ?: return emptyList()
+        val now = System.currentTimeMillis()
+        return try {
+            val json = JSONObject(raw)
+            val active = mutableListOf<String>()
+            val expired = mutableListOf<String>()
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val pkg = keys.next()
+                val expiry = json.optLong(pkg, 0L)
+                if (expiry > now) {
+                    active.add(pkg)
+                } else {
+                    expired.add(pkg)
+                }
+            }
+            if (expired.isNotEmpty()) {
+                for (pkg in expired) {
+                    json.remove(pkg)
+                }
+                prefs.edit().putString("temp_unlocks", json.toString()).apply()
+            }
+            active
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 }

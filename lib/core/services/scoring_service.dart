@@ -51,8 +51,8 @@ class ScoringService {
       final data = snapshot.data() ?? {};
       final double vowHours = _extractVowHours(data);
       final Map<String, dynamic> reality = await NativeBridge.getRealityCheck();
-      final Map<String, bool> restricted = await PersistenceService
-          .getRestrictedApps();
+      final Map<String, bool> restricted =
+          await PersistenceService.getRestrictedApps();
       final Set<String> restrictedPackages = restricted.entries
           .where((e) => e.value)
           .map((e) => e.key)
@@ -68,10 +68,11 @@ class ScoringService {
         vowHours: vowHours,
       );
 
-      final int regimeSessionsCompleted = await _estimateCompletedRegimeSessions(
-        restrictedHoursToday,
-        vowHours,
-      );
+      final int regimeSessionsCompleted =
+          await _estimateCompletedRegimeSessions(
+            restrictedHoursToday,
+            vowHours,
+          );
       final int rewardTarget = regimeSessionsCompleted * 15;
 
       await _firestore.runTransaction((tx) async {
@@ -79,7 +80,8 @@ class ScoringService {
         if (!fresh.exists) return;
 
         final user = fresh.data() ?? <String, dynamic>{};
-        final int current = (user['focusScore'] as num?)?.toInt() ?? _baselineScore;
+        final int current =
+            (user['focusScore'] as num?)?.toInt() ?? _baselineScore;
         final List<int> history = List<int>.from(
           (user['scoreHistory'] as List?)?.map((e) => (e as num).toInt()) ??
               const <int>[],

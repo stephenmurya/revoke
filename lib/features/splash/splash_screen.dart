@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/native_bridge.dart';
@@ -13,7 +12,7 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  String _status = "INITIALIZING...";
+  String _status = 'Initializing...';
 
   @override
   void initState() {
@@ -32,7 +31,7 @@ class _SplashScreenState extends State<SplashScreen> {
       }
 
       // 2. Check User Data (Async)
-      setState(() => _status = "SYNCING PROFILE...");
+      setState(() => _status = 'Syncing profile...');
 
       // Add a timeout to prevent hanging forever
       final userData = await AuthService.getUserData().timeout(
@@ -68,7 +67,7 @@ class _SplashScreenState extends State<SplashScreen> {
       }
 
       // 3. Check Permissions
-      setState(() => _status = "CHECKING PERMISSIONS...");
+      setState(() => _status = 'Checking permissions...');
       final perms = await NativeBridge.checkPermissions();
       final hasAll =
           (perms['usage_stats'] ?? false) && (perms['overlay'] ?? false);
@@ -82,7 +81,7 @@ class _SplashScreenState extends State<SplashScreen> {
       if (mounted) context.go('/home');
     } catch (e) {
       if (mounted) {
-        setState(() => _status = "ERROR: $e");
+        setState(() => _status = 'Error: $e');
       }
       // Consider adding a retry button in the UI if this happens
     }
@@ -91,31 +90,28 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.black,
+      backgroundColor: AppSemanticColors.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Logo / Initial Text
             Text(
-              "REVOKE",
-              style: GoogleFonts.spaceGrotesk(
-                color: AppTheme.white,
-                fontSize: 48,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 8,
+              'Revoke',
+              style: AppTheme.size5xlBold.copyWith(
+                color: AppSemanticColors.primaryText,
+                letterSpacing: 1,
               ),
             ),
             const SizedBox(height: 24),
             // Loading Indicator
-            const CircularProgressIndicator(color: AppTheme.orange),
+            const CircularProgressIndicator(color: AppSemanticColors.accent),
             const SizedBox(height: 24),
             // Status Text
             Text(
               _status,
-              style: GoogleFonts.jetBrainsMono(
-                color: AppTheme.lightGrey,
-                fontSize: 14,
+              style: AppTheme.bodyMedium.copyWith(
+                color: AppSemanticColors.secondaryText,
               ),
             ),
           ],

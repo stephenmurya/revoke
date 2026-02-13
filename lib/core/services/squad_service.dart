@@ -48,10 +48,11 @@ class SquadService {
   /// Joins an existing squad using a 6-digit (REV-XXX) code.
   /// Updates both the /squads document and the user's /users document atomically.
   static Future<void> joinSquad(String uid, String squadCode) async {
+    final normalizedCode = squadCode.toUpperCase().trim();
     // 1. Find the squad by code
     final querySnapshot = await _firestore
         .collection('squads')
-        .where('squadCode', isEqualTo: squadCode.toUpperCase().trim())
+        .where('squadCode', isEqualTo: normalizedCode)
         .limit(1)
         .get();
 
@@ -81,10 +82,12 @@ class SquadService {
           final oldMemberIds = List<String>.from(
             oldSquadSnapshot.get('memberIds') as List,
           );
-          final shouldDeleteOldSquad =
-              oldMemberIds.length == 1 && oldMemberIds.contains(uid);
+          oldMemberIds.remove(uid);
+          final shouldDeleteOldSquad = oldMemberIds.isEmpty;
           if (shouldDeleteOldSquad) {
             transaction.delete(oldSquadRef);
+          } else {
+            transaction.update(oldSquadRef, {'memberIds': oldMemberIds});
           }
         }
       }
@@ -99,7 +102,7 @@ class SquadService {
       // 3. Update the User document
       transaction.update(userRef, {
         'squadId': squadRef.id,
-        'squadCode': squadCode.toUpperCase().trim(),
+        'squadCode': normalizedCode,
       });
     });
   }
