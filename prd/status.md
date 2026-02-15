@@ -1,90 +1,65 @@
 # Revoke Project Status
 
+Last updated: Feb 15, 2026
+
+Source of truth: repository implementation + PRD (`prd/prd.md`).
+
 ## Completed
-- [x] Project Foundation & Permissions (Usage Stats, Overlay, Wallpaper, etc.)
+- [x] Project Foundation & Permissions (Usage Stats, Overlay, Battery Optimization gate)
 - [x] Design System (Black/Orange base palette + centralized theme system)
-- [x] Core Navigation Shell
-- [x] App Discovery (Fetching installed user apps with icons)
-- [x] Local Persistence (Saving restricted apps using SharedPreferences)
-- [x] Usage Monitoring (Kotlin Foreground Service with polling logic)
-- [x] Overlay Triggering (Native-to-Flutter communication via Broadcast & MethodChannel)
-- [x] Fixed Android 14 FGS Crash (Added FOREGROUND_SERVICE_DATA_SYNC permission)
-- [x] App Categorization (Native category fetch + Flutter categorizer)
-- [x] Harder Lock Overlay (Opaque + Home screen trigger)
-- [x] Website Blocker UI (Bottom sheet trigger for web-aware apps)
-- [x] Regime (Schedules) Engine (Custom time blocks and usage limits)
-- [x] Command Center Dashboard (HUD with Focus Score and Active Regimes)
-- [x] Home Optimization (Vertical ListView + Optimistic UI + Caching)
-- [x] App Selector Integration (Dedicated AppListScreen)
-- [x] Native UI Upgrade (Buttons + Dynamic Shame Copy)
-- [x] Focus Score Visualization (Animated Card with Rank Titles)
-- [x] Focus Score Detail Page (Tap-through analytics/explainer screen)
-- [x] Blocking Sync Fix (Schedules now properly enforce on Android)
+- [x] Android Enforcement Layer
+- [x] Kotlin Foreground Service (Usage monitoring + adaptive polling)
+- [x] Overlay Triggering (Broadcast + MethodChannel bridge)
+- [x] Boot Persistence (BOOT_COMPLETED receiver + restart strategy)
 - [x] Native Persistence (SharedPreferences storage for service restarts)
-- [x] Loop Hardening (Timestamp-based event tracking)
-- [x] Lazy Loading (On-demand icon fetching for instant Dashboard load)
-- [x] Home Screen Performance (Removed full app list scan from init)
-- [x] Permission Gatekeeper (Forced access on first launch)
-- [x] Persistent Permission Checks (Real-time warning banner)
-- [x] Premium Overlay Redesign (Gen Z HUD + High-fidelity UI)
-- [x] Smart Dashboard Cards (Real-time status + Time remaining context)
-- [x] High-fidelity Branding (Lock Vector + Home HUD)
-- [x] Squad Data Layer (User & Squad Models)
-- [x] Squad Service (Create/Join Logic)
-- [x] Squad HUD (Member List & Real-time Scores)
-- [x] Plea Data Engine (Firestore Logic)
-- [x] Native-to-Cloud Bridge (Plea Trigger)
-- [x] Judgment Day (Voting UI & Real-time Pleas)
-- [x] Outcome Enforcement (Native Stand-Down)
-- [x] Judgment Siren
-- [x] Account Management (Profile & Deletion)
-- [x] Global Nickname Editing (Profile bottom-sheet editor + Firestore update)
-- [x] Squad Topbar Copy Action (Copy squad code directly from Squad HUD)
-- [x] Focus Score Algorithm (Decay & Reward)
-- [x] Native Bridge Synchronization
-- [x] Firestore Rule Alignment
-- [x] Firebase Auth (Google Sign-In)
-- [x] Smart Onboarding Resume (Skip/rejoin flow based on squad + profile state)
-- [x] Onboarding UI Refinements (Input consistency, slider/time styling, copy interactions)
-- [x] Reality Check Cleanup (Centered duration + system-app filtering)
-- [x] Category Bulk Selection (Select/Deselect all by category header)
-- [x] FCM Delivery Hardening (Token refresh sync + safe Cloud Function token routing)
-- [x] Plea Notification Deep Links (Tap notification to open live session)
-- [x] Plea Compose Flow Upgrade (App icon + duration chips + reason input before send)
-- [x] Dynamic Plea Copy (Notification + judgment text include selected duration/app)
-- [x] Live Judgement Banner (Squad HUD card for active session entry)
-- [x] Plea Chat Infrastructure (messages sub-collection stream + send pipeline)
-- [x] Attendance-Based Voting Model (participants + voteCounts + string vote map)
-- [x] Attendance Resolution Rule (resolve when attendees have all voted, tie => reject)
-- [x] Verdict Lifecycle UX (3s full-screen verdict + 5s redirect + deletion mark)
-- [x] Squad-only Plea/Chat Rules (Firestore guardrails by squadId)
-- [x] Outcome Grant Accuracy (approved unlock uses requested minutes + package)
-- [x] Overlay Monitor Stability (usage-stats fallback throttling to reduce spam/overhead)
-- [x] Home Screen Flicker Mitigation (permission setState guard + cached user future)
-- [x] Tribunal Rename + Routing (JudgementChatScreen renamed to TribunalScreen)
-- [x] Auto Tribunal Jump (BegForTime submit now pushReplacement into Tribunal)
-- [x] Tribunal Live Scoreboard (REJECT/APPROVE counters with winning-side color emphasis)
-- [x] Server-Authoritative Pleas (callables for create/vote/join/message + server-only plea mutations)
-- [x] Deadlock Fix (Requester excluded from eligible voter set in server verdict resolution)
-- [x] Firestore Rules Hardening (plea doc client writes disabled; chat writes via callable; same-squad user reads)
-- [x] Anti-spam Backend Throttles (plea + message rolling limits in callable layer)
-- [x] Stale Session Auto-finalization (scheduled timeout resolves long-active pleas server-side)
-- [x] Plea Lifecycle Cleanup (scheduled deletion of resolved/marked pleas + messages)
-- [x] Android Boot Restart (BOOT_COMPLETED receiver restarts AppMonitorService)
-- [x] Android Service Reliability (self-health tick + restart-on-task-removal strategy)
-- [x] Adaptive Polling (2s/5s/9s tiers + skip when screen off; reduced heavy checks)
-- [x] Battery Optimization Gate (explicit permission requirement in permissions UX and service start gating)
-- [x] Admin Flow Consolidation (GodModeDashboard is primary; legacy GodModeScreen removed)
+- [x] App Discovery (Installed app fetch + icons + categorization)
+- [x] Local Persistence (Restricted apps in SharedPreferences)
+- [x] Regime (Schedule) Engine (Time blocks + usage limits)
+- [x] Local-first Regime Save + Background Cloud Sync
+- [x] Account-tied Regime Storage (per-user local key + cloud `/users/{uid}/regimes`)
+- [x] Native Schedule Sync (active regimes synced to Kotlin service)
+- [x] Home (Monitor) Dashboard (Focus Score + currently restricted + active regimes)
+- [x] Focus Score System (card + detail page)
+- [x] Core Navigation Shell (3 primary pillars: Home/Monitor, Squad, Challenges)
+- [x] Personal HUD Header (brand cluster + notifications/analytics + avatar -> controls)
+- [x] Challenges Pillar (placeholder screen + route + legacy alias)
+- [x] Firebase Auth (Google Sign-In) + token refresh sync for FCM
+- [x] Smart Onboarding Resume (squad/profile-based redirect flow)
+- [x] Squad Data Layer (User & Squad models + create/join)
+- [x] Plea/Tribunal System (server-authoritative callables + triggers + scheduled jobs)
+- [x] Tribunal UX (chat, vote UI, live banner entry, verdict lifecycle)
+- [x] Anti-spam + Abuse Controls (plea/message throttles in callable layer)
+- [x] Firestore Rules Hardening (server-only plea mutation, callable-authoritative messaging)
+- [x] Outcome Enforcement (approved pleas trigger native temporary unlock)
+- [x] Admin Flow Consolidation (GodModeDashboard + mock tribunal tools)
+- [x] Squad Logs Data Layer
+- [x] Cloud Functions: automatic squad log writes on plea creation + verdict resolution
+- [x] Cloud Functions: `updateUserStatus` callable writes `users/{uid}.currentStatus`
+- [x] Firestore Rules: server-written `squads/{squadId}/logs` (read-only for squad members)
+- [x] Squad HUD 2.0 ("The Barracks")
+- [x] Pillory hero (lowest-scoring member highlight)
+- [x] Roster strip with status rings + score pill
+- [x] Squad log feed (timeline UI; reactions stubbed)
+- [x] Member Rap Sheet sheet (protocols, blacklist summary, plea stats)
 
 ## In Progress
 - [ ] Onboarding Final Polish (copy tuning + micro-interactions)
-- [ ] Website Blocker Flow Consolidation (single-source bottom sheet behavior)
-- [x] Social Hard-Lock (Squad Invites)
-- [ ] Option A Vote Subcollection Migration (reduce long-term integrity complexity)
+- [ ] Website Blocker Flow Consolidation (single-source behavior + eliminate duplicate entry points)
+- [ ] Squad Log Reactions (implement callable-backed "salute" reactions, not stub)
+- [ ] Member Rap Sheet correctness hardening (secure cross-user regime visibility; see Next Steps)
 - [ ] Production Hardening Pass (remove debug prints, add index docs, emulator tests)
+- [ ] Option A Vote Subcollection Migration (PRD milestone: votes as subcollection)
+
+## Next Steps (Aligned to PRD)
+- [ ] Firestore rules + data model for cross-user regime visibility
+- [ ] Build a safe member snapshot for Rap Sheet
+- [ ] Challenges pillar implementation beyond placeholder
+- [ ] Notifications + Analytics pages (currently placeholders) and real dashboards
+- [ ] OEM reliability hardening (WorkManager fallback + stronger "service running" UX)
+- [ ] iOS strategy decision (scaffold only vs enforcement parity plan)
 
 ## Backlog
-- [ ] Vandalism Feature (Wallpaper changing)
+- [ ] Vandalism Feature (Wallpaper penalties)
 - [ ] Simp Protocol (Friction-based unlocking)
-- [ ] The Squad (Social leaderboards)
+- [ ] Squad leaderboard and social ranking layer
 - [ ] AI Vibe Rater
