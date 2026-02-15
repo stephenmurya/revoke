@@ -1,190 +1,172 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-import '../../core/theme/app_theme.dart';
-import '../profile/profile_screen.dart';
+import '../../core/utils/theme_extensions.dart';
+import 'appearance_screen.dart';
+import 'pages/account_settings_page.dart';
+import 'pages/advanced_settings_page.dart';
+import 'pages/app_management_settings_page.dart';
+import 'pages/behavioural_settings_page.dart';
 import 'pages/notification_settings_page.dart';
 import 'pages/privacy_settings_page.dart';
 import 'pages/squad_social_settings_page.dart';
-import 'pages/app_management_settings_page.dart';
-import 'pages/appearance_settings_page.dart';
-import 'pages/advanced_settings_page.dart';
-import 'pages/behavioural_settings_page.dart';
+import 'widgets/settings_option_tile.dart';
 
-class ControlsHubScreen extends StatelessWidget {
+class ControlsHubScreen extends StatefulWidget {
   const ControlsHubScreen({super.key});
 
   @override
+  State<ControlsHubScreen> createState() => _ControlsHubScreenState();
+}
+
+class _ControlsHubScreenState extends State<ControlsHubScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      final next = _searchController.text.trim().toLowerCase();
+      if (next == _query) return;
+      setState(() => _query = next);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final sections = _filteredSections(_query);
+
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
-        backgroundColor: AppSemanticColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        title: Text('Controls', style: AppTheme.h2),
+        title: Text(
+          'Controls',
+          style: context.text.headlineMedium ?? const TextStyle(),
+        ),
       ),
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
           children: [
-            ..._controlsSections.map(
-              (section) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _ControlsTile(section: section),
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search controls...',
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.only(left: 12, right: 8),
+                  child: PhosphorIcon(
+                    PhosphorIcons.magnifyingGlass(),
+                    size: 18,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+                prefixIconConstraints:
+                    const BoxConstraints(minWidth: 0, minHeight: 0),
               ),
             ),
+            const SizedBox(height: 18),
+            for (final section in sections) ...[
+              SettingsOptionTile(
+                title: section.title,
+                subtitle: section.subtitle,
+                icon: section.icon,
+                onTap: () {
+                  final destination = section.destination;
+                  if (destination == null) return;
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => destination),
+                  );
+                },
+              ),
+              const SizedBox(height: 6),
+            ],
           ],
         ),
       ),
     );
   }
-}
 
-class _ControlsTile extends StatelessWidget {
-  const _ControlsTile({required this.section});
-
-  final _ControlsSection section;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => section.destination));
-        },
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppSemanticColors.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppSemanticColors.primaryText.withValues(alpha: 0.08)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppSemanticColors.background,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppSemanticColors.accent, width: 1.2),
-                ),
-                child: Icon(section.icon, color: AppSemanticColors.accent, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(section.title, style: AppTheme.bodyLarge),
-                    const SizedBox(height: 4),
-                    Text(
-                      section.subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTheme.bodySmall.copyWith(
-                        color: AppSemanticColors.mutedText,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${section.itemCount} pages',
-                      style: AppTheme.bodySmall.copyWith(
-                        color: AppSemanticColors.mutedText,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: AppSemanticColors.mutedText,
-                size: 18,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  static List<_ControlsSection> _filteredSections(String query) {
+    if (query.isEmpty) return _controlsSections;
+    return _controlsSections.where((s) {
+      final title = s.title.toLowerCase();
+      final subtitle = s.subtitle.toLowerCase();
+      return title.contains(query) || subtitle.contains(query);
+    }).toList(growable: false);
   }
 }
 
 class _ControlsSection {
-  const _ControlsSection({
+  _ControlsSection({
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.itemCount,
-    required this.destination,
+    this.destination,
   });
 
   final String title;
   final String subtitle;
-  final IconData icon;
-  final int itemCount;
-  final Widget destination;
+  final PhosphorIconData icon;
+  final Widget? destination;
 }
 
-const List<_ControlsSection> _controlsSections = [
+final List<_ControlsSection> _controlsSections = [
   _ControlsSection(
     title: 'Account & Profile',
     subtitle: 'Identity and account controls for squad presence.',
-    icon: Icons.person_outline,
-    itemCount: 1,
-    destination: ProfileScreen(),
+    icon: PhosphorIcons.user(),
+    destination: AccountSettingsPage(),
   ),
   _ControlsSection(
     title: 'Notifications',
     subtitle: 'Alert preferences for shame, verdicts, and digests.',
-    icon: Icons.notifications_none,
-    itemCount: NotificationSettingsPage.itemCount,
+    icon: PhosphorIcons.bell(),
     destination: NotificationSettingsPage(),
   ),
   _ControlsSection(
     title: 'Privacy & Data',
     subtitle: 'Visibility and export controls for personal usage data.',
-    icon: Icons.lock_outline,
-    itemCount: PrivacySettingsPage.itemCount,
+    icon: PhosphorIcons.lockSimple(),
     destination: PrivacySettingsPage(),
   ),
   _ControlsSection(
     title: 'Squad & Social',
     subtitle: 'Membership and moderation controls for squad operations.',
-    icon: Icons.groups_outlined,
-    itemCount: SquadSocialSettingsPage.itemCount,
+    icon: PhosphorIcons.users(),
     destination: SquadSocialSettingsPage(),
   ),
   _ControlsSection(
     title: 'App Management & Regimes',
     subtitle: 'Default regime behavior and block policy preferences.',
-    icon: Icons.settings_input_component,
-    itemCount: AppManagementSettingsPage.itemCount,
+    icon: PhosphorIcons.slidersHorizontal(),
     destination: AppManagementSettingsPage(),
   ),
   _ControlsSection(
     title: 'Appearance & Experience',
     subtitle: 'Theme, feedback, and presentation preferences.',
-    icon: Icons.palette_outlined,
-    itemCount: AppearanceSettingsPage.itemCount,
-    destination: AppearanceSettingsPage(),
+    icon: PhosphorIcons.palette(),
+    destination: AppearanceScreen(),
   ),
   _ControlsSection(
     title: 'Advanced / Power User',
     subtitle: 'System-level tuning and recovery tooling.',
-    icon: Icons.terminal_rounded,
-    itemCount: AdvancedSettingsPage.itemCount,
+    icon: PhosphorIcons.terminalWindow(),
     destination: AdvancedSettingsPage(),
   ),
   _ControlsSection(
     title: 'Behavioural / Gamification',
     subtitle: 'Streaks, benchmarks, and challenge participation settings.',
-    icon: Icons.emoji_events_outlined,
-    itemCount: BehaviouralSettingsPage.itemCount,
+    icon: PhosphorIcons.trophy(),
     destination: BehaviouralSettingsPage(),
   ),
 ];

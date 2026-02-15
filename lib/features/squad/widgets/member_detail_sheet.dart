@@ -7,6 +7,7 @@ import '../../../core/models/user_model.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/regime_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/theme_extensions.dart';
 
 class MemberDetailSheet extends StatelessWidget {
   final UserModel member;
@@ -16,15 +17,15 @@ class MemberDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final handle = _handle(member);
-    final ringColor = _ringColor(member);
+    final ringColor = _ringColor(context, member);
     final scoreDisplay = member.focusScore.clamp(0, 1000);
 
     return SafeArea(
       top: false,
       child: Container(
-        decoration: const BoxDecoration(
-          color: AppSemanticColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        decoration: BoxDecoration(
+          color: context.scheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           children: [
@@ -33,7 +34,7 @@ class MemberDetailSheet extends StatelessWidget {
               width: 42,
               height: 5,
               decoration: BoxDecoration(
-                color: AppSemanticColors.primaryText.withValues(alpha: 0.15),
+                color: context.scheme.onSurface.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(999),
               ),
             ),
@@ -46,7 +47,7 @@ class MemberDetailSheet extends StatelessWidget {
                     child: Text(
                       'RAP SHEET',
                       style: AppTheme.smBold.copyWith(
-                        color: AppSemanticColors.mutedText,
+                        color: context.colors.textSecondary,
                         letterSpacing: 1.0,
                       ),
                     ),
@@ -79,13 +80,11 @@ class MemberDetailSheet extends StatelessWidget {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return const Padding(
                             padding: EdgeInsets.all(12),
-                            child: LinearProgressIndicator(
-                              color: AppSemanticColors.accent,
-                            ),
+                            child: LinearProgressIndicator(),
                           );
                         }
                         if (regimes.isEmpty) {
-                          return _emptyLine('No active protocols.');
+                          return _emptyLine(context, 'No active protocols.');
                         }
                         final active =
                             regimes.where((r) => r.isActive).toList();
@@ -93,9 +92,12 @@ class MemberDetailSheet extends StatelessWidget {
                         return Column(
                           children: [
                             for (final r in list.take(6))
-                              _bulletLine(r.name.trim().isEmpty ? 'REGIME' : r.name),
+                              _bulletLine(
+                                context,
+                                r.name.trim().isEmpty ? 'REGIME' : r.name,
+                              ),
                             if (list.length > 6)
-                              _mutedLine('+ ${list.length - 6} more'),
+                              _mutedLine(context, '+ ${list.length - 6} more'),
                           ],
                         );
                       },
@@ -114,14 +116,15 @@ class MemberDetailSheet extends StatelessWidget {
                           apps.addAll(r.targetApps.map((e) => e.trim()).where((e) => e.isNotEmpty));
                         }
                         if (snap.connectionState == ConnectionState.waiting) {
-                          return _mutedLine('Assembling blacklist...');
+                          return _mutedLine(context, 'Assembling blacklist...');
                         }
                         if (apps.isEmpty) {
-                          return _emptyLine('Blacklist empty.');
+                          return _emptyLine(context, 'Blacklist empty.');
                         }
                         final count = apps.length;
                         final preview = apps.take(2).join(', ');
                         return _mutedLine(
+                          context,
                           count <= 2 ? preview : '$preview + ${count - 2} others',
                         );
                       },
@@ -135,31 +138,33 @@ class MemberDetailSheet extends StatelessWidget {
                       future: _loadPleaStatsForCurrentSquad(),
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
-                          return _mutedLine('Querying record...');
+                          return _mutedLine(context, 'Querying record...');
                         }
                         final stats = snap.data;
                         if (stats == null) {
-                          return _emptyLine('No record available.');
+                          return _emptyLine(context, 'No record available.');
                         }
                         return Row(
                           children: [
                             Expanded(
-                              child: _statCard('TOTAL', '${stats.total}'),
+                              child: _statCard(context, 'TOTAL', '${stats.total}'),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: _statCard(
+                                context,
                                 'APPROVED',
                                 '${stats.approved}',
-                                accent: AppSemanticColors.success,
+                                accent: context.colors.success,
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: _statCard(
+                                context,
                                 'REJECTED',
                                 '${stats.rejected}',
-                                accent: AppSemanticColors.reject,
+                                accent: context.colors.danger,
                               ),
                             ),
                           ],
@@ -187,10 +192,10 @@ class MemberDetailSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
       decoration: BoxDecoration(
-        color: AppSemanticColors.background.withValues(alpha: 0.35),
+        color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: AppSemanticColors.primaryText.withValues(alpha: 0.06),
+          color: context.scheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -220,12 +225,12 @@ class MemberDetailSheet extends StatelessWidget {
                       fit: BoxFit.cover,
                     )
                   : Container(
-                      color: AppSemanticColors.background,
+                      color: Theme.of(context).scaffoldBackgroundColor,
                       child: Center(
                         child: Text(
                           handle.isNotEmpty ? handle[0].toUpperCase() : 'U',
                           style: AppTheme.xlMedium.copyWith(
-                            color: AppSemanticColors.secondaryText,
+                            color: context.colors.textSecondary,
                           ),
                         ),
                       ),
@@ -235,7 +240,7 @@ class MemberDetailSheet extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             '@$handle',
-            style: AppTheme.h2.copyWith(color: AppSemanticColors.primaryText),
+            style: AppTheme.h2.copyWith(color: context.scheme.onSurface),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -243,7 +248,7 @@ class MemberDetailSheet extends StatelessWidget {
           Text(
             (member.fullName ?? member.email ?? '').toString().trim(),
             style: AppTheme.bodySmall.copyWith(
-              color: AppSemanticColors.secondaryText,
+              color: context.colors.textSecondary,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -252,7 +257,7 @@ class MemberDetailSheet extends StatelessWidget {
           Text(
             '$scoreDisplay',
             style: AppTheme.size5xlBold.copyWith(
-              color: AppSemanticColors.accentText,
+              color: context.scheme.primary,
               height: 0.95,
             ),
           ),
@@ -260,7 +265,7 @@ class MemberDetailSheet extends StatelessWidget {
           Text(
             'FOCUS SCORE',
             style: AppTheme.labelSmall.copyWith(
-              color: AppSemanticColors.mutedText,
+              color: context.colors.textSecondary,
               letterSpacing: 1.2,
             ),
           ),
@@ -298,12 +303,17 @@ class MemberDetailSheet extends StatelessWidget {
     }
   }
 
-  static Widget _statCard(String label, String value, {Color? accent}) {
-    final c = accent ?? AppSemanticColors.accent;
+  static Widget _statCard(
+    BuildContext context,
+    String label,
+    String value, {
+    Color? accent,
+  }) {
+    final c = accent ?? context.scheme.primary;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
-        color: AppSemanticColors.surface,
+        color: context.scheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: c.withValues(alpha: 0.18)),
       ),
@@ -313,7 +323,7 @@ class MemberDetailSheet extends StatelessWidget {
           Text(
             label,
             style: AppTheme.labelSmall.copyWith(
-              color: AppSemanticColors.mutedText,
+              color: context.colors.textSecondary,
               letterSpacing: 0.7,
             ),
           ),
@@ -327,7 +337,7 @@ class MemberDetailSheet extends StatelessWidget {
     );
   }
 
-  static Widget _bulletLine(String text) {
+  static Widget _bulletLine(BuildContext context, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -337,7 +347,7 @@ class MemberDetailSheet extends StatelessWidget {
             height: 6,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppSemanticColors.accent.withValues(alpha: 0.85),
+              color: context.scheme.primary.withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(width: 10),
@@ -345,7 +355,7 @@ class MemberDetailSheet extends StatelessWidget {
             child: Text(
               text,
               style: AppTheme.bodyMedium.copyWith(
-                color: AppSemanticColors.primaryText,
+                color: context.scheme.onSurface,
               ),
             ),
           ),
@@ -354,40 +364,40 @@ class MemberDetailSheet extends StatelessWidget {
     );
   }
 
-  static Widget _mutedLine(String text) {
+  static Widget _mutedLine(BuildContext context, String text) {
     return Text(
       text,
-      style: AppTheme.bodySmall.copyWith(color: AppSemanticColors.secondaryText),
+      style: AppTheme.bodySmall.copyWith(color: context.colors.textSecondary),
     );
   }
 
-  static Widget _emptyLine(String text) {
+  static Widget _emptyLine(BuildContext context, String text) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppSemanticColors.surface,
+        color: context.scheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppSemanticColors.primaryText.withValues(alpha: 0.06),
+          color: context.scheme.outlineVariant,
         ),
       ),
       child: Text(
         text,
-        style: AppTheme.bodySmall.copyWith(color: AppSemanticColors.secondaryText),
+        style: AppTheme.bodySmall.copyWith(color: context.colors.textSecondary),
       ),
     );
   }
 
-  static Color _ringColor(UserModel user) {
+  static Color _ringColor(BuildContext context, UserModel user) {
     final status = (user.currentStatus ?? 'idle').trim().toLowerCase();
     switch (status) {
       case 'locked_in':
-        return AppSemanticColors.success;
+        return context.colors.success;
       case 'vulnerable':
-        return AppSemanticColors.reject;
+        return context.colors.danger;
       case 'idle':
       default:
-        return AppSemanticColors.mutedText.withValues(alpha: 0.55);
+        return context.colors.textSecondary.withValues(alpha: 0.55);
     }
   }
 
@@ -419,10 +429,10 @@ class _Section extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
-        color: AppSemanticColors.surface,
+        color: context.scheme.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: AppSemanticColors.primaryText.withValues(alpha: 0.06),
+          color: context.scheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -431,7 +441,7 @@ class _Section extends StatelessWidget {
           Text(
             title,
             style: AppTheme.smBold.copyWith(
-              color: AppSemanticColors.mutedText,
+              color: context.colors.textSecondary,
               letterSpacing: 0.9,
             ),
           ),
@@ -439,7 +449,7 @@ class _Section extends StatelessWidget {
           Text(
             subtitle,
             style: AppTheme.bodySmall.copyWith(
-              color: AppSemanticColors.secondaryText,
+              color: context.colors.textSecondary,
             ),
           ),
           const SizedBox(height: 12),

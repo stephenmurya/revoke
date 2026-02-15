@@ -1,46 +1,7 @@
 import 'package:flutter/material.dart';
 
-class AppPalette {
-  const AppPalette._();
-
-  // Base palette
-  static const Color black = Color(0xFF000000);
-  static const Color darkGrey = Color(0xFF121212);
-  static const Color orange = Color(0xFFFF4500);
-  static const Color deepRed = Color(0xFFFF3131);
-  static const Color white = Color(0xFFFFFFFF);
-  static const Color grey = Color(0xFF757575);
-  static const Color lightGrey = Color(0xFFB0B0B0);
-  static const Color trendUp = Color(0xFF00FF41);
-  static const Color trendDown = Color(0xFFFF3131);
-  static const Color acidGreen = Color(0xFFB7FF00);
-}
-
-class AppSemanticColors {
-  const AppSemanticColors._();
-
-  // Surfaces
-  static const Color background = AppPalette.black;
-  static const Color surface = Color(0xFF121212);
-  static const Color accent = AppPalette.orange;
-  static const Color danger = AppPalette.deepRed;
-  static const Color success = AppPalette.trendUp;
-  static const Color approve = AppPalette.acidGreen;
-  static const Color reject = AppPalette.deepRed;
-
-  // Text roles
-  static const Color primaryText = AppPalette.white;
-  static const Color secondaryText = AppPalette.lightGrey;
-  static const Color mutedText = AppPalette.grey;
-  static const Color accentText = AppPalette.orange;
-  static const Color errorText = AppPalette.deepRed;
-  static const Color inverseText = AppPalette.black;
-  static const Color onAccentText = AppPalette.black;
-  static const Color onDangerText = AppPalette.white;
-  static const Color approveText = AppPalette.acidGreen;
-  static const Color rejectText = AppPalette.deepRed;
-  static Color get hintText => secondaryText.withValues(alpha: 0.6);
-}
+import '../services/theme_service.dart';
+import 'app_colors_extension.dart';
 
 class AppTheme {
   static const String fontFamily = 'NeueMontreal';
@@ -79,17 +40,43 @@ class AppTheme {
   static const double size4xl = 40;
   static const double size5xl = 48;
 
+  static const TextCapitalization defaultTextCapitalization =
+      TextCapitalization.sentences;
+
+  static Brightness _resolveEffectiveBrightness() {
+    final mode = ThemeService.instance.themeMode.value;
+    switch (mode) {
+      case ThemeMode.light:
+        return Brightness.light;
+      case ThemeMode.dark:
+        return Brightness.dark;
+      case ThemeMode.system:
+        return WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    }
+  }
+
+  static Color _resolveEffectiveAccent() {
+    return ThemeService.instance.accentColor.value;
+  }
+
   static InputDecoration defaultInputDecoration({
     String? hintText,
     String? labelText,
     Widget? prefixIcon,
   }) {
+    final brightness = _resolveEffectiveBrightness();
+    final accent = _resolveEffectiveAccent();
+    final isDark = brightness == Brightness.dark;
+    final surface = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+    final onSurface = isDark ? const Color(0xFFFFFFFF) : const Color(0xFF000000);
+    final muted = onSurface.withValues(alpha: 0.65);
+
     return InputDecoration(
       hintText: hintText,
       labelText: labelText,
       prefixIcon: prefixIcon,
       filled: true,
-      fillColor: AppSemanticColors.surface,
+      fillColor: surface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -98,74 +85,137 @@ class AppTheme {
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(
-          color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+          color: onSurface.withValues(alpha: 0.10),
         ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppSemanticColors.accent, width: 2),
+        borderSide: BorderSide(color: accent, width: 2),
       ),
       labelStyle: bodyMedium.copyWith(
-        color: AppSemanticColors.mutedText,
+        color: muted,
         letterSpacing: 1.1,
         fontWeight: FontWeight.w700,
       ),
       floatingLabelStyle: bodyMedium.copyWith(
-        color: AppSemanticColors.accentText,
+        color: accent,
         letterSpacing: 1.1,
         fontWeight: FontWeight.w700,
       ),
       hintStyle: bodyMedium.copyWith(
-        color: AppSemanticColors.hintText,
+        color: onSurface.withValues(alpha: 0.55),
         letterSpacing: 0.2,
         fontWeight: FontWeight.w500,
       ),
     );
   }
 
-  static ThemeData get darkTheme {
+  static ThemeData create({
+    required Brightness brightness,
+    required Color accent,
+  }) {
+    final bool isDark = brightness == Brightness.dark;
+
+    // Fixed neutral surfaces. Avoid Material seed tinting.
+    final Color background = isDark ? const Color(0xFF000000) : const Color(0xFFF2F2F7);
+    final Color surface = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+    final Color onSurface = isDark ? const Color(0xFFFFFFFF) : const Color(0xFF000000);
+    final Color textSecondary = onSurface.withValues(alpha: isDark ? 0.70 : 0.75);
+    final Color danger = const Color(0xFFFF3B30);
+    final Color success = const Color(0xFF34C759);
+    final Color warning = const Color(0xFFFFCC00);
+
+    final ColorScheme seedScheme = ColorScheme.fromSeed(
+      seedColor: accent,
+      brightness: brightness,
+    );
+
+    final ColorScheme scheme = seedScheme.copyWith(
+      primary: accent,
+      surface: surface,
+      onSurface: onSurface,
+      error: danger,
+    );
+
+    final appColors = AppColorsExtension(
+      accent: accent,
+      danger: danger,
+      success: success,
+      warning: warning,
+      surface: surface,
+      background: background,
+      textPrimary: onSurface,
+      textSecondary: textSecondary,
+    );
+
+    final TextTheme baseTextTheme = TextTheme(
+      displayLarge: size5xlBold,
+      displayMedium: size4xlBold,
+      displaySmall: size3xlBold,
+      headlineLarge: xxlBold,
+      headlineMedium: xxlMedium,
+      headlineSmall: xlBold,
+      titleLarge: xlMedium,
+      titleMedium: lgMedium,
+      titleSmall: baseMedium,
+      bodyLarge: lgRegular,
+      bodyMedium: baseRegular,
+      bodySmall: smRegular,
+      labelLarge: baseBold,
+      labelMedium: smMedium,
+      labelSmall: xsBold,
+    ).apply(
+      bodyColor: onSurface,
+      displayColor: onSurface,
+    );
+
+    final ButtonStyle primary = ElevatedButton.styleFrom(
+      backgroundColor: accent,
+      foregroundColor: scheme.onPrimary,
+      textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+      elevation: 0,
+    );
+
+    final ButtonStyle outlined = OutlinedButton.styleFrom(
+      foregroundColor: accent,
+      textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      side: BorderSide(color: accent.withValues(alpha: 0.45), width: 1.5),
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+    );
+
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppSemanticColors.background,
-      colorScheme: const ColorScheme.dark(
-        primary: AppSemanticColors.accent,
-        surface: AppSemanticColors.surface,
-        onPrimary: AppSemanticColors.onAccentText,
-        onSurface: AppSemanticColors.primaryText,
-        error: AppSemanticColors.danger,
-      ),
+      brightness: brightness,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: background,
+      extensions: <ThemeExtension<dynamic>>[appColors],
 
       // Typography
-      textTheme: TextTheme(
-        displayLarge: size5xlBold,
-        displayMedium: size4xlBold,
-        displaySmall: size3xlBold,
-        headlineLarge: xxlBold,
-        headlineMedium: xxlMedium,
-        headlineSmall: xlBold,
-        titleLarge: xlMedium,
-        titleMedium: lgMedium,
-        titleSmall: baseMedium,
-        bodyLarge: lgRegular,
-        bodyMedium: baseRegular,
-        bodySmall: smRegular,
-        labelLarge: baseBold,
-        labelMedium: smMedium,
-        labelSmall: xsBold,
+      textTheme: baseTextTheme,
+
+      // App bar
+      appBarTheme: AppBarTheme(
+        backgroundColor: background,
+        foregroundColor: onSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: h2.copyWith(color: onSurface),
+        iconTheme: IconThemeData(color: onSurface),
       ),
 
       // Buttons
-      elevatedButtonTheme: ElevatedButtonThemeData(style: primaryButtonStyle),
+      elevatedButtonTheme: ElevatedButtonThemeData(style: primary),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: outlined),
 
       // Inputs
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppSemanticColors.surface,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
+        fillColor: surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -173,41 +223,47 @@ class AppTheme {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+            color: onSurface.withValues(alpha: 0.10),
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppSemanticColors.accent, width: 2),
+          borderSide: BorderSide(color: accent, width: 2),
         ),
         labelStyle: bodyMedium.copyWith(
-          color: AppSemanticColors.mutedText,
+          color: textSecondary,
           letterSpacing: 1.1,
           fontWeight: FontWeight.w500,
         ),
         floatingLabelStyle: bodyMedium.copyWith(
-          color: AppSemanticColors.accentText,
+          color: accent,
           letterSpacing: 1.1,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w700,
         ),
         hintStyle: bodyMedium.copyWith(
-          color: AppSemanticColors.hintText,
+          color: onSurface.withValues(alpha: 0.55),
           letterSpacing: 0.2,
           fontWeight: FontWeight.w500,
         ),
       ),
 
       // Bottom Navigation Bar
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: AppSemanticColors.background,
-        selectedItemColor: AppSemanticColors.accent,
-        unselectedItemColor: AppSemanticColors.mutedText,
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: surface,
+        selectedItemColor: accent,
+        unselectedItemColor: textSecondary,
         showSelectedLabels: true,
         showUnselectedLabels: true,
         type: BottomNavigationBarType.fixed,
       ),
     );
   }
+
+  @Deprecated('Use AppTheme.create(brightness: Brightness.dark, accent: ...) instead.')
+  static ThemeData get darkTheme => create(
+    brightness: Brightness.dark,
+    accent: const Color(0xFFFF4500),
+  );
 
   // Typography Tokens
   // Rule: do not create ad hoc TextStyles in feature code. Use these tokens.
@@ -380,63 +436,87 @@ class AppTheme {
   static final TextStyle labelSmall = xsBold.copyWith(letterSpacing: 0.6);
 
   static final SliderThemeData vowSliderTheme = SliderThemeData(
-    activeTrackColor: AppSemanticColors.accent,
-    inactiveTrackColor: AppSemanticColors.surface,
-    thumbColor: AppSemanticColors.accent,
-    overlayColor: AppSemanticColors.accent.withValues(alpha: 0.16),
+    activeTrackColor: _resolveEffectiveAccent(),
+    inactiveTrackColor: _resolveEffectiveBrightness() == Brightness.dark
+        ? const Color(0xFF1C1C1E)
+        : const Color(0xFFFFFFFF),
+    thumbColor: _resolveEffectiveAccent(),
+    overlayColor: _resolveEffectiveAccent().withValues(alpha: 0.16),
     trackHeight: 4,
     thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
     overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
   );
 
   // Button Styles
-  static final ButtonStyle primaryButtonStyle = ElevatedButton.styleFrom(
-    backgroundColor: AppSemanticColors.accent,
-    foregroundColor: AppSemanticColors.onAccentText,
-    textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-    elevation: 0,
-  );
+  static ButtonStyle get primaryButtonStyle {
+    final accent = _resolveEffectiveAccent();
+    final brightness = _resolveEffectiveBrightness();
+    final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: brightness);
+    return ElevatedButton.styleFrom(
+      backgroundColor: accent,
+      foregroundColor: scheme.onPrimary,
+      textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+      elevation: 0,
+    );
+  }
 
-  static final ButtonStyle secondaryButtonStyle = ElevatedButton.styleFrom(
-    backgroundColor: AppSemanticColors.surface,
-    foregroundColor: AppSemanticColors.primaryText,
-    textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
-      side: BorderSide(
-        color: AppSemanticColors.primaryText.withValues(alpha: 0.1),
-        width: 1,
+  static ButtonStyle get secondaryButtonStyle {
+    final brightness = _resolveEffectiveBrightness();
+    final surface = brightness == Brightness.dark
+        ? const Color(0xFF1C1C1E)
+        : const Color(0xFFFFFFFF);
+    final onSurface = brightness == Brightness.dark
+        ? const Color(0xFFFFFFFF)
+        : const Color(0xFF000000);
+    return ElevatedButton.styleFrom(
+      backgroundColor: surface,
+      foregroundColor: onSurface,
+      textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: onSurface.withValues(alpha: 0.10),
+          width: 1,
+        ),
       ),
-    ),
-    padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-    elevation: 0,
-  );
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+      elevation: 0,
+    );
+  }
 
-  static final ButtonStyle dangerButtonStyle = ElevatedButton.styleFrom(
-    backgroundColor: AppSemanticColors.background,
-    foregroundColor: AppSemanticColors.errorText,
-    textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
-      side: const BorderSide(color: AppSemanticColors.danger, width: 2),
-    ),
-    padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-    elevation: 0,
-  );
+  static ButtonStyle get dangerButtonStyle {
+    final brightness = _resolveEffectiveBrightness();
+    final background = brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFFF2F2F7);
+    const danger = Color(0xFFFF3B30);
+    return ElevatedButton.styleFrom(
+      backgroundColor: background,
+      foregroundColor: danger,
+      textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: danger, width: 2),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+      elevation: 0,
+    );
+  }
 
-  static final BoxDecoration avatarBorderStyle = BoxDecoration(
+  static BoxDecoration get avatarBorderStyle => BoxDecoration(
     shape: BoxShape.circle,
-    border: Border.all(color: AppSemanticColors.accent, width: 2),
+    border: Border.all(color: _resolveEffectiveAccent(), width: 2),
   );
 
   // Chip decoration
   static BoxDecoration chipDecoration({Color? borderColor, Color? fillColor}) {
+    final accent = _resolveEffectiveAccent();
     return BoxDecoration(
-      color: fillColor ?? AppSemanticColors.accent.withValues(alpha: 0.15),
+      color: fillColor ?? accent.withValues(alpha: 0.15),
       border: Border.all(
-        color: borderColor ?? AppSemanticColors.accent,
+        color: borderColor ?? accent,
         width: 1.5,
       ),
       borderRadius: BorderRadius.circular(10),
@@ -444,26 +524,36 @@ class AppTheme {
   }
 
   static BoxDecoration get chatBubbleUserDecoration => BoxDecoration(
-    color: AppSemanticColors.accent,
+    color: _resolveEffectiveAccent(),
     borderRadius: BorderRadius.circular(16),
   );
 
   static BoxDecoration get chatBubbleOtherDecoration => BoxDecoration(
-    color: AppSemanticColors.surface,
+    color: _resolveEffectiveBrightness() == Brightness.dark
+        ? const Color(0xFF1C1C1E)
+        : const Color(0xFFFFFFFF),
     border: Border.all(
-      color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+      color: (_resolveEffectiveBrightness() == Brightness.dark
+              ? const Color(0xFFFFFFFF)
+              : const Color(0xFF000000))
+          .withValues(alpha: 0.10),
       width: 1,
     ),
     borderRadius: BorderRadius.circular(16),
   );
 
   static BoxDecoration get warningBannerDecoration => BoxDecoration(
-    color: AppSemanticColors.accent,
+    color: _resolveEffectiveAccent(),
     borderRadius: BorderRadius.circular(14),
-    border: Border.all(color: AppSemanticColors.background, width: 2),
+    border: Border.all(
+      color: _resolveEffectiveBrightness() == Brightness.dark
+          ? const Color(0xFF000000)
+          : const Color(0xFFF2F2F7),
+      width: 2,
+    ),
     boxShadow: [
       BoxShadow(
-        color: AppSemanticColors.accent.withValues(alpha: 0.35),
+        color: _resolveEffectiveAccent().withValues(alpha: 0.35),
         blurRadius: 14,
         spreadRadius: 1,
       ),
@@ -471,17 +561,31 @@ class AppTheme {
   );
 
   static TextStyle get warningBannerTextStyle => baseBold.copyWith(
-    color: AppSemanticColors.onAccentText,
+    color: ColorScheme.fromSeed(
+      seedColor: _resolveEffectiveAccent(),
+      brightness: _resolveEffectiveBrightness(),
+    ).onPrimary,
     letterSpacing: 1.2,
   );
 
   static BoxDecoration get tribunalScoreboardDecoration => BoxDecoration(
-    color: AppSemanticColors.background,
+    color: _resolveEffectiveBrightness() == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFFF2F2F7),
     borderRadius: BorderRadius.circular(12),
-    border: Border.all(color: AppSemanticColors.primaryText, width: 2),
+    border: Border.all(
+      color: (_resolveEffectiveBrightness() == Brightness.dark
+              ? const Color(0xFFFFFFFF)
+              : const Color(0xFF000000))
+          .withValues(alpha: 0.90),
+      width: 2,
+    ),
     boxShadow: [
       BoxShadow(
-        color: AppSemanticColors.primaryText.withValues(alpha: 0.12),
+        color: (_resolveEffectiveBrightness() == Brightness.dark
+                ? const Color(0xFFFFFFFF)
+                : const Color(0xFF000000))
+            .withValues(alpha: 0.12),
         blurRadius: 10,
         spreadRadius: 1,
       ),
@@ -492,17 +596,20 @@ class AppTheme {
     required bool isSelected,
     bool isDanger = false,
   }) {
-    final bgColor = isSelected
-        ? (isDanger ? AppSemanticColors.reject : AppSemanticColors.accent)
-        : AppSemanticColors.background;
-    final fgColor = isSelected
-        ? AppSemanticColors.primaryText
-        : (isDanger
-              ? AppSemanticColors.rejectText
-              : AppSemanticColors.accentText);
-    final borderColor = isSelected
-        ? (isDanger ? AppSemanticColors.reject : AppSemanticColors.accent)
-        : (isDanger ? AppSemanticColors.reject : AppSemanticColors.accent);
+    final accent = _resolveEffectiveAccent();
+    final brightness = _resolveEffectiveBrightness();
+    final background = brightness == Brightness.dark
+        ? const Color(0xFF000000)
+        : const Color(0xFFF2F2F7);
+    final onSurface = brightness == Brightness.dark
+        ? const Color(0xFFFFFFFF)
+        : const Color(0xFF000000);
+    const danger = Color(0xFFFF3B30);
+
+    final Color active = isDanger ? danger : accent;
+    final bgColor = isSelected ? active : background;
+    final fgColor = isSelected ? onSurface : active;
+    final borderColor = active;
 
     return ElevatedButton.styleFrom(
       backgroundColor: bgColor,

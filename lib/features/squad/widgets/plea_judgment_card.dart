@@ -3,6 +3,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/models/plea_model.dart';
 import '../../../core/services/squad_service.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/utils/theme_extensions.dart';
 
 class PleaJudgmentCard extends StatefulWidget {
   final PleaModel plea;
@@ -38,12 +39,12 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
       margin: const EdgeInsets.all(24),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppSemanticColors.background,
+        color: context.scheme.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppSemanticColors.accent, width: 4),
+        border: Border.all(color: context.scheme.primary, width: 4),
         boxShadow: [
           BoxShadow(
-            color: AppSemanticColors.accent.withValues(alpha: 0.2),
+            color: context.scheme.primary.withValues(alpha: 0.2),
             blurRadius: 20,
             spreadRadius: 5,
           ),
@@ -55,12 +56,12 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.gavel_rounded, color: AppSemanticColors.accent, size: 28),
+              Icon(Icons.gavel_rounded, color: context.scheme.primary, size: 28),
               const SizedBox(width: 12),
               Text(
                 'Judgment day',
                 style: AppTheme.h3.copyWith(
-                  color: AppSemanticColors.accent,
+                  color: context.scheme.primary,
                   letterSpacing: 0.8,
                 ),
               ),
@@ -71,14 +72,14 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
             textAlign: TextAlign.center,
             text: TextSpan(
               style: AppTheme.bodyLarge.copyWith(
-                color: AppSemanticColors.primaryText,
+                color: context.scheme.onSurface,
                 height: 1.4,
               ),
               children: [
                 TextSpan(
                   text: widget.plea.userName,
                   style: AppTheme.lgBold.copyWith(
-                    color: AppSemanticColors.accentText,
+                    color: context.scheme.primary,
                   ),
                 ),
                 TextSpan(
@@ -88,7 +89,7 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
                 TextSpan(
                   text: widget.plea.appName,
                   style: AppTheme.lgBold.copyWith(
-                    color: AppSemanticColors.primaryText,
+                    color: context.scheme.onSurface,
                   ),
                 ),
                 const TextSpan(text: ".\n\nWhat is the verdict?"),
@@ -101,17 +102,17 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppSemanticColors.surface,
+                color: context.scheme.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+                  color: context.scheme.outlineVariant,
                 ),
               ),
               child: Text(
                 '"${widget.plea.reason.trim()}"',
                 textAlign: TextAlign.center,
                 style: AppTheme.bodyMedium.copyWith(
-                  color: AppSemanticColors.secondaryText,
+                  color: context.colors.textSecondary,
                 ),
               ),
             ),
@@ -122,10 +123,8 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () => _vote(context, currentUid, true),
-                  style: AppTheme.primaryButtonStyle.copyWith(
-                    padding: const WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(vertical: 16),
-                    ),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   child: const Text('Save'),
                 ),
@@ -134,13 +133,11 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () => _vote(context, currentUid, false),
-                  style: AppTheme.secondaryButtonStyle.copyWith(
-                    padding: const WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    backgroundColor: const WidgetStatePropertyAll(
-                      AppSemanticColors.surface,
-                    ),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: context.scheme.surface,
+                    foregroundColor: context.scheme.onSurface,
+                    side: BorderSide(color: context.scheme.outlineVariant),
                   ),
                   child: const Text('Revoke'),
                 ),

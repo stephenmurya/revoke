@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/app_discovery_service.dart';
 import '../../core/utils/app_categorizer.dart';
+import '../../core/utils/theme_extensions.dart';
 import 'dart:typed_data';
 
 class AppListScreen extends StatefulWidget {
@@ -46,10 +47,9 @@ class _AppListScreenState extends State<AppListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
         title: Text('Select apps', style: AppTheme.h3),
-        backgroundColor: Colors.transparent,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
         actions: [
           TextButton(
@@ -57,7 +57,7 @@ class _AppListScreenState extends State<AppListScreen> {
             child: Text(
               'DONE',
               style: AppTheme.baseMedium.copyWith(
-                color: AppSemanticColors.accentText,
+                color: context.scheme.primary,
               ),
             ),
           ),
@@ -68,12 +68,12 @@ class _AppListScreenState extends State<AppListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const CircularProgressIndicator(color: AppSemanticColors.accent),
+                  CircularProgressIndicator(color: context.scheme.primary),
                   const SizedBox(height: 16),
                   Text(
                     'Scanning apps...',
                     style: AppTheme.baseMedium.copyWith(
-                      color: AppSemanticColors.accentText,
+                      color: context.scheme.primary,
                       letterSpacing: 0.4,
                     ),
                   ),
@@ -89,9 +89,9 @@ class _AppListScreenState extends State<AppListScreen> {
                     controller: _searchController,
                     decoration: AppTheme.defaultInputDecoration(
                       hintText: 'Search for apps...',
-                      prefixIcon: const Icon(
+                      prefixIcon: Icon(
                         Icons.search,
-                        color: AppSemanticColors.accent,
+                        color: context.scheme.primary,
                       ),
                     ),
                   ),
@@ -134,16 +134,16 @@ class _AppListScreenState extends State<AppListScreen> {
                                   height: 24,
                                 )
                               else
-                                const Icon(
+                                Icon(
                                   Icons.android,
                                   size: 24,
-                                  color: AppSemanticColors.mutedText,
+                                  color: context.colors.textSecondary,
                                 ),
                               const SizedBox(width: 8),
                               Text(
                                 app.name,
                                 style: AppTheme.smBold.copyWith(
-                                  color: AppSemanticColors.primaryText,
+                                  color: context.scheme.onSurface,
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -153,10 +153,10 @@ class _AppListScreenState extends State<AppListScreen> {
                                     _selectedPackages.remove(pkg);
                                   });
                                 },
-                                child: const Icon(
+                                child: Icon(
                                   Icons.close,
                                   size: 16,
-                                  color: AppSemanticColors.secondaryText,
+                                  color: context.colors.textSecondary,
                                 ),
                               ),
                             ],
@@ -169,8 +169,8 @@ class _AppListScreenState extends State<AppListScreen> {
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: () => _loadApps(forceRefresh: true),
-                    color: AppSemanticColors.accent,
-                    backgroundColor: AppSemanticColors.surface,
+                    color: context.scheme.primary,
+                    backgroundColor: context.scheme.surface,
                     child: _buildAppList(),
                   ),
                 ),
@@ -200,7 +200,7 @@ class _AppListScreenState extends State<AppListScreen> {
                   child: Text(
                     category.label,
                     style: AppTheme.baseMedium.copyWith(
-                      color: AppSemanticColors.secondaryText,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                 ),
@@ -209,7 +209,7 @@ class _AppListScreenState extends State<AppListScreen> {
                       ? 'Deselect all'
                       : 'Select all',
                   style: AppTheme.smMedium.copyWith(
-                    color: AppSemanticColors.mutedText,
+                    color: context.colors.textSecondary,
                   ),
                 ),
               ],
@@ -236,9 +236,9 @@ class _AppListScreenState extends State<AppListScreen> {
                           width: 32,
                           height: 32,
                         )
-                      : const Icon(Icons.android, color: AppSemanticColors.secondaryText),
-                  activeColor: AppSemanticColors.accent,
-                  checkColor: AppSemanticColors.background,
+                      : Icon(Icons.android, color: context.colors.textSecondary),
+                  activeColor: context.scheme.primary,
+                  checkColor: context.scheme.onPrimary,
                 ),
               )
               .toList(),

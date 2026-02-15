@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+
+import '../utils/theme_extensions.dart';
 
 class RevokeProgressBar extends StatelessWidget {
   final int totalSteps;
@@ -20,7 +21,9 @@ class RevokeProgressBar extends StatelessWidget {
             height: 4,
             margin: const EdgeInsets.symmetric(horizontal: 2),
             decoration: BoxDecoration(
-              color: index <= currentStep ? AppSemanticColors.accent : AppSemanticColors.surface,
+              color: index <= currentStep
+                  ? context.scheme.primary
+                  : context.scheme.surface,
               borderRadius: BorderRadius.circular(2),
             ),
           ),

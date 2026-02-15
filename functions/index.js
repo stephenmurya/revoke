@@ -48,6 +48,60 @@ async function logSquadEvent(squadId, type, title, user, metadata) {
   }
 }
 
+async function _loadUserProfileOrThrow(uid, label) {
+  const normalized = (uid || "").toString().trim();
+  if (!normalized) {
+    throw new HttpsError("invalid-argument", `${label} uid is required.`);
+  }
+  const snap = await db.collection("users").doc(normalized).get();
+  if (!snap.exists) {
+    throw new HttpsError(
+        "failed-precondition",
+        `${label} user profile is missing.`,
+    );
+  }
+  const data = snap.data() || {};
+  return {
+    uid: (data.uid || snap.id || normalized).toString().trim(),
+    ref: snap.ref,
+    squadId: (data.squadId || "").toString().trim(),
+    name: _deriveUserDisplayName(data),
+    avatar: (data.photoUrl || "").toString().trim(),
+    token: (data.fcmToken || "").toString().trim(),
+    focusScore: Number(data.focusScore),
+  };
+}
+
+async function _sendUserNotificationBestEffort(token, title, body, data) {
+  const normalizedToken = (token || "").toString().trim();
+  if (!normalizedToken) return;
+  const safeTitle = (title || "").toString().trim();
+  const safeBody = (body || "").toString().trim();
+  try {
+    await messaging.send({
+      token: normalizedToken,
+      notification: {
+        title: safeTitle,
+        body: safeBody,
+      },
+      android: {
+        priority: "high",
+        notification: {
+          channelId: "squad_alerts",
+          sound: "lookatthisdude",
+        },
+      },
+      data: data && typeof data === "object" ? data : {},
+    });
+  } catch (error) {
+    logger.warn("FCM send failed.", {
+      tokenSuffix: normalizedToken.slice(-8),
+      errorCode: error?.code,
+      errorMessage: error?.message || String(error),
+    });
+  }
+}
+
 // -----------------------------
 // Abuse controls & lifecycle
 // -----------------------------
@@ -1086,6 +1140,260 @@ exports.updateUserStatus = onCall({
     });
     throw new HttpsError("internal", "Failed to update user status.");
   }
+});
+
+exports.castStone = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const uid = request.auth.uid;
+  const isAdmin = request.auth.token?.admin === true;
+  const payload = request.data || {};
+  const allowedKeys = new Set(["targetUserId", "squadId"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+    }
+  }
+
+  const targetUserId = (payload.targetUserId || "").toString().trim();
+  const squadId = (payload.squadId || "").toString().trim();
+  if (!targetUserId || !squadId) {
+    throw new HttpsError(
+        "invalid-argument",
+        "targetUserId and squadId are required.",
+    );
+  }
+  if (!isAdmin && targetUserId === uid) {
+    throw new HttpsError(
+        "failed-precondition",
+        "Cannot cast a stone at yourself.",
+    );
+  }
+
+  const caller = await _loadUserProfileOrThrow(uid, "Caller");
+  const target = await _loadUserProfileOrThrow(targetUserId, "Target");
+
+  if (!isAdmin) {
+    if (!caller.squadId || caller.squadId !== squadId) {
+      throw new HttpsError("permission-denied", "Caller is not in this squad.");
+    }
+    if (!target.squadId || target.squadId !== squadId) {
+      throw new HttpsError("permission-denied", "Target is not in this squad.");
+    }
+  }
+
+  const callerName = caller.name || "A Member";
+  const title = "JUDGMENT";
+  const body = `${callerName} cast a stone at you.`;
+  await _sendUserNotificationBestEffort(target.token, title, body, {
+    type: "SHAME",
+    actorUid: uid,
+    squadId: String(squadId),
+  });
+
+  await logSquadEvent(
+      squadId,
+      "shame",
+      `${callerName} cast a stone.`,
+      {userId: uid, userName: callerName, userAvatar: caller.avatar},
+      {targetUserId: String(targetUserId)},
+  );
+
+  return {success: true};
+});
+
+exports.prayFor = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const uid = request.auth.uid;
+  const isAdmin = request.auth.token?.admin === true;
+  const payload = request.data || {};
+  const allowedKeys = new Set(["targetUserId", "squadId"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+    }
+  }
+
+  const targetUserId = (payload.targetUserId || "").toString().trim();
+  const squadId = (payload.squadId || "").toString().trim();
+  if (!targetUserId || !squadId) {
+    throw new HttpsError(
+        "invalid-argument",
+        "targetUserId and squadId are required.",
+    );
+  }
+  if (!isAdmin && targetUserId === uid) {
+    throw new HttpsError(
+        "failed-precondition",
+        "Cannot pray for yourself here.",
+    );
+  }
+
+  const caller = await _loadUserProfileOrThrow(uid, "Caller");
+  const target = await _loadUserProfileOrThrow(targetUserId, "Target");
+
+  if (!isAdmin) {
+    if (!caller.squadId || caller.squadId !== squadId) {
+      throw new HttpsError("permission-denied", "Caller is not in this squad.");
+    }
+    if (!target.squadId || target.squadId !== squadId) {
+      throw new HttpsError("permission-denied", "Target is not in this squad.");
+    }
+  }
+
+  const callerName = caller.name || "A Member";
+  const title = "PRAYER";
+  const body = `${callerName} is praying for your focus.`;
+  await _sendUserNotificationBestEffort(target.token, title, body, {
+    type: "STRENGTH",
+    actorUid: uid,
+    squadId: String(squadId),
+  });
+
+  await logSquadEvent(
+      squadId,
+      "support",
+      `${callerName} sent prayers.`,
+      {userId: uid, userName: callerName, userAvatar: caller.avatar},
+      {targetUserId: String(targetUserId)},
+  );
+
+  return {success: true};
+});
+
+exports.postBail = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const uid = request.auth.uid;
+  const isAdmin = request.auth.token?.admin === true;
+  const payload = request.data || {};
+  const allowedKeys = new Set(["targetUserId", "squadId"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+    }
+  }
+
+  const targetUserId = (payload.targetUserId || "").toString().trim();
+  const squadId = (payload.squadId || "").toString().trim();
+  if (!targetUserId || !squadId) {
+    throw new HttpsError(
+        "invalid-argument",
+        "targetUserId and squadId are required.",
+    );
+  }
+  if (!isAdmin && targetUserId === uid) {
+    throw new HttpsError(
+        "failed-precondition",
+        "Cannot post bail for yourself.",
+    );
+  }
+
+  const callerRef = db.collection("users").doc(uid);
+  const targetRef = db.collection("users").doc(targetUserId);
+
+  let callerName = "A Member";
+  let callerAvatar = "";
+  let targetToken = "";
+
+  const COST = 50;
+
+  await db.runTransaction(async (tx) => {
+    const callerSnap = await tx.get(callerRef);
+    const targetSnap = await tx.get(targetRef);
+    if (!callerSnap.exists) {
+      throw new HttpsError("failed-precondition", "Caller profile is missing.");
+    }
+    if (!targetSnap.exists) {
+      throw new HttpsError("failed-precondition", "Target profile is missing.");
+    }
+
+    const callerData = callerSnap.data() || {};
+    const targetData = targetSnap.data() || {};
+
+    const callerSquadId = (callerData.squadId || "").toString().trim();
+    const targetSquadId = (targetData.squadId || "").toString().trim();
+
+    if (!isAdmin) {
+      if (!callerSquadId || callerSquadId !== squadId) {
+        throw new HttpsError(
+            "permission-denied",
+            "Caller is not in this squad.",
+        );
+      }
+      if (!targetSquadId || targetSquadId !== squadId) {
+        throw new HttpsError(
+            "permission-denied",
+            "Target is not in this squad.",
+        );
+      }
+    }
+
+    const callerScoreRaw = Number(callerData.focusScore);
+    const callerScore = Number.isFinite(callerScoreRaw) ?
+      Math.floor(callerScoreRaw) : 0;
+
+    if (callerScore < COST) {
+      throw new HttpsError(
+          "failed-precondition",
+          "Insufficient points to post bail.",
+      );
+    }
+
+    // Capture for use after the transaction.
+    callerName = _deriveUserDisplayName(callerData) || "A Member";
+    callerAvatar = (callerData.photoUrl || "").toString().trim();
+    targetToken = (targetData.fcmToken || "").toString().trim();
+
+    tx.update(callerRef, {
+      focusScore: callerScore - COST,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    const targetScoreRaw = Number(targetData.focusScore);
+    const targetScore = Number.isFinite(targetScoreRaw) ?
+      Math.floor(targetScoreRaw) : 0;
+
+    tx.update(targetRef, {
+      focusScore: targetScore + COST,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  await _sendUserNotificationBestEffort(
+      targetToken,
+      "FREEDOM",
+      `${callerName} posted bail for you (50 pts).`,
+      {
+        type: "FREEDOM",
+        actorUid: uid,
+        squadId: String(squadId),
+        amount: String(COST),
+      },
+  );
+
+  await logSquadEvent(
+      squadId,
+      "redemption",
+      `${callerName} posted bail.`,
+      {userId: uid, userName: callerName, userAvatar: callerAvatar},
+      {targetUserId: String(targetUserId), amount: COST},
+  );
+
+  return {success: true, amount: COST};
 });
 
 exports.createMockTribunal = onCall({

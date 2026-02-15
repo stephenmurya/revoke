@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/app_discovery_service.dart';
-import '../../../core/theme/app_theme.dart';
 import 'dart:typed_data';
+
+import '../../../core/utils/theme_extensions.dart';
 
 class SingleAppIcon extends StatelessWidget {
   final String packageName;
@@ -16,16 +17,20 @@ class SingleAppIcon extends StatelessWidget {
       builder: (context, snapshot) {
         // Handle errors gracefully - show fallback icon instead of error
         if (snapshot.hasError) {
-          return Icon(Icons.android, size: size, color: AppSemanticColors.secondaryText);
+          return Icon(
+            Icons.android,
+            size: size,
+            color: context.colors.textSecondary,
+          );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
           return SizedBox(
             width: size,
             height: size,
-            child: const CircularProgressIndicator(
+            child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AppSemanticColors.accent,
+              color: context.scheme.primary,
             ),
           );
         }
@@ -36,12 +41,16 @@ class SingleAppIcon extends StatelessWidget {
             width: size,
             height: size,
             errorBuilder: (context, error, stackTrace) {
-              return Icon(Icons.android, size: size, color: AppSemanticColors.secondaryText);
+              return Icon(
+                Icons.android,
+                size: size,
+                color: context.colors.textSecondary,
+              );
             },
           );
         }
 
-        return Icon(Icons.android, size: size, color: AppSemanticColors.secondaryText);
+        return Icon(Icons.android, size: size, color: context.colors.textSecondary);
       },
     );
   }

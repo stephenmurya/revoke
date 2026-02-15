@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/theme_extensions.dart';
 
 class FocusScoreCard extends StatefulWidget {
   const FocusScoreCard({super.key});
@@ -52,11 +53,11 @@ class _FocusScoreCardState extends State<FocusScoreCard>
     return 'Cooked';
   }
 
-  Color get _rankColor {
-    if (_score >= 900) return AppSemanticColors.accentText;
-    if (_score >= 700) return AppSemanticColors.primaryText;
-    if (_score >= 400) return AppSemanticColors.secondaryText;
-    return AppSemanticColors.errorText;
+  Color _rankColorFor(BuildContext context) {
+    if (_score >= 900) return context.scheme.primary;
+    if (_score >= 700) return context.scheme.onSurface;
+    if (_score >= 400) return context.colors.textSecondary;
+    return context.colors.danger;
   }
 
   @override
@@ -69,20 +70,16 @@ class _FocusScoreCardState extends State<FocusScoreCard>
         margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppSemanticColors.surface, AppSemanticColors.background],
-          ),
+          color: context.scheme.surface,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: _rankColor.withValues(alpha: 0.3),
+            color: _rankColorFor(context).withValues(alpha: 0.3),
             width: 2,
           ),
           boxShadow: _score >= 900
               ? [
                   BoxShadow(
-                    color: AppSemanticColors.accent.withValues(alpha: 0.3),
+                    color: context.scheme.primary.withValues(alpha: 0.3),
                     blurRadius: 20,
                     spreadRadius: 2,
                   ),
@@ -98,7 +95,7 @@ class _FocusScoreCardState extends State<FocusScoreCard>
                   child: Text(
                     'FOCUS SCORE',
                     style: AppTheme.smBold.copyWith(
-                      color: AppSemanticColors.accentText,
+                      color: context.scheme.primary,
                       letterSpacing: 0,
                     ),
                   ),
@@ -106,7 +103,7 @@ class _FocusScoreCardState extends State<FocusScoreCard>
                 Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: AppSemanticColors.secondaryText.withValues(alpha: 0.9),
+                  color: context.colors.textSecondary.withValues(alpha: 0.9),
                 ),
               ],
             ),
@@ -118,10 +115,11 @@ class _FocusScoreCardState extends State<FocusScoreCard>
                 AnimatedBuilder(
                   animation: _animation,
                   builder: (context, child) {
+                    final rankColor = _rankColorFor(context);
                     return Text(
                       '${_animation.value}',
                       style: AppTheme.size5xlBold.copyWith(
-                        color: _rankColor,
+                        color: rankColor,
                         height: 1,
                       ),
                     );
@@ -133,12 +131,14 @@ class _FocusScoreCardState extends State<FocusScoreCard>
                   children: [
                     Text(
                       _rankTitle,
-                      style: AppTheme.lgBold.copyWith(color: _rankColor),
+                      style: AppTheme.lgBold.copyWith(
+                        color: _rankColorFor(context),
+                      ),
                     ),
                     Text(
                       'Up 12% this week',
                       style: AppTheme.smRegular.copyWith(
-                        color: AppSemanticColors.success,
+                        color: context.colors.success,
                       ),
                     ),
                   ],

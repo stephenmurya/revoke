@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/plea_message_model.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/theme_extensions.dart';
 
 class ChatBubble extends StatelessWidget {
   const ChatBubble({
@@ -40,7 +41,7 @@ class ChatBubble extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 300),
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: _bubbleDecoration(isArchitect),
+          decoration: _bubbleDecoration(context, isArchitect),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -48,7 +49,7 @@ class ChatBubble extends StatelessWidget {
                 Text(
                   'THE ARCHITECT',
                   style: AppTheme.labelSmall.copyWith(
-                    color: const Color(0xFFFFD54F),
+                    color: context.colors.warning,
                     letterSpacing: 1.1,
                   ),
                 )
@@ -56,17 +57,17 @@ class ChatBubble extends StatelessWidget {
                 Text(
                   message.senderName,
                   style: AppTheme.labelSmall.copyWith(
-                    color: AppSemanticColors.accentText,
+                    color: context.scheme.primary,
                   ),
                 ),
               Text(
                 message.text,
                 style: AppTheme.bodyMedium.copyWith(
                   color: isArchitect
-                      ? const Color(0xFFFFF3C4)
+                      ? context.scheme.onSurface.withValues(alpha: 0.92)
                       : (isMine
-                            ? AppSemanticColors.inverseText
-                            : AppSemanticColors.primaryText),
+                            ? context.scheme.onPrimary
+                            : context.scheme.onSurface),
                 ),
               ),
             ],
@@ -76,17 +77,24 @@ class ChatBubble extends StatelessWidget {
     );
   }
 
-  BoxDecoration _bubbleDecoration(bool isArchitect) {
+  BoxDecoration _bubbleDecoration(BuildContext context, bool isArchitect) {
     if (isArchitect) {
       return BoxDecoration(
-        color: const Color(0xFF111111),
+        color: Theme.of(context).scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFD54F), width: 1.2),
+        border: Border.all(color: context.colors.warning, width: 1.2),
       );
     }
     if (isMine) {
-      return AppTheme.chatBubbleUserDecoration;
+      return BoxDecoration(
+        color: context.scheme.primary,
+        borderRadius: BorderRadius.circular(16),
+      );
     }
-    return AppTheme.chatBubbleOtherDecoration;
+    return BoxDecoration(
+      color: context.scheme.surface,
+      border: Border.all(color: context.scheme.outlineVariant, width: 1),
+      borderRadius: BorderRadius.circular(16),
+    );
   }
 }

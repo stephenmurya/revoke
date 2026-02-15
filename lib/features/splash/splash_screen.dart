@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/native_bridge.dart';
+import '../../core/utils/theme_extensions.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -90,7 +91,6 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -99,19 +99,19 @@ class _SplashScreenState extends State<SplashScreen> {
             Text(
               'Revoke',
               style: AppTheme.size5xlBold.copyWith(
-                color: AppSemanticColors.primaryText,
+                color: context.scheme.onSurface,
                 letterSpacing: 1,
               ),
             ),
             const SizedBox(height: 24),
             // Loading Indicator
-            const CircularProgressIndicator(color: AppSemanticColors.accent),
+            CircularProgressIndicator(color: context.scheme.primary),
             const SizedBox(height: 24),
             // Status Text
             Text(
               _status,
               style: AppTheme.bodyMedium.copyWith(
-                color: AppSemanticColors.secondaryText,
+                color: context.colors.textSecondary,
               ),
             ),
           ],

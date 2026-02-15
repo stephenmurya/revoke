@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/user_model.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/theme_extensions.dart';
 import 'member_detail_sheet.dart';
 
 class SquadRosterStrip extends StatelessWidget {
@@ -32,7 +33,7 @@ class SquadRosterStrip extends StatelessWidget {
         separatorBuilder: (context, index) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final user = members[index];
-          final ringColor = _ringColor(user);
+          final ringColor = _ringColor(context, user);
           final isHighlighted =
               highlightUserId != null && user.uid == highlightUserId;
 
@@ -49,12 +50,12 @@ class SquadRosterStrip extends StatelessWidget {
               width: 86,
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
               decoration: BoxDecoration(
-                color: AppSemanticColors.surface,
+                color: context.colors.surface,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: isHighlighted
-                      ? AppSemanticColors.accent.withValues(alpha: 0.40)
-                      : AppSemanticColors.primaryText.withValues(alpha: 0.06),
+                      ? context.colors.accent.withValues(alpha: 0.40)
+                      : context.colors.textPrimary.withValues(alpha: 0.06),
                 ),
               ),
               child: Column(
@@ -71,8 +72,8 @@ class SquadRosterStrip extends StatelessWidget {
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTheme.smMedium.copyWith(
-                      color: AppSemanticColors.secondaryText,
+                    style: (context.text.labelMedium ?? AppTheme.smMedium).copyWith(
+                      color: context.colors.textSecondary,
                       height: 1.05,
                     ),
                   ),
@@ -104,16 +105,16 @@ class SquadRosterStrip extends StatelessWidget {
     );
   }
 
-  static Color _ringColor(UserModel user) {
+  static Color _ringColor(BuildContext context, UserModel user) {
     final status = (user.currentStatus ?? 'idle').trim().toLowerCase();
     switch (status) {
       case 'locked_in':
-        return AppSemanticColors.success;
+        return context.colors.success;
       case 'vulnerable':
-        return AppSemanticColors.reject;
+        return context.colors.danger;
       case 'idle':
       default:
-        return AppSemanticColors.mutedText.withValues(alpha: 0.55);
+        return context.colors.textSecondary.withValues(alpha: 0.70);
     }
   }
 
@@ -162,9 +163,9 @@ class _StatusRingAvatar extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: AppSemanticColors.background,
+          color: context.colors.background,
           border: Border.all(
-            color: AppSemanticColors.primaryText.withValues(alpha: 0.10),
+            color: context.colors.textPrimary.withValues(alpha: 0.10),
           ),
         ),
         clipBehavior: Clip.antiAlias,
@@ -176,8 +177,8 @@ class _StatusRingAvatar extends StatelessWidget {
             : Center(
                 child: Text(
                   fallbackText.isNotEmpty ? fallbackText[0].toUpperCase() : 'U',
-                  style: AppTheme.smBold.copyWith(
-                    color: AppSemanticColors.secondaryText,
+                  style: (context.text.labelMedium ?? AppTheme.smBold).copyWith(
+                    color: context.colors.textSecondary,
                   ),
                 ),
               ),
@@ -195,8 +196,8 @@ class _ScorePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final clamped = score.clamp(0, 1000);
     final Color base = clamped >= 800
-        ? Colors.greenAccent
-        : (clamped >= 500 ? Colors.orangeAccent : Colors.redAccent);
+        ? context.colors.success
+        : (clamped >= 500 ? context.colors.warning : context.colors.danger);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -207,7 +208,7 @@ class _ScorePill extends StatelessWidget {
       ),
       child: Text(
         '$clamped',
-        style: AppTheme.smBold.copyWith(
+        style: (context.text.labelMedium ?? AppTheme.smBold).copyWith(
           color: base.withValues(alpha: 0.95),
           letterSpacing: 0.2,
         ),

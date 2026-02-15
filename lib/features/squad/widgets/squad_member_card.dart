@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/user_model.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/theme_extensions.dart';
 
 class SquadMemberCard extends StatelessWidget {
   const SquadMemberCard({
@@ -26,18 +27,18 @@ class SquadMemberCard extends StatelessWidget {
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: AppSemanticColors.surface,
+        color: context.scheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isCooked
-              ? AppSemanticColors.accent.withValues(alpha: 0.5)
-              : AppSemanticColors.primaryText.withValues(alpha: 0.05),
+              ? context.scheme.primary.withValues(alpha: 0.55)
+              : context.scheme.outlineVariant,
           width: 2,
         ),
       ),
       child: Row(
         children: [
-          _buildAvatar(member.photoUrl, isCooked),
+          _buildAvatar(context, member.photoUrl, isCooked),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -46,20 +47,20 @@ class SquadMemberCard extends StatelessWidget {
                 Text(
                   _displayNickname(member.nickname),
                   style: AppTheme.lgMedium.copyWith(
-                    color: AppSemanticColors.primaryText,
+                    color: context.scheme.onSurface,
                   ),
                 ),
                 Text(
                   member.fullName ?? member.email ?? '',
                   style: AppTheme.bodySmall.copyWith(
-                    color: AppSemanticColors.mutedText,
+                    color: context.colors.textSecondary,
                   ),
                 ),
                 if (isCooked)
                   Text(
                     'Cooked',
                     style: AppTheme.smBold.copyWith(
-                      color: AppSemanticColors.accentText,
+                      color: context.scheme.primary,
                     ),
                   ),
               ],
@@ -73,14 +74,14 @@ class SquadMemberCard extends StatelessWidget {
                     member.focusScore.toString(),
                     style: AppTheme.xlMedium.copyWith(
                       color: isCooked
-                          ? AppSemanticColors.accentText
-                          : AppSemanticColors.primaryText,
+                          ? context.scheme.primary
+                          : context.scheme.onSurface,
                     ),
                   ),
                   Text(
                     'Focus Score',
                     style: AppTheme.xsRegular.copyWith(
-                      color: AppSemanticColors.mutedText,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                 ],
@@ -100,21 +101,21 @@ class SquadMemberCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar(String? photoUrl, bool isPulse) {
+  Widget _buildAvatar(BuildContext context, String? photoUrl, bool isPulse) {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: isPulse ? AppSemanticColors.accent : Colors.transparent,
+          color: isPulse ? context.scheme.primary : Colors.transparent,
           width: 2,
         ),
       ),
       child: CircleAvatar(
         radius: 24,
-        backgroundColor: AppSemanticColors.background,
+        backgroundColor: context.scheme.surface,
         backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
         child: photoUrl == null
-            ? const Icon(Icons.person, color: AppSemanticColors.secondaryText)
+            ? Icon(Icons.person, color: context.colors.textSecondary)
             : null,
       ),
     );

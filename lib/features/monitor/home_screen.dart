@@ -8,6 +8,7 @@ import '../../core/services/schedule_service.dart';
 import 'widgets/focus_score_card.dart';
 import 'widgets/single_app_icon.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/utils/theme_extensions.dart';
 
 class HomeScreen extends StatefulWidget {
   final List<ScheduleModel> schedules;
@@ -165,15 +166,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       body: SafeArea(
         child: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: AppSemanticColors.accent),
+            ? Center(
+                child: CircularProgressIndicator(color: context.scheme.primary),
               )
             : RefreshIndicator(
                 onRefresh: _loadSchedules,
-                color: AppSemanticColors.accent,
+                color: context.scheme.primary,
                 child: CustomScrollView(
                   slivers: [
                     if (_isMissingPermissions)
@@ -184,14 +184,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             _checkPermissions();
                           },
                           child: Container(
-                            color: AppSemanticColors.danger,
+                            color: context.colors.danger,
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Center(
                               child: Text(
                                 'Revoke is blind. Tap to fix.',
                                 style: AppTheme.baseBold.copyWith(
-                                  color: AppSemanticColors.primaryText,
+                                  color: context.scheme.onError,
                                   letterSpacing: 1,
                                 ),
                               ),
@@ -220,7 +220,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     Text(
                                       '${_schedules.where((s) => s.isActive).length}/${_schedules.length}',
                                       style: AppTheme.smMedium.copyWith(
-                                        color: AppSemanticColors.secondaryText,
+                                        color: context.colors.textSecondary,
                                       ),
                                     ),
                                   ],
@@ -251,14 +251,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           await context.push('/regime/new');
           _loadSchedules();
         },
-        backgroundColor: AppSemanticColors.accent,
-        child: const Icon(Icons.add, color: AppSemanticColors.background, size: 40),
+        backgroundColor: context.scheme.primary,
+        child: Icon(Icons.add, color: context.scheme.onPrimary, size: 40),
       ),
     );
   }
 
   Widget _buildSectionHeader(String title) {
-    return Text(title, style: AppTheme.smBold.copyWith(color: AppSemanticColors.accent));
+    return Text(
+      title,
+      style: AppTheme.smBold.copyWith(color: context.scheme.primary),
+    );
   }
 
   bool _isCurrentlyBlocking(ScheduleModel s) {
@@ -330,11 +333,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _temporaryApprovedPackages.contains,
     );
     final cardBorderColor = hasTemporaryApproval
-        ? AppSemanticColors.approve
+        ? context.colors.success
         : (schedule.isActive
               ? (isBlocking
-                    ? AppSemanticColors.accent
-                    : AppSemanticColors.success.withOpacity(0.5))
+                    ? context.scheme.primary
+                    : context.colors.success.withValues(alpha: 0.5))
               : Colors.transparent);
     final cardBorderWidth = hasTemporaryApproval ? 1.0 : 2.0;
 
@@ -347,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: AppSemanticColors.surface,
+          color: context.scheme.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: cardBorderColor, width: cardBorderWidth),
         ),
@@ -360,8 +363,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 Expanded(child: Text(schedule.name, style: AppTheme.h3)),
                 Switch(
                   value: schedule.isActive,
-                  activeColor: AppSemanticColors.background,
-                  activeTrackColor: AppSemanticColors.accent,
+                  activeColor: context.scheme.onPrimary,
+                  activeTrackColor: context.scheme.primary,
                   onChanged: (v) => _onToggleSchedule(schedule),
                 ),
               ],
@@ -377,9 +380,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   decoration: BoxDecoration(
                     color: schedule.isActive
                         ? (isBlocking
-                              ? AppSemanticColors.accent.withOpacity(0.1)
-                              : AppSemanticColors.success.withOpacity(0.1))
-                        : AppSemanticColors.background.withOpacity(0.2),
+                              ? context.scheme.primary.withValues(alpha: 0.10)
+                              : context.colors.success.withValues(alpha: 0.10))
+                        : Theme.of(context)
+                            .scaffoldBackgroundColor
+                            .withValues(alpha: 0.20),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -388,8 +393,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         : "💤 INACTIVE",
                     style: AppTheme.labelSmall.copyWith(
                       color: schedule.isActive
-                          ? (isBlocking ? AppSemanticColors.accent : AppSemanticColors.success)
-                          : AppSemanticColors.mutedText,
+                          ? (isBlocking
+                                ? context.scheme.primary
+                                : context.colors.success)
+                          : context.colors.textSecondary,
                     ),
                   ),
                 ),
@@ -413,7 +420,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ? "TIME BLOCK"
                       : "USAGE LIMIT",
                   style: AppTheme.labelSmall.copyWith(
-                    color: AppSemanticColors.mutedText.withOpacity(0.5),
+                    color: context.colors.textSecondary.withValues(alpha: 0.55),
                   ),
                 ),
               ],
@@ -438,8 +445,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: _temporaryApprovedPackages.contains(icons[i])
-                      ? AppSemanticColors.approve
-                      : AppSemanticColors.surface,
+                      ? context.colors.success
+                      : context.scheme.surface,
                   width: _temporaryApprovedPackages.contains(icons[i]) ? 1 : 2,
                 ),
               ),
@@ -467,10 +474,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             margin: const EdgeInsets.only(right: 12),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppSemanticColors.surface,
+              color: context.scheme.surface,
               borderRadius: BorderRadius.circular(12),
               border: _temporaryApprovedPackages.contains(packageName)
-                  ? Border.all(color: AppSemanticColors.approve, width: 1)
+                  ? Border.all(color: context.colors.success, width: 1)
                   : null,
             ),
             child: SingleAppIcon(packageName: packageName, size: 32),
@@ -484,7 +491,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Text(
       text,
       style: AppTheme.bodySmall.copyWith(
-        color: AppSemanticColors.mutedText.withValues(alpha: 0.5),
+        color: context.colors.textSecondary.withValues(alpha: 0.55),
       ),
     );
   }
@@ -496,7 +503,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         child: Text(
           'TAP + TO START THE GRIND',
           style: AppTheme.bodyMedium.copyWith(
-            color: AppSemanticColors.mutedText,
+            color: context.colors.textSecondary,
           ),
         ),
       ),

@@ -7,6 +7,7 @@ import '../../core/native_bridge.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/squad_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/theme_extensions.dart';
 
 class BegForTimeScreen extends StatefulWidget {
   final String appName;
@@ -94,9 +95,8 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
         title: Text('Beg for time', style: AppTheme.h3),
       ),
@@ -117,22 +117,20 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
                       width: 108,
                       height: 108,
                       decoration: BoxDecoration(
-                        color: AppSemanticColors.surface,
+                        color: context.scheme.surface,
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: AppSemanticColors.primaryText.withValues(
-                            alpha: 0.08,
-                          ),
+                          color: context.scheme.outlineVariant,
                           width: 1.5,
                         ),
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: iconBytes != null
                           ? Image.memory(iconBytes, fit: BoxFit.cover)
-                          : const Icon(
+                          : Icon(
                               Icons.apps_rounded,
                               size: 56,
-                              color: AppSemanticColors.accent,
+                              color: context.scheme.primary,
                             ),
                     ),
                   ),
@@ -155,15 +153,15 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
                         selected: selected,
                         labelStyle: AppTheme.smBold.copyWith(
                           color: selected
-                              ? AppSemanticColors.onAccentText
-                              : AppSemanticColors.primaryText,
+                              ? context.scheme.onPrimary
+                              : context.scheme.onSurface,
                         ),
-                        selectedColor: AppSemanticColors.accent,
-                        backgroundColor: AppSemanticColors.surface,
+                        selectedColor: context.scheme.primary,
+                        backgroundColor: context.scheme.surface,
                         side: BorderSide(
                           color: selected
-                              ? AppSemanticColors.accent
-                              : AppSemanticColors.primaryText,
+                              ? context.scheme.primary
+                              : context.scheme.outlineVariant,
                         ),
                         onSelected: (_) {
                           setState(() => _selectedMinutes = minutes);

@@ -12,6 +12,7 @@ import '../../core/native_bridge.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/squad_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/theme_extensions.dart';
 import 'widgets/chat_bubble.dart';
 
 class TribunalScreen extends StatefulWidget {
@@ -223,7 +224,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          backgroundColor: AppSemanticColors.surface,
+          backgroundColor: dialogContext.scheme.surface,
           title: Text('Force Resolve this plea?', style: AppTheme.h3),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -232,7 +233,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
               Text(
                 '${plea.userName} on ${plea.appName} (${plea.durationMinutes}m)',
                 style: AppTheme.bodySmall.copyWith(
-                  color: AppSemanticColors.secondaryText,
+                  color: dialogContext.colors.textSecondary,
                 ),
               ),
               const SizedBox(height: 12),
@@ -295,14 +296,19 @@ class _TribunalScreenState extends State<TribunalScreen> {
   }
 
   Widget _buildAdminTribunalControls(PleaModel plea) {
+    final successScheme = ColorScheme.fromSeed(
+      seedColor: context.colors.success,
+      brightness: Theme.of(context).brightness,
+    );
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppSemanticColors.surface,
+        color: context.scheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+          color: context.scheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -321,12 +327,8 @@ class _TribunalScreenState extends State<TribunalScreen> {
                           plea: plea,
                         ),
                   style: AppTheme.primaryButtonStyle.copyWith(
-                    backgroundColor: const WidgetStatePropertyAll(
-                      AppSemanticColors.approve,
-                    ),
-                    foregroundColor: const WidgetStatePropertyAll(
-                      AppSemanticColors.inverseText,
-                    ),
+                    backgroundColor: WidgetStatePropertyAll(context.colors.success),
+                    foregroundColor: WidgetStatePropertyAll(successScheme.onPrimary),
                   ),
                   child: const Text('Approve'),
                 ),
@@ -357,7 +359,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                     Text(
                       'Send as The Architect',
                       style: AppTheme.bodySmall.copyWith(
-                        color: AppSemanticColors.secondaryText,
+                        color: context.colors.textSecondary,
                       ),
                     ),
                   ],
@@ -432,11 +434,11 @@ class _TribunalScreenState extends State<TribunalScreen> {
     final approveLeading = approveCount > rejectCount;
 
     final rejectBg = rejectLeading
-        ? AppSemanticColors.reject
-        : AppSemanticColors.reject.withValues(alpha: 0.14);
+        ? context.colors.danger
+        : context.colors.danger.withValues(alpha: 0.14);
     final approveBg = approveLeading
-        ? AppSemanticColors.approve
-        : AppSemanticColors.approve.withValues(alpha: 0.14);
+        ? context.colors.success
+        : context.colors.success.withValues(alpha: 0.14);
 
     return Container(
       width: double.infinity,
@@ -451,7 +453,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTheme.smBold.copyWith(
-              color: AppSemanticColors.primaryText,
+              color: context.scheme.onSurface,
             ),
           ),
           if (plea.reason.trim().isNotEmpty) ...[
@@ -461,7 +463,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTheme.smRegular.copyWith(
-                color: AppSemanticColors.secondaryText,
+                color: context.colors.textSecondary,
               ),
             ),
           ],
@@ -477,14 +479,14 @@ class _TribunalScreenState extends State<TribunalScreen> {
                   decoration: BoxDecoration(
                     color: rejectBg,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppSemanticColors.reject),
+                    border: Border.all(color: context.colors.danger),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.close_rounded,
                         size: 14,
-                        color: AppSemanticColors.reject,
+                        color: context.colors.danger,
                       ),
                       const SizedBox(width: 6),
                       Expanded(
@@ -493,7 +495,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTheme.xsBold.copyWith(
-                            color: AppSemanticColors.rejectText,
+                            color: context.colors.danger,
                           ),
                         ),
                       ),
@@ -511,14 +513,14 @@ class _TribunalScreenState extends State<TribunalScreen> {
                   decoration: BoxDecoration(
                     color: approveBg,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppSemanticColors.approve),
+                    border: Border.all(color: context.colors.success),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.check_rounded,
                         size: 14,
-                        color: AppSemanticColors.approve,
+                        color: context.colors.success,
                       ),
                       const SizedBox(width: 6),
                       Expanded(
@@ -527,7 +529,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTheme.xsBold.copyWith(
-                            color: AppSemanticColors.approveText,
+                            color: context.colors.success,
                           ),
                         ),
                       ),
@@ -548,24 +550,24 @@ class _TribunalScreenState extends State<TribunalScreen> {
 
     if (!_adminClaimChecked || !_sessionReady) {
       return Scaffold(
-        backgroundColor: AppSemanticColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
-          backgroundColor: AppSemanticColors.background,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           surfaceTintColor: Colors.transparent,
           elevation: 0,
           title: Text('The Tribunal', style: AppTheme.h2),
         ),
-        body: const Center(
-          child: CircularProgressIndicator(color: AppSemanticColors.accent),
+        body: Center(
+          child: CircularProgressIndicator(color: context.scheme.primary),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       extendBodyBehindAppBar: false,
       appBar: AppBar(
-        backgroundColor: AppSemanticColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         title: Text('The Tribunal', style: AppTheme.h2),
@@ -588,14 +590,14 @@ class _TribunalScreenState extends State<TribunalScreen> {
             return Center(
               child: Text(
                 'ACCESS DENIED',
-                style: AppTheme.h3.copyWith(color: AppSemanticColors.errorText),
+                style: AppTheme.h3.copyWith(color: context.colors.danger),
               ),
             );
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppSemanticColors.accent),
+            return Center(
+              child: CircularProgressIndicator(color: context.scheme.primary),
             );
           }
 
@@ -605,7 +607,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
               child: Text(
                 'SESSION NOT FOUND',
                 style: AppTheme.h3.copyWith(
-                  color: AppSemanticColors.accentText,
+                  color: context.scheme.primary,
                 ),
               ),
             );
@@ -627,7 +629,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
             return Center(
               child: Text(
                 'ACCESS DENIED',
-                style: AppTheme.h3.copyWith(color: AppSemanticColors.errorText),
+                style: AppTheme.h3.copyWith(color: context.colors.danger),
               ),
             );
           }
@@ -672,7 +674,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                             child: Text(
                               'ACCESS DENIED OR CHAT ERROR.',
                               style: AppTheme.bodyMedium.copyWith(
-                                color: AppSemanticColors.errorText,
+                                color: context.colors.danger,
                               ),
                             ),
                           );
@@ -684,7 +686,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                             child: Text(
                               'NO MESSAGES YET',
                               style: AppTheme.bodySmall.copyWith(
-                                color: AppSemanticColors.mutedText,
+                                color: context.colors.textSecondary,
                               ),
                             ),
                           );
@@ -760,19 +762,19 @@ class _TribunalScreenState extends State<TribunalScreen> {
                                 vertical: 10,
                               ),
                               decoration: BoxDecoration(
-                                color: AppSemanticColors.surface,
+                                color: context.scheme.surface,
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color: AppSemanticColors.approve,
+                                  color: context.colors.success,
                                   width: 1,
                                 ),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.reply_rounded,
                                     size: 16,
-                                    color: AppSemanticColors.approve,
+                                    color: context.colors.success,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -785,7 +787,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: AppTheme.labelSmall.copyWith(
-                                            color: AppSemanticColors.approve,
+                                            color: context.colors.success,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -795,7 +797,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                                           overflow: TextOverflow.ellipsis,
                                           style: AppTheme.bodySmall.copyWith(
                                             color:
-                                                AppSemanticColors.secondaryText,
+                                                context.colors.textSecondary,
                                           ),
                                         ),
                                       ],
@@ -803,9 +805,9 @@ class _TribunalScreenState extends State<TribunalScreen> {
                                   ),
                                   IconButton(
                                     onPressed: _clearReplyTarget,
-                                    icon: const Icon(
+                                    icon: Icon(
                                       Icons.close_rounded,
-                                      color: AppSemanticColors.mutedText,
+                                      color: context.colors.textSecondary,
                                       size: 18,
                                     ),
                                   ),
@@ -869,14 +871,16 @@ class _TribunalScreenState extends State<TribunalScreen> {
               if (_showVerdictOverlay)
                 Positioned.fill(
                   child: Container(
-                    color: AppSemanticColors.background.withValues(alpha: 0.92),
+                    color: Theme.of(context)
+                        .scaffoldBackgroundColor
+                        .withValues(alpha: 0.92),
                     alignment: Alignment.center,
                     child: Text(
                       _verdictText,
                       style: AppTheme.h1.copyWith(
                         color: _verdictText.contains('REJECTED')
-                            ? AppSemanticColors.errorText
-                            : AppSemanticColors.accentText,
+                            ? context.colors.danger
+                            : context.scheme.primary,
                         letterSpacing: 2,
                       ),
                     ),

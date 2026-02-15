@@ -2,24 +2,30 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/models/user_model.dart';
+import '../../../core/services/auth_service.dart';
+import '../../../core/services/squad_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/theme_extensions.dart';
 
 class PilloryHero extends StatelessWidget {
   final UserModel victim;
-  final VoidCallback? onBailOut;
-  final VoidCallback? onPileOn;
+  final String squadId;
 
   const PilloryHero({
     super.key,
     required this.victim,
-    this.onBailOut,
-    this.onPileOn,
+    required this.squadId,
   });
 
   @override
   Widget build(BuildContext context) {
+    final warningScheme = ColorScheme.fromSeed(
+      seedColor: context.colors.warning,
+      brightness: Theme.of(context).brightness,
+    );
     final displayHandle = _displayHandle(victim);
     final score = victim.focusScore;
     final isCritical = score < 50;
@@ -34,16 +40,11 @@ class PilloryHero extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
-        color: AppSemanticColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppSemanticColors.accent.withValues(alpha: 0.22)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.45),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
+        border: Border.all(
+          color: context.colors.accent.withValues(alpha: 0.22),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -53,16 +54,16 @@ class PilloryHero extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppSemanticColors.background.withValues(alpha: 0.55),
+                  color: context.colors.background.withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+                    color: context.colors.textPrimary.withValues(alpha: 0.08),
                   ),
                 ),
                 child: Text(
                   'THE PILLORY',
-                  style: AppTheme.labelSmall.copyWith(
-                    color: AppSemanticColors.mutedText,
+                  style: (context.text.labelSmall ?? AppTheme.labelSmall).copyWith(
+                    color: context.colors.textSecondary,
                     letterSpacing: 0.6,
                   ),
                 ),
@@ -83,16 +84,16 @@ class PilloryHero extends StatelessWidget {
                   children: [
                     Text(
                       'CURRENTLY SHAMED',
-                      style: AppTheme.smBold.copyWith(
-                        color: AppSemanticColors.reject.withValues(alpha: 0.9),
+                      style: (context.text.labelMedium ?? AppTheme.smBold).copyWith(
+                        color: context.colors.danger.withValues(alpha: 0.9),
                         letterSpacing: 1.0,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       '@$displayHandle',
-                      style: AppTheme.h2.copyWith(
-                        color: AppSemanticColors.primaryText,
+                      style: (context.text.headlineMedium ?? AppTheme.h2).copyWith(
+                        color: context.colors.textPrimary,
                         height: 1.05,
                       ),
                       maxLines: 1,
@@ -103,8 +104,8 @@ class PilloryHero extends StatelessWidget {
                       isCritical
                           ? 'This soldier has fallen below operational readiness.'
                           : 'Morale is low. Supervision recommended.',
-                      style: AppTheme.bodySmall.copyWith(
-                        color: AppSemanticColors.secondaryText,
+                      style: (context.text.bodySmall ?? AppTheme.bodySmall).copyWith(
+                        color: context.colors.textSecondary,
                         height: 1.25,
                       ),
                       maxLines: 2,
@@ -115,37 +116,75 @@ class PilloryHero extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          
+          // --- FIXED SECTION START ---
+          const SizedBox(height: 16), // Add vertical spacing before buttons
           Row(
             children: [
               Expanded(
-                child: ElevatedButton(
-                  onPressed: onBailOut,
-                  style: AppTheme.primaryButtonStyle.copyWith(
-                    padding: const WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(vertical: 14),
-                    ),
+                child: OutlinedButton.icon(
+                  onPressed: () => _castStone(context),
+                  icon: const Icon(Icons.gavel_rounded, size: 16),
+                  label: const Text(
+                    'Stone',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
-                  child: const Text('BAIL OUT'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: context.colors.danger,
+                    side: BorderSide(
+                      color: context.colors.danger.withValues(alpha: 0.3),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
-                child: ElevatedButton(
-                  onPressed: onPileOn,
-                  style: AppTheme.secondaryButtonStyle.copyWith(
-                    padding: const WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    backgroundColor: WidgetStatePropertyAll(
-                      AppSemanticColors.background.withValues(alpha: 0.35),
-                    ),
+                child: OutlinedButton.icon(
+                  onPressed: () => _prayFor(context),
+                  icon: const Icon(Icons.spa_rounded, size: 16),
+                  label: const Text(
+                    'Pray',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
-                  child: const Text('PILE ON'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: context.colors.success,
+                    side: BorderSide(
+                      color: context.colors.success.withValues(alpha: 0.3),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _postBail(context, displayHandle),
+                  icon: const Icon(Icons.lock_open_rounded, size: 16),
+                  label: const Text(
+                    'Bail',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: context.colors.warning,
+                    foregroundColor: warningScheme.onPrimary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 0,
+                  ),
                 ),
               ),
             ],
           ),
+          // --- FIXED SECTION END ---
         ],
       ),
     );
@@ -160,6 +199,114 @@ class PilloryHero extends StatelessWidget {
     if (email.isNotEmpty) return email.split('@').first;
     return 'member';
   }
+
+  Future<void> _castStone(BuildContext context) async {
+    HapticFeedback.heavyImpact();
+    try {
+      await SquadService.castStone(victim.uid, squadId);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Judgment delivered.'),
+            duration: Duration(milliseconds: 900),
+          ),
+        );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  Future<void> _prayFor(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    try {
+      await SquadService.prayForUser(victim.uid, squadId);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Prayers sent.'),
+            duration: Duration(milliseconds: 900),
+          ),
+        );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
+
+  Future<void> _postBail(BuildContext context, String displayHandle) async {
+    final callerUid = AuthService.currentUser?.uid;
+    if (callerUid == null) return;
+    if (callerUid == victim.uid) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('You cannot post bail for yourself.')),
+        );
+      return;
+    }
+
+    final should = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: dialogContext.colors.surface,
+          title: const Text('Post Bail?'),
+          content: Text(
+            'Sacrifice 50 Points to save @$displayHandle?',
+            style: (dialogContext.text.bodyMedium ?? AppTheme.bodyMedium).copyWith(
+              color: dialogContext.colors.textSecondary,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: dialogContext.colors.warning,
+                foregroundColor: ColorScheme.fromSeed(
+                  seedColor: dialogContext.colors.warning,
+                  brightness: Theme.of(dialogContext).brightness,
+                ).onPrimary,
+              ),
+              child: const Text('Post Bail'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (should != true) return;
+
+    try {
+      await SquadService.postBail(victim.uid, squadId);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Bail posted. You are a martyr.'),
+            duration: Duration(milliseconds: 1200),
+          ),
+        );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
+  }
 }
 
 class _ScorePill extends StatelessWidget {
@@ -172,8 +319,8 @@ class _ScorePill extends StatelessWidget {
     final clamped = score.clamp(0, 1000);
     final severity = (1.0 - (clamped / 1000.0)).clamp(0.0, 1.0);
     final heat = Color.lerp(
-      AppSemanticColors.success,
-      AppSemanticColors.reject,
+      context.colors.success,
+      context.colors.danger,
       math.min(1.0, severity * 1.1),
     )!;
 
@@ -186,7 +333,7 @@ class _ScorePill extends StatelessWidget {
       ),
       child: Text(
         'SCORE: $clamped',
-        style: AppTheme.smBold.copyWith(
+        style: (context.text.labelMedium ?? AppTheme.smBold).copyWith(
           color: heat.withValues(alpha: 0.95),
           letterSpacing: 0.4,
         ),
@@ -215,9 +362,9 @@ class _AvatarWithTreatment extends StatelessWidget {
       height: 74,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppSemanticColors.background,
+        color: context.colors.background,
         border: Border.all(
-          color: AppSemanticColors.primaryText.withValues(alpha: 0.10),
+          color: context.colors.textPrimary.withValues(alpha: 0.10),
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -229,8 +376,8 @@ class _AvatarWithTreatment extends StatelessWidget {
           : Center(
               child: Text(
                 fallbackText.isNotEmpty ? fallbackText[0].toUpperCase() : 'U',
-                style: AppTheme.xlMedium.copyWith(
-                  color: AppSemanticColors.secondaryText,
+                style: (context.text.titleLarge ?? AppTheme.xlMedium).copyWith(
+                  color: context.colors.textSecondary,
                 ),
               ),
             ),
@@ -255,7 +402,10 @@ class _AvatarWithTreatment extends StatelessWidget {
           Positioned.fill(
             child: IgnorePointer(
               child: CustomPaint(
-                painter: _JailBarsPainter(),
+                painter: _JailBarsPainter(
+                  barColor: context.scheme.onSurface.withValues(alpha: 0.09),
+                  edgeColor: Theme.of(context).shadowColor.withValues(alpha: 0.28),
+                ),
               ),
             ),
           ),
@@ -265,14 +415,19 @@ class _AvatarWithTreatment extends StatelessWidget {
 }
 
 class _JailBarsPainter extends CustomPainter {
+  final Color barColor;
+  final Color edgeColor;
+
+  _JailBarsPainter({required this.barColor, required this.edgeColor});
+
   @override
   void paint(Canvas canvas, Size size) {
     final barPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.09)
+      ..color = barColor
       ..style = PaintingStyle.fill;
 
     final edgePaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.28)
+      ..color = edgeColor
       ..style = PaintingStyle.fill;
 
     final barWidth = math.max(5.5, size.width / 14.0);
@@ -290,7 +445,7 @@ class _JailBarsPainter extends CustomPainter {
         ..shader = RadialGradient(
           colors: [
             Colors.transparent,
-            Colors.black.withValues(alpha: 0.28),
+            edgeColor,
           ],
         ).createShader(Offset.zero & size),
     );
@@ -306,4 +461,3 @@ class _JailBarsPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-

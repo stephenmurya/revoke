@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/squad_service.dart';
 import '../../core/native_bridge.dart';
+import '../../core/utils/theme_extensions.dart';
 import '../../core/widgets/revoke_logo.dart';
 import '../../core/widgets/revoke_progress_bar.dart';
 import 'package:share_plus/share_plus.dart';
@@ -248,11 +249,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           content: Text(
             "Code copied to clipboard.",
             style: AppTheme.baseBold.copyWith(
-              color: AppSemanticColors.onAccentText,
+              color: context.scheme.onPrimary,
               letterSpacing: 0.8,
             ),
           ),
-          backgroundColor: AppSemanticColors.accent,
+          backgroundColor: context.scheme.primary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
           duration: const Duration(milliseconds: 1200),
@@ -299,7 +300,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       body: Stack(
         children: [
           SafeArea(
@@ -341,9 +341,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           if (_isLoading)
             Container(
-              color: AppSemanticColors.background.withOpacity(0.8),
-              child: const Center(
-                child: CircularProgressIndicator(color: AppSemanticColors.accent),
+              color: Theme.of(context)
+                  .scaffoldBackgroundColor
+                  .withValues(alpha: 0.8),
+              child: Center(
+                child: CircularProgressIndicator(color: context.scheme.primary),
               ),
             ),
         ],
@@ -365,7 +367,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             "WE NEED ACCESS TO YOUR SOUL\n(AND YOUR SCREEN TIME DATA 🙃)",
             textAlign: TextAlign.center,
             style: AppTheme.bodyMedium.copyWith(
-              color: AppSemanticColors.mutedText,
+              color: context.colors.textSecondary,
             ),
           ),
           const Spacer(),
@@ -380,11 +382,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 } else {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
+                      SnackBar(
                         content: Text(
                           "Sign-in failed. Please check your internet and Google account.",
                         ),
-                        backgroundColor: AppSemanticColors.danger,
+                        backgroundColor: context.colors.danger,
                       ),
                     );
                   }
@@ -394,7 +396,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text("Error: $e"),
-                      backgroundColor: AppSemanticColors.danger,
+                      backgroundColor: context.colors.danger,
                       duration: const Duration(seconds: 10),
                     ),
                   );
@@ -476,7 +478,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             "${_estimatedHours.toStringAsFixed(1)} HOURS",
             textAlign: TextAlign.center, // Centered
             style: AppTheme.size5xlBold.copyWith(
-              color: AppSemanticColors.accentText,
+              color: context.scheme.primary,
             ),
           ),
           const SizedBox(height: 32),
@@ -522,7 +524,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             "${actualHours.toStringAsFixed(1)} HOURS DAILY",
             textAlign: TextAlign.center,
             style: AppTheme.size5xlMedium.copyWith(
-              color: AppSemanticColors.accentText,
+              color: context.scheme.primary,
             ),
           ),
           const SizedBox(height: 16),
@@ -533,8 +535,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             textAlign: TextAlign.center,
             style: AppTheme.bodyLarge.copyWith(
               color: isCooked
-                  ? AppSemanticColors.errorText
-                  : AppSemanticColors.success,
+                  ? context.colors.danger
+                  : context.colors.success,
             ),
           ),
           const Spacer(),
@@ -545,14 +547,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppSemanticColors.surface,
+                color: context.scheme.surface,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.apps_rounded,
-                    color: AppSemanticColors.accent,
+                    color: context.scheme.primary,
                     size: 20,
                   ),
                   const SizedBox(width: 12),
@@ -563,7 +565,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           .last
                           .toUpperCase(),
                       style: AppTheme.baseBold.copyWith(
-                        color: AppSemanticColors.primaryText,
+                        color: context.scheme.onSurface,
                       ),
                     ),
                   ),
@@ -592,14 +594,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             "${_goalHours.toStringAsFixed(1)} HOURS",
             textAlign: TextAlign.center,
             style: AppTheme.size5xlBold.copyWith(
-              color: AppSemanticColors.accentText,
+              color: context.scheme.primary,
             ),
           ),
           const SizedBox(height: 16),
           Text(
             "DAILY LIMIT",
             style: AppTheme.labelSmall.copyWith(
-              color: AppSemanticColors.mutedText,
+              color: context.colors.textSecondary,
             ),
           ),
           const SizedBox(height: 32),
@@ -652,10 +654,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   child: Ink(
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
-                      color: AppSemanticColors.surface,
+                      color: context.scheme.surface,
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: AppSemanticColors.accent.withOpacity(0.3),
+                        color: context.scheme.primary.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Column(
@@ -663,7 +665,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         Text(
                           "YOUR SQUAD CODE",
                           style: AppTheme.smMedium.copyWith(
-                            color: AppSemanticColors.mutedText,
+                            color: context.colors.textSecondary,
                           ),
                         ),
                         FittedBox(
@@ -684,7 +686,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         Text(
                           "TAP ANYWHERE TO COPY",
                           style: AppTheme.xsMedium.copyWith(
-                            color: AppSemanticColors.secondaryText.withOpacity(0.8),
+                            color: context.colors.textSecondary.withValues(alpha: 0.8),
                           ),
                         ),
                       ],
@@ -785,7 +787,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             header,
             textAlign: TextAlign.center,
             style: AppTheme.size4xlBold.copyWith(
-              color: AppSemanticColors.primaryText,
+              color: context.scheme.onSurface,
               height: 1.1,
             ),
           ),
@@ -795,7 +797,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               subtext,
               textAlign: TextAlign.center,
               style: AppTheme.bodyMedium.copyWith(
-                color: AppSemanticColors.mutedText,
+                color: context.colors.textSecondary,
               ),
             ),
           ],
@@ -814,12 +816,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: AppSemanticColors.surface,
+        color: context.scheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isGranted
-              ? AppSemanticColors.success
-              : AppSemanticColors.primaryText.withValues(alpha: 0.1),
+              ? context.colors.success
+              : context.scheme.outlineVariant,
         ),
       ),
       child: ListTile(
@@ -827,14 +829,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         title: Text(title, style: AppTheme.h3),
         subtitle: Text(desc, style: AppTheme.bodySmall),
         trailing: isGranted
-            ? const Icon(Icons.check_circle, color: AppSemanticColors.success)
+            ? Icon(Icons.check_circle, color: context.colors.success)
             : ElevatedButton(
                 onPressed: onTap,
                 style: AppTheme.secondaryButtonStyle.copyWith(
                   padding: const WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
-                  backgroundColor: const WidgetStatePropertyAll(AppSemanticColors.background),
+                  backgroundColor: WidgetStatePropertyAll(
+                    Theme.of(context).scaffoldBackgroundColor,
+                  ),
                 ),
                 child: const Text("GRANT"),
               ),
@@ -890,7 +894,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     return Text(
       title,
       style: AppTheme.baseBold.copyWith(
-        color: AppSemanticColors.accentText.withValues(alpha: 0.7),
+        color: context.scheme.primary.withValues(alpha: 0.7),
       ),
     );
   }

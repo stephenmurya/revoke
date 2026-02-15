@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../core/services/auth_service.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/utils/theme_extensions.dart';
 import '../../core/widgets/revoke_logo.dart';
 
 class MainShell extends StatefulWidget {
@@ -44,16 +44,17 @@ class _MainShellState extends State<MainShell> {
             onTap: () => context.push('/controls'),
             child: CircleAvatar(
               radius: 16,
-              backgroundColor: AppSemanticColors.surface,
+              backgroundColor: context.scheme.surface,
               backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
                   ? CachedNetworkImageProvider(photoUrl)
                   : null,
               child: (photoUrl == null || photoUrl.isEmpty)
                   ? Text(
                       initial.toUpperCase(),
-                      style: AppTheme.smBold.copyWith(
-                        color: AppSemanticColors.accentText,
-                      ),
+                      style: (context.text.labelMedium ??
+                              Theme.of(context).textTheme.labelMedium ??
+                              const TextStyle())
+                          .copyWith(color: context.scheme.primary),
                     )
                   : null,
             ),
@@ -79,10 +80,10 @@ class _MainShellState extends State<MainShell> {
     }
 
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: showHudTopBar
           ? AppBar(
-              backgroundColor: AppSemanticColors.background,
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               automaticallyImplyLeading: false,
@@ -93,8 +94,8 @@ class _MainShellState extends State<MainShell> {
                   const SizedBox(width: 10),
                   Text(
                     'REVOKE',
-                    style: AppTheme.lgMedium.copyWith(
-                      color: AppSemanticColors.secondaryText,
+                    style: (context.text.titleMedium ?? const TextStyle()).copyWith(
+                      color: context.scheme.onSurface.withValues(alpha: 0.78),
                       letterSpacing: -0.5,
                     ),
                   ),
@@ -102,13 +103,13 @@ class _MainShellState extends State<MainShell> {
                   IconButton(
                     onPressed: () => context.push('/notifications'),
                     icon: PhosphorIcon(PhosphorIcons.notification()),
-                    color: AppSemanticColors.secondaryText,
+                    color: context.scheme.onSurface.withValues(alpha: 0.72),
                     tooltip: 'Notifications',
                   ),
                   IconButton(
                     onPressed: () => context.push('/analytics'),
                     icon: PhosphorIcon(PhosphorIcons.chartBar()),
-                    color: AppSemanticColors.secondaryText,
+                    color: context.scheme.onSurface.withValues(alpha: 0.72),
                     tooltip: 'Analytics',
                   ),
                   _buildProfileAvatar(context),

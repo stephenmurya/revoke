@@ -327,6 +327,45 @@ class SquadService {
         );
   }
 
+  static Future<void> castStone(String userId, String squadId) async {
+    final targetUserId = userId.trim();
+    final normalizedSquadId = squadId.trim();
+    if (targetUserId.isEmpty || normalizedSquadId.isEmpty) {
+      throw Exception('INVALID_ARGUMENTS');
+    }
+    final callable = _functions.httpsCallable('castStone');
+    await callable.call({
+      'targetUserId': targetUserId,
+      'squadId': normalizedSquadId,
+    });
+  }
+
+  static Future<void> prayForUser(String userId, String squadId) async {
+    final targetUserId = userId.trim();
+    final normalizedSquadId = squadId.trim();
+    if (targetUserId.isEmpty || normalizedSquadId.isEmpty) {
+      throw Exception('INVALID_ARGUMENTS');
+    }
+    final callable = _functions.httpsCallable('prayFor');
+    await callable.call({
+      'targetUserId': targetUserId,
+      'squadId': normalizedSquadId,
+    });
+  }
+
+  static Future<void> postBail(String userId, String squadId) async {
+    final targetUserId = userId.trim();
+    final normalizedSquadId = squadId.trim();
+    if (targetUserId.isEmpty || normalizedSquadId.isEmpty) {
+      throw Exception('INVALID_ARGUMENTS');
+    }
+    final callable = _functions.httpsCallable('postBail');
+    await callable.call({
+      'targetUserId': targetUserId,
+      'squadId': normalizedSquadId,
+    });
+  }
+
   /// Removes a user from their squad.
   static Future<void> leaveSquad(String uid, String squadId) async {
     final squadRef = _firestore.collection('squads').doc(squadId);

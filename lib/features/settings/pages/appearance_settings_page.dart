@@ -1,32 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/theme_extensions.dart';
+import '../widgets/settings_option_tile.dart';
 
 class AppearanceSettingsPage extends StatelessWidget {
   const AppearanceSettingsPage({super.key});
 
-  static const int itemCount = 6;
-
-  static const List<_SettingItem> _items = [
+  static final List<_SettingItem> _items = [
     _SettingItem(
       title: 'Theme',
       description: 'Light / Dark / System / High Contrast.',
+      icon: PhosphorIcons.moonStars(),
     ),
     _SettingItem(
       title: 'Accent Colour',
       description: 'Pick a highlight colour (brand purple, etc.).',
+      icon: PhosphorIcons.palette(),
     ),
     _SettingItem(
       title: 'Shame Sound Effects',
       description: 'Optional audio when you get shamed.',
+      icon: PhosphorIcons.speakerHigh(),
     ),
     _SettingItem(
       title: 'Haptics',
       description: 'Subtle buzz on denied requests.',
+      icon: PhosphorIcons.vibrate(),
     ),
     _SettingItem(
       title: 'Icon Badge',
       description: 'Show pending shame count on app icon.',
+      icon: PhosphorIcons.appWindow(),
     ),
     _SettingItem(title: 'Language', description: 'English (more later).'),
   ];
@@ -34,51 +39,39 @@ class AppearanceSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
-        backgroundColor: AppSemanticColors.background,
-        elevation: 0,
-        title: Text('Appearance & Experience', style: AppTheme.xlMedium),
+        title: Text('Appearance & Experience', style: context.text.titleLarge),
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-        itemCount: _items.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          final item = _items[index];
-          return Container(
-            decoration: BoxDecoration(
-              color: AppSemanticColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppSemanticColors.primaryText.withValues(alpha: 0.08)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        children: [
+          for (final item in _items) ...[
+            SettingsOptionTile(
+              title: item.title,
+              subtitle: item.description,
+              icon: item.icon ?? PhosphorIcons.sparkle(),
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Coming soon.')),
+                );
+              },
             ),
-            child: ListTile(
-              title: Text(item.title, style: AppTheme.lgMedium),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  item.description,
-                  style: AppTheme.bodySmall.copyWith(
-                    color: AppSemanticColors.secondaryText,
-                    height: 1.45,
-                  ),
-                ),
-              ),
-              trailing: const Icon(
-                Icons.chevron_right_rounded,
-                color: AppSemanticColors.secondaryText,
-              ),
-            ),
-          );
-        },
+            const SizedBox(height: 6),
+          ],
+        ],
       ),
     );
   }
 }
 
 class _SettingItem {
-  const _SettingItem({required this.title, required this.description});
+  _SettingItem({
+    required this.title,
+    required this.description,
+    this.icon,
+  });
 
   final String title;
   final String description;
+  final PhosphorIconData? icon;
 }

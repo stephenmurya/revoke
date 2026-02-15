@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_theme.dart';
+import '../../core/utils/theme_extensions.dart';
 
 class PlaceholderScreen extends StatelessWidget {
   const PlaceholderScreen({super.key, required this.title});
@@ -10,12 +10,14 @@ class PlaceholderScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       body: SafeArea(
         child: Center(
           child: Text(
             title.toUpperCase(),
-            style: AppTheme.h2.copyWith(color: AppSemanticColors.accentText),
+            style: context.text.headlineMedium?.copyWith(
+                  color: context.scheme.primary,
+                ) ??
+                TextStyle(color: context.scheme.primary),
           ),
         ),
       ),

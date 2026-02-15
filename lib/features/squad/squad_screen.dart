@@ -10,6 +10,7 @@ import '../../core/services/app_discovery_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/squad_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/theme_extensions.dart';
 import 'widgets/pillory_hero.dart';
 import 'widgets/plea_judgment_card.dart';
 import 'widgets/squad_log_feed.dart';
@@ -23,11 +24,10 @@ class SquadScreen extends StatelessWidget {
     final currentUid = AuthService.currentUser?.uid;
 
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openBegForTimePicker(context),
-        backgroundColor: AppSemanticColors.accent,
-        foregroundColor: AppSemanticColors.onAccentText,
+        backgroundColor: context.scheme.primary,
+        foregroundColor: context.scheme.onPrimary,
         icon: const Icon(Icons.gavel_rounded),
         label: const Text('BEG FOR TIME'),
       ),
@@ -37,8 +37,8 @@ class SquadScreen extends StatelessWidget {
           future: AuthService.getUserData(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: AppSemanticColors.accent),
+              return Center(
+                child: CircularProgressIndicator(color: context.scheme.primary),
               );
             }
 
@@ -59,8 +59,8 @@ class SquadScreen extends StatelessWidget {
                   stream: SquadService.getSquadMembersStream(squadId),
                   builder: (context, membersSnap) {
                     if (membersSnap.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(color: AppSemanticColors.accent),
+                      return Center(
+                        child: CircularProgressIndicator(color: context.scheme.primary),
                       );
                     }
                     if (membersSnap.hasError) {
@@ -102,24 +102,7 @@ class SquadScreen extends StatelessWidget {
                             SliverToBoxAdapter(
                               child: PilloryHero(
                                 victim: victim,
-                                onBailOut: () {
-                                  ScaffoldMessenger.of(context)
-                                    ..hideCurrentSnackBar()
-                                    ..showSnackBar(
-                                      const SnackBar(
-                                        content: Text('BAIL OUT: Coming soon.'),
-                                      ),
-                                    );
-                                },
-                                onPileOn: () {
-                                  ScaffoldMessenger.of(context)
-                                    ..hideCurrentSnackBar()
-                                    ..showSnackBar(
-                                      const SnackBar(
-                                        content: Text('PILE ON: Coming soon.'),
-                                      ),
-                                    );
-                                },
+                                squadId: squadId,
                               ),
                             ),
                             SliverToBoxAdapter(
@@ -184,7 +167,9 @@ class SquadScreen extends StatelessWidget {
                     if (activePleas.isEmpty) return const SizedBox.shrink();
 
                     return Container(
-                      color: AppSemanticColors.background.withValues(alpha: 0.82),
+                      color: Theme.of(context)
+                          .scaffoldBackgroundColor
+                          .withValues(alpha: 0.82),
                       child: Center(child: PleaJudgmentCard(plea: activePleas.first)),
                     );
                   },
@@ -203,7 +188,7 @@ class SquadScreen extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppSemanticColors.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -236,7 +221,7 @@ class SquadScreen extends StatelessWidget {
                         width: 42,
                         height: 5,
                         decoration: BoxDecoration(
-                          color: AppSemanticColors.primaryText.withValues(alpha: 0.15),
+                          color: sheetContext.scheme.onSurface.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
@@ -247,7 +232,7 @@ class SquadScreen extends StatelessWidget {
                             child: Text(
                               'SELECT TARGET APP',
                               style: AppTheme.smBold.copyWith(
-                                color: AppSemanticColors.mutedText,
+                                color: sheetContext.colors.textSecondary,
                                 letterSpacing: 0.8,
                               ),
                             ),
@@ -263,7 +248,7 @@ class SquadScreen extends StatelessWidget {
                         onChanged: (value) =>
                             setModalState(() => query = value.trim()),
                         style: AppTheme.baseMedium.copyWith(
-                          color: AppSemanticColors.primaryText,
+                          color: sheetContext.scheme.onSurface,
                         ),
                         decoration: AppTheme.defaultInputDecoration(
                           hintText: 'Search apps...',
@@ -277,9 +262,9 @@ class SquadScreen extends StatelessWidget {
                           builder: (context, appsSnap) {
                             if (appsSnap.connectionState ==
                                 ConnectionState.waiting) {
-                              return const Center(
+                              return Center(
                                 child: CircularProgressIndicator(
-                                  color: AppSemanticColors.accent,
+                                  color: sheetContext.scheme.primary,
                                 ),
                               );
                             }
@@ -302,7 +287,7 @@ class SquadScreen extends StatelessWidget {
                                 child: Text(
                                   'No matches.',
                                   style: AppTheme.bodySmall.copyWith(
-                                    color: AppSemanticColors.secondaryText,
+                                    color: sheetContext.colors.textSecondary,
                                   ),
                                 ),
                               );
@@ -312,9 +297,7 @@ class SquadScreen extends StatelessWidget {
                               itemCount: filtered.length,
                               separatorBuilder: (context, index) => Divider(
                                 height: 1,
-                                color: AppSemanticColors.primaryText.withValues(
-                                  alpha: 0.06,
-                                ),
+                                color: sheetContext.scheme.outlineVariant,
                               ),
                               itemBuilder: (context, index) {
                                 final app = filtered[index];
@@ -329,7 +312,7 @@ class SquadScreen extends StatelessWidget {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: AppTheme.bodySmall.copyWith(
-                                      color: AppSemanticColors.mutedText,
+                                      color: sheetContext.colors.textSecondary,
                                     ),
                                   ),
                                   trailing:
@@ -375,10 +358,10 @@ class _BarracksHeader extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
         decoration: BoxDecoration(
-          color: AppSemanticColors.surface,
+          color: context.scheme.surface,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: AppSemanticColors.primaryText.withValues(alpha: 0.06),
+            color: context.scheme.outlineVariant,
           ),
         ),
         child: Row(
@@ -390,7 +373,7 @@ class _BarracksHeader extends StatelessWidget {
                   Text(
                     'THE SQUAD',
                     style: AppTheme.smBold.copyWith(
-                      color: AppSemanticColors.mutedText,
+                      color: context.colors.textSecondary,
                       letterSpacing: 1.0,
                     ),
                   ),
@@ -398,7 +381,7 @@ class _BarracksHeader extends StatelessWidget {
                   Text(
                     '$memberCount ACTIVE',
                     style: AppTheme.lgBold.copyWith(
-                      color: AppSemanticColors.primaryText,
+                      color: context.scheme.onSurface,
                       height: 1.0,
                     ),
                   ),
@@ -423,10 +406,12 @@ class _BarracksHeader extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppSemanticColors.background.withValues(alpha: 0.55),
+                    color: Theme.of(context)
+                        .scaffoldBackgroundColor
+                        .withValues(alpha: 0.55),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: AppSemanticColors.accent.withValues(alpha: 0.22),
+                      color: context.scheme.primary.withValues(alpha: 0.22),
                     ),
                   ),
                   child: Row(
@@ -435,7 +420,7 @@ class _BarracksHeader extends StatelessWidget {
                       Text(
                         squadCode,
                         style: AppTheme.smBold.copyWith(
-                          color: AppSemanticColors.accent,
+                          color: context.scheme.primary,
                           letterSpacing: 0.6,
                         ),
                       ),
@@ -443,7 +428,7 @@ class _BarracksHeader extends StatelessWidget {
                       Icon(
                         Icons.copy_rounded,
                         size: 16,
-                        color: AppSemanticColors.accent.withValues(alpha: 0.85),
+                        color: context.scheme.primary.withValues(alpha: 0.85),
                       ),
                       const SizedBox(width: 6),
                       InkWell(
@@ -456,7 +441,7 @@ class _BarracksHeader extends StatelessWidget {
                         child: Icon(
                           Icons.ios_share_rounded,
                           size: 16,
-                          color: AppSemanticColors.accent.withValues(alpha: 0.85),
+                          color: context.scheme.primary.withValues(alpha: 0.85),
                         ),
                       ),
                     ],
@@ -486,14 +471,14 @@ class _SectionLabel extends StatelessWidget {
           Text(
             title,
             style: AppTheme.smBold.copyWith(
-              color: AppSemanticColors.mutedText,
+              color: context.colors.textSecondary,
               letterSpacing: 1.0,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: AppTheme.bodySmall.copyWith(color: AppSemanticColors.secondaryText),
+            style: AppTheme.bodySmall.copyWith(color: context.colors.textSecondary),
           ),
         ],
       ),
@@ -525,17 +510,17 @@ class _LiveTribunalBanner extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: AppSemanticColors.reject.withValues(alpha: 0.10),
+                color: context.colors.danger.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: AppSemanticColors.reject.withValues(alpha: 0.28),
+                  color: context.colors.danger.withValues(alpha: 0.28),
                 ),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.gavel_rounded,
-                    color: AppSemanticColors.reject.withValues(alpha: 0.90),
+                    color: context.colors.danger.withValues(alpha: 0.90),
                     size: 18,
                   ),
                   const SizedBox(width: 10),
@@ -543,7 +528,7 @@ class _LiveTribunalBanner extends StatelessWidget {
                     child: Text(
                       'LIVE TRIBUNAL: Tap to enter',
                       style: AppTheme.smBold.copyWith(
-                        color: AppSemanticColors.reject.withValues(alpha: 0.95),
+                        color: context.colors.danger.withValues(alpha: 0.95),
                         letterSpacing: 0.3,
                       ),
                     ),
@@ -572,13 +557,13 @@ class _AppIcon extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppSemanticColors.background,
+          color: Theme.of(context).scaffoldBackgroundColor,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+            color: context.scheme.outlineVariant,
           ),
         ),
-        child: const Icon(Icons.apps_rounded, color: AppSemanticColors.accent),
+        child: Icon(Icons.apps_rounded, color: context.scheme.primary),
       );
     }
 
@@ -612,30 +597,30 @@ class _EmptyBarracks extends StatelessWidget {
               width: 84,
               height: 84,
               decoration: BoxDecoration(
-                color: AppSemanticColors.surface,
+                color: context.scheme.surface,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+                  color: context.scheme.outlineVariant,
                 ),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.groups_rounded,
                 size: 42,
-                color: AppSemanticColors.accent,
+                color: context.scheme.primary,
               ),
             ),
             const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: AppTheme.h2.copyWith(color: AppSemanticColors.primaryText),
+              style: AppTheme.h2.copyWith(color: context.scheme.onSurface),
             ),
             const SizedBox(height: 10),
             Text(
               subtitle,
               textAlign: TextAlign.center,
               style: AppTheme.bodySmall.copyWith(
-                color: AppSemanticColors.secondaryText,
+                color: context.colors.textSecondary,
               ),
             ),
           ],

@@ -5,7 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../native_bridge.dart';
-import '../theme/app_theme.dart';
+import 'theme_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -221,7 +221,7 @@ class NotificationService {
     required String body,
     Map<String, dynamic>? data,
   }) async {
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       'squad_alerts',
       'Squad Alerts',
       channelDescription: 'High-priority alerts for incoming squad pleas.',
@@ -230,10 +230,10 @@ class NotificationService {
       playSound: true,
       sound: RawResourceAndroidNotificationSound('lookatthisdude'),
       icon: 'notification_icon',
-      color: AppSemanticColors.accent,
+      color: ThemeService.instance.accentColor.value,
     );
     const iosDetails = DarwinNotificationDetails(presentSound: true);
-    const details = NotificationDetails(
+    final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
@@ -275,7 +275,7 @@ class NotificationService {
   static Future<void> _showAmnestyNotification(int durationMinutes) async {
     await _initializeLocalNotifications();
 
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       'squad_alerts',
       'Squad Alerts',
       channelDescription: 'High-priority alerts for incoming squad pleas.',
@@ -284,10 +284,10 @@ class NotificationService {
       playSound: true,
       sound: RawResourceAndroidNotificationSound('lookatthisdude'),
       icon: 'notification_icon',
-      color: AppSemanticColors.accent,
+      color: ThemeService.instance.accentColor.value,
     );
     const iosDetails = DarwinNotificationDetails(presentSound: true);
-    const details = NotificationDetails(
+    final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );

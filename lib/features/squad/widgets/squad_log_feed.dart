@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/squad_log_model.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/theme_extensions.dart';
 
 class SquadLogFeed extends StatelessWidget {
   final List<SquadLogModel> logs;
@@ -21,16 +22,16 @@ class SquadLogFeed extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppSemanticColors.surface,
+            color: context.scheme.surface,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: AppSemanticColors.primaryText.withValues(alpha: 0.06),
+              color: context.scheme.outlineVariant,
             ),
           ),
           child: Text(
             'No incidents logged. This silence is suspicious.',
             style: AppTheme.bodySmall.copyWith(
-              color: AppSemanticColors.secondaryText,
+              color: context.colors.textSecondary,
             ),
           ),
         ),
@@ -66,7 +67,7 @@ class _TimelineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = _accentForType(log.type);
+    final accent = _accentForType(context, log.type);
     final icon = _iconForType(log.type);
 
     return Row(
@@ -92,7 +93,7 @@ class _TimelineRow extends StatelessWidget {
                   height: 44,
                   margin: const EdgeInsets.only(top: 6),
                   decoration: BoxDecoration(
-                    color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+                    color: context.scheme.outlineVariant,
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -104,10 +105,10 @@ class _TimelineRow extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             decoration: BoxDecoration(
-              color: AppSemanticColors.surface,
+              color: context.scheme.surface,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: AppSemanticColors.primaryText.withValues(alpha: 0.06),
+                color: context.scheme.outlineVariant,
               ),
             ),
             child: Column(
@@ -119,7 +120,7 @@ class _TimelineRow extends StatelessWidget {
                       child: Text(
                         log.title.trim().isNotEmpty ? log.title.trim() : 'Event',
                         style: AppTheme.baseMedium.copyWith(
-                          color: AppSemanticColors.primaryText,
+                          color: context.scheme.onSurface,
                           height: 1.15,
                         ),
                       ),
@@ -128,7 +129,7 @@ class _TimelineRow extends StatelessWidget {
                     Text(
                       _formatTimestamp(log.timestamp),
                       style: AppTheme.labelSmall.copyWith(
-                        color: AppSemanticColors.mutedText,
+                        color: context.colors.textSecondary,
                         letterSpacing: 0.2,
                       ),
                     ),
@@ -139,7 +140,7 @@ class _TimelineRow extends StatelessWidget {
                   Text(
                     'Filed by ${log.userName.trim()}',
                     style: AppTheme.bodySmall.copyWith(
-                      color: AppSemanticColors.secondaryText,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                 ],
@@ -167,19 +168,19 @@ class _TimelineRow extends StatelessWidget {
     }
   }
 
-  static Color _accentForType(String typeRaw) {
+  static Color _accentForType(BuildContext context, String typeRaw) {
     final type = (typeRaw).trim().toLowerCase();
     switch (type) {
       case 'plea_request':
-        return AppSemanticColors.accent;
+        return context.scheme.primary;
       case 'verdict':
-        return AppSemanticColors.primaryText;
+        return context.scheme.onSurface;
       case 'violation':
-        return AppSemanticColors.reject;
+        return context.colors.danger;
       case 'regime_adopt':
-        return AppSemanticColors.success;
+        return context.colors.success;
       default:
-        return AppSemanticColors.secondaryText;
+        return context.colors.textSecondary;
     }
   }
 

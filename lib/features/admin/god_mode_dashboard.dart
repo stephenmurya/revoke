@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'sub_screens/admin_ledger_screen.dart';
 import 'sub_screens/adjust_score_screen.dart';
+import 'sub_screens/broadcast_mandate_screen.dart';
 import 'sub_screens/grant_amnesty_screen.dart';
 
 class GodModeDashboard extends StatefulWidget {
@@ -175,6 +176,11 @@ class _GodModeDashboardState extends State<GodModeDashboard> {
     }
 
     final actions = <_DashboardAction>[
+      _DashboardAction(
+        icon: Icons.notifications_active_rounded,
+        label: 'Broadcast',
+        onTap: () => _openScreen(const BroadcastMandateScreen()),
+      ),
       _DashboardAction(
         icon: Icons.tune_rounded,
         label: 'Focus Score',

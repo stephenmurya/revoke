@@ -4,6 +4,7 @@ import '../../core/models/schedule_model.dart';
 import '../../core/services/schedule_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/app_discovery_service.dart';
+import '../../core/utils/theme_extensions.dart';
 import 'app_list_screen.dart';
 import 'widgets/single_app_icon.dart';
 
@@ -82,13 +83,12 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       appBar: AppBar(
         title: Text(
           widget.existingSchedule == null ? 'New regime' : 'Edit regime',
           style: AppTheme.h3,
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
         actions: [
           TextButton(
@@ -96,7 +96,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
             child: Text(
               'SAVE REGIME',
               style: AppTheme.baseMedium.copyWith(
-                color: AppSemanticColors.accentText,
+                color: context.scheme.primary,
               ),
             ),
           ),
@@ -134,7 +134,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                 child: Text(
                   'Apps will be blocked during this time',
                   style: AppTheme.smRegular.copyWith(
-                    color: AppSemanticColors.mutedText,
+                    color: context.colors.textSecondary,
                   ),
                 ),
               ),
@@ -195,12 +195,15 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                 );
                 if (result != null) setState(() => _selectedPackages = result);
               },
-              icon: const Icon(Icons.apps, color: AppSemanticColors.accent),
-              label: Text('Select target apps', style: AppTheme.lgMedium.copyWith(color: AppSemanticColors.accent)),
+              icon: Icon(Icons.apps, color: context.scheme.primary),
+              label: Text(
+                'Select target apps',
+                style: AppTheme.lgMedium.copyWith(color: context.scheme.primary),
+              ),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 56),
-                backgroundColor: AppSemanticColors.surface,
-                side: const BorderSide(color: AppSemanticColors.accent, width: 1),
+                backgroundColor: context.scheme.surface,
+                side: BorderSide(color: context.scheme.primary, width: 1),
               ),
             ),
             const SizedBox(height: 16),
@@ -216,7 +219,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppSemanticColors.surface,
+                        color: context.scheme.surface,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: SingleAppIcon(packageName: pkg, size: 24),
@@ -235,7 +238,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text,
-        style: AppTheme.smMedium.copyWith(color: AppSemanticColors.accentText),
+        style: AppTheme.smMedium.copyWith(color: context.scheme.primary),
       ),
     );
   }
@@ -248,16 +251,16 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: active ? AppSemanticColors.accent : AppSemanticColors.surface,
+            color: active ? context.scheme.primary : context.scheme.surface,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Text(
             type.label,
             textAlign: TextAlign.center,
             style: active ? AppTheme.baseBold.copyWith(
-              color: AppSemanticColors.onAccentText,
+              color: context.scheme.onPrimary,
             ) : AppTheme.baseMedium.copyWith(
-              color: AppSemanticColors.primaryText,
+              color: context.scheme.onSurface,
             ),
           ),
         ),
@@ -281,7 +284,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppSemanticColors.surface,
+          color: context.scheme.surface,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
@@ -289,7 +292,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
             Text(
               label,
               style: AppTheme.bodySmall.copyWith(
-                color: AppSemanticColors.secondaryText,
+                color: context.colors.textSecondary,
               ),
             ),
             Text(time.format(context), style: AppTheme.lgBold),
@@ -309,14 +312,14 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: AppSemanticColors.surface,
+          color: context.scheme.surface,
           borderRadius: BorderRadius.circular(10),
         ),
         child: DropdownButton<int>(
           value: value,
           underline: const SizedBox(),
           isExpanded: true,
-          dropdownColor: AppSemanticColors.surface,
+          dropdownColor: context.scheme.surface,
           items: List.generate(
             max,
             (i) => DropdownMenuItem(
@@ -351,18 +354,16 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: selected ? AppSemanticColors.accent : AppSemanticColors.surface,
+              color: selected ? context.scheme.primary : context.scheme.surface,
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
             child: Text(
               shortDays[index],
               style: selected ? AppTheme.baseBold.copyWith(
-                color: selected
-                    ? AppSemanticColors.onAccentText
-                    : AppSemanticColors.primaryText,
+                color: context.scheme.onPrimary,
               ) : AppTheme.baseMedium.copyWith(
-                color: AppSemanticColors.primaryText,
+                color: context.scheme.onSurface,
               ),
             ),
           ),

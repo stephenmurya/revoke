@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/native_bridge.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/theme_extensions.dart';
 
 class PermissionScreen extends StatefulWidget {
   const PermissionScreen({super.key});
@@ -59,7 +60,6 @@ class _PermissionScreenState extends State<PermissionScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -70,7 +70,7 @@ class _PermissionScreenState extends State<PermissionScreen>
               Text(
                 'Revoke is blind.',
                 style: AppTheme.h1.copyWith(
-                  color: AppSemanticColors.danger,
+                  color: context.colors.danger,
                   letterSpacing: -0.4,
                 ),
               ),
@@ -78,7 +78,7 @@ class _PermissionScreenState extends State<PermissionScreen>
               Text(
                 'You revoked our access. We cannot see your activity.',
                 style: AppTheme.baseRegular.copyWith(
-                  color: AppSemanticColors.primaryText,
+                  color: context.scheme.onSurface,
                 ),
               ),
               const SizedBox(height: 48),
@@ -88,7 +88,6 @@ class _PermissionScreenState extends State<PermissionScreen>
                     'Required to detect when restricted apps are opened.',
                 isGranted: _hasUsageStats,
                 onGrant: () => NativeBridge.requestUsageStats(),
-                color: AppSemanticColors.accent,
               ),
               const SizedBox(height: 20),
               _buildPermissionCard(
@@ -96,7 +95,6 @@ class _PermissionScreenState extends State<PermissionScreen>
                 description: 'Required to show the block screen overlay.',
                 isGranted: _hasOverlay,
                 onGrant: () => NativeBridge.requestOverlay(),
-                color: AppSemanticColors.accent,
               ),
               const SizedBox(height: 20),
               _buildPermissionCard(
@@ -105,7 +103,6 @@ class _PermissionScreenState extends State<PermissionScreen>
                     'Required so Revoke can survive background restrictions and reboots.',
                 isGranted: _hasBatteryOptOut,
                 onGrant: () => NativeBridge.requestBatteryOptimizations(),
-                color: AppSemanticColors.accent,
               ),
               const Spacer(),
               SizedBox(
@@ -114,7 +111,6 @@ class _PermissionScreenState extends State<PermissionScreen>
                   onPressed: (_hasUsageStats && _hasOverlay && _hasBatteryOptOut)
                       ? () => context.go('/home')
                       : null,
-                  style: AppTheme.primaryButtonStyle,
                   child: const Text('Restore vision'),
                 ),
               ),
@@ -130,17 +126,16 @@ class _PermissionScreenState extends State<PermissionScreen>
     required String description,
     required bool isGranted,
     required VoidCallback onGrant,
-    required Color color,
   }) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppSemanticColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isGranted
-              ? Colors.greenAccent
-              : AppSemanticColors.primaryText.withValues(alpha: 0.1),
+              ? context.colors.success
+              : Theme.of(context).colorScheme.outlineVariant,
           width: 2,
         ),
       ),
@@ -155,7 +150,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                 Text(
                   description,
                   style: AppTheme.baseRegular.copyWith(
-                    color: AppSemanticColors.secondaryText,
+                    color: context.colors.textSecondary,
                   ),
                 ),
               ],
@@ -163,15 +158,15 @@ class _PermissionScreenState extends State<PermissionScreen>
           ),
           const SizedBox(width: 16),
           if (isGranted)
-            const Icon(Icons.check_circle, color: AppSemanticColors.success)
+            Icon(Icons.check_circle, color: context.colors.success)
           else
             ElevatedButton(
               onPressed: onGrant,
-              style: AppTheme.secondaryButtonStyle.copyWith(
-                padding: const WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-                backgroundColor: const WidgetStatePropertyAll(AppSemanticColors.background),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                foregroundColor: context.scheme.onSurface,
+                side: BorderSide(color: context.scheme.outlineVariant),
               ),
               child: Text('Grant', style: AppTheme.baseBold),
             ),

@@ -12,6 +12,7 @@ import '../features/home/focus_score_detail_screen.dart';
 import '../features/plea/plea_compose_screen.dart';
 import '../features/monitor/create_schedule_screen.dart';
 import '../features/settings/controls_hub_screen.dart';
+import '../features/settings/appearance_screen.dart';
 import '../features/admin/god_mode_dashboard.dart';
 import '../core/models/schedule_model.dart';
 
@@ -238,6 +239,10 @@ class AppRouter {
       GoRoute(
         path: '/controls',
         builder: (context, state) => const ControlsHubScreen(),
+      ),
+      GoRoute(
+        path: '/settings/appearance',
+        builder: (context, state) => const AppearanceScreen(),
       ),
       GoRoute(
         path: '/lock_screen',

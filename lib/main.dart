@@ -8,10 +8,12 @@ import 'core/services/auth_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/squad_service.dart';
 import 'core/services/scoring_service.dart';
+import 'core/services/theme_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  await ThemeService.instance.loadTheme();
   await NotificationService.initialize();
   await NotificationService.subscribeToGlobalCitizensTopic();
   await AuthService.initializeMessagingTokenSync();
@@ -84,11 +86,26 @@ class RevokeApp extends StatelessWidget {
           });
         }
 
-        return MaterialApp.router(
-          title: 'Revoke',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.darkTheme,
-          routerConfig: AppRouter.router,
+        final listenable = Listenable.merge([
+          ThemeService.instance.themeMode,
+          ThemeService.instance.accentColor,
+        ]);
+
+        return AnimatedBuilder(
+          animation: listenable,
+          builder: (context, _) {
+            final accent = ThemeService.instance.accentColor.value;
+            final mode = ThemeService.instance.themeMode.value;
+
+            return MaterialApp.router(
+              title: 'Revoke',
+              debugShowCheckedModeBanner: false,
+              routerConfig: AppRouter.router,
+              theme: AppTheme.create(brightness: Brightness.light, accent: accent),
+              darkTheme: AppTheme.create(brightness: Brightness.dark, accent: accent),
+              themeMode: mode,
+            );
+          },
         );
       },
     );

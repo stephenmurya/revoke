@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/theme_extensions.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -66,32 +67,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppSemanticColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
-        backgroundColor: AppSemanticColors.background,
+        backgroundColor: context.colors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color: AppSemanticColors.primaryText,
-          ),
+          icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
           onPressed: () => context.pop(),
         ),
-        title: Text("Account & Profile", style: AppTheme.xlMedium),
+        title: Text("Account & Profile", style: context.text.titleLarge),
       ),
       body: FutureBuilder<Map<String, dynamic>?>(
         future: _userDataFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppSemanticColors.accent),
+            return Center(
+              child: CircularProgressIndicator(color: context.colors.accent),
             );
           }
 
           final userData = snapshot.data;
           if (userData == null) {
             return Center(
-              child: Text("USER NOT FOUND", style: AppTheme.bodyLarge),
+              child: Text("USER NOT FOUND", style: context.text.titleMedium),
             );
           }
 
@@ -107,15 +105,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   decoration: AppTheme.avatarBorderStyle,
                   child: CircleAvatar(
                     radius: 60,
-                    backgroundColor: AppSemanticColors.surface,
+                    backgroundColor: context.colors.surface,
                     backgroundImage: userData['photoUrl'] != null
                         ? CachedNetworkImageProvider(userData['photoUrl'])
                         : null,
                     child: userData['photoUrl'] == null
                         ? Text(
                             (userData['fullName'] ?? "?")[0].toUpperCase(),
-                            style: AppTheme.size5xlBold.copyWith(
-                              color: AppSemanticColors.accentText,
+                            style: (context.text.displayLarge ?? AppTheme.size5xlBold).copyWith(
+                              color: context.colors.accent,
                             ),
                           )
                         : null,
@@ -132,13 +130,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: AppSemanticColors.danger,
+                          color: context.colors.danger,
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           'GOD MODE',
-                          style: AppTheme.smBold.copyWith(
-                            color: AppSemanticColors.onDangerText,
+                          style: (context.text.labelMedium ?? AppTheme.smBold).copyWith(
+                            color: context.scheme.onError,
                             letterSpacing: 0.8,
                           ),
                         ),
@@ -204,18 +202,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppSemanticColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppSemanticColors.primaryText.withValues(alpha: 0.05),
+          color: context.colors.textPrimary.withValues(alpha: 0.05),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppTheme.labelSmall.copyWith(letterSpacing: 1.5)),
+          Text(
+            label,
+            style: (context.text.labelSmall ?? AppTheme.labelSmall).copyWith(
+              letterSpacing: 1.5,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text(value, style: AppTheme.lgMedium),
+          Text(value, style: context.text.titleMedium),
         ],
       ),
     );
@@ -231,10 +234,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: AppSemanticColors.surface,
+            color: context.colors.surface,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: AppSemanticColors.primaryText.withValues(alpha: 0.05),
+              color: context.colors.textPrimary.withValues(alpha: 0.05),
             ),
           ),
           child: Column(
@@ -242,7 +245,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text(
                 label,
-                style: AppTheme.labelSmall.copyWith(letterSpacing: 1.5),
+                style: (context.text.labelSmall ?? AppTheme.labelSmall).copyWith(
+                  letterSpacing: 1.5,
+                ),
               ),
               const SizedBox(height: 8),
               Row(
@@ -250,15 +255,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Expanded(
                     child: Text(
                       value,
-                      style: AppTheme.lgMedium.copyWith(
-                        color: AppSemanticColors.primaryText,
-                      ),
+                      style: context.text.titleMedium?.copyWith(
+                            color: context.colors.textPrimary,
+                          ) ??
+                          AppTheme.lgMedium.copyWith(
+                            color: context.colors.textPrimary,
+                          ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(
+                  Icon(
                     Icons.edit_rounded,
-                    color: AppSemanticColors.accent,
+                    color: context.colors.accent,
                   ),
                 ],
               ),
@@ -274,7 +282,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final newNickname = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppSemanticColors.surface,
+      backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -286,14 +294,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('EDIT NICKNAME', style: AppTheme.h3),
+              Text('EDIT NICKNAME', style: sheetContext.text.titleLarge),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
                 textCapitalization: TextCapitalization.characters,
                 textInputAction: TextInputAction.done,
                 maxLength: 24,
-                style: AppTheme.bodyLarge,
+                style: sheetContext.text.bodyLarge,
                 decoration: AppTheme.defaultInputDecoration(
                   hintText: 'ENTER NEW NICKNAME',
                 ),
@@ -349,10 +357,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: AppSemanticColors.background,
+        backgroundColor: context.colors.background,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: AppSemanticColors.danger, width: 2),
+          side: BorderSide(color: context.colors.danger, width: 2),
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -361,23 +369,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.warning_amber_rounded,
-                  color: AppSemanticColors.danger,
+                  color: context.colors.danger,
                   size: 64,
                 ),
                 const SizedBox(height: 20),
                 Text(
                   "EXTERMINATE ACCOUNT?",
                   textAlign: TextAlign.center,
-                  style: AppTheme.h2,
+                  style: context.text.headlineMedium,
                 ),
                 const SizedBox(height: 12),
                 Text(
                   "This action is irreversible. Your focus scores, squad history, and presence will be purged from the archives.",
                   textAlign: TextAlign.center,
-                  style: AppTheme.bodyMedium.copyWith(
-                    color: AppSemanticColors.mutedText,
+                  style: (context.text.bodyMedium ?? AppTheme.bodyMedium).copyWith(
+                    color: context.colors.textSecondary,
                     height: 1.5,
                   ),
                 ),
