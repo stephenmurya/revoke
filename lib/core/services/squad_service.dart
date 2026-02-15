@@ -1,12 +1,17 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../models/plea_message_model.dart';
 import '../models/user_model.dart';
 import '../models/plea_model.dart';
+import '../models/squad_log_model.dart';
 import 'scoring_service.dart';
 
 class SquadService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+    region: 'us-central1',
+  );
 
   /// Helper to generate a 6-character alphanumeric squad code.
   static String _generateSquadCode() {
@@ -130,26 +135,27 @@ class SquadService {
     required int durationMinutes,
     required String reason,
   }) async {
-    final docRef = _firestore.collection('pleas').doc();
-    await docRef.set({
-      'userId': uid,
-      'userName': userName,
-      'squadId': squadId,
+    final callable = _functions.httpsCallable('createPlea');
+    final response = await callable.call({
+      'uid': uid,
       'appName': appName,
       'packageName': packageName,
       'durationMinutes': durationMinutes,
       'reason': reason,
-      'participants': [],
-      'voteCounts': {'accept': 0, 'reject': 0},
-      'votes': {},
-      'status': 'active',
-      'createdAt': FieldValue.serverTimestamp(),
     });
+
+    final data = Map<String, dynamic>.from(response.data as Map? ?? const {});
+    final pleaId = (data['pleaId'] as String?)?.trim();
+    if (pleaId == null || pleaId.isEmpty) {
+      throw Exception('INVALID_PLEA_ID');
+    }
+
     await ScoringService.applyBeggarsTax(uid);
-    return docRef.id;
+    return pleaId;
   }
 
-  /// Votes on a plea and updates status if majority reached.
+  /// Submits a vote choice for a plea.
+  /// Verdict resolution is handled server-side by Cloud Functions.
   static Future<void> voteOnPlea(
     String pleaId,
     String voterUid,
@@ -169,86 +175,16 @@ class SquadService {
       throw Exception('INVALID VOTE');
     }
 
-    final pleaRef = _firestore.collection('pleas').doc(pleaId);
-    String? requesterUid;
-    String? finalStatus;
+    final currentUid = voterUid.trim();
+    if (currentUid.isEmpty) {
+      throw Exception('INVALID_VOTER_UID');
+    }
 
-    return _firestore
-        .runTransaction((transaction) async {
-          final pleaSnap = await transaction.get(pleaRef);
-          if (!pleaSnap.exists) throw Exception("PLEA NOT FOUND.");
-
-          final pleaData = pleaSnap.data() ?? <String, dynamic>{};
-          requesterUid = pleaSnap.get('userId') as String;
-          final participants =
-              List<String>.from(pleaData['participants'] as List? ?? const [])
-                  .map((uid) => uid.trim())
-                  .where((uid) => uid.isNotEmpty)
-                  .toSet()
-                  .toList();
-          final rawVotes = Map<String, dynamic>.from(
-            pleaData['votes'] as Map? ?? const {},
-          );
-          final votes = <String, String>{};
-          rawVotes.forEach((uid, rawVote) {
-            if (rawVote is bool) {
-              votes[uid] = rawVote ? 'accept' : 'reject';
-              return;
-            }
-            if (rawVote is String) {
-              final normalized = rawVote.trim().toLowerCase();
-              if (normalized == 'accept' || normalized == 'reject') {
-                votes[uid] = normalized;
-              }
-            }
-          });
-
-          if (!participants.contains(voterUid)) {
-            participants.add(voterUid);
-          }
-
-          votes[voterUid] = normalizedVote;
-
-          votes.removeWhere((uid, _) => !participants.contains(uid));
-
-          final acceptVotes = participants
-              .where((uid) => votes[uid] == 'accept')
-              .length;
-          final rejectVotes = participants
-              .where((uid) => votes[uid] == 'reject')
-              .length;
-          final allParticipantsVoted =
-              participants.isNotEmpty &&
-              participants.every((uid) => votes.containsKey(uid));
-
-          final updates = <String, dynamic>{
-            'participants': participants,
-            'votes': votes,
-            'voteCounts': {'accept': acceptVotes, 'reject': rejectVotes},
-          };
-
-          // Attendance rule: finalize only when every attendee has voted.
-          if (allParticipantsVoted) {
-            // Tie-breaker: reject on tie.
-            final resolvedStatus = acceptVotes > rejectVotes
-                ? 'approved'
-                : 'rejected';
-            updates['status'] = resolvedStatus;
-            updates['resolvedAt'] = FieldValue.serverTimestamp();
-            finalStatus = resolvedStatus;
-          }
-
-          transaction.update(pleaRef, updates);
-        })
-        .then((_) async {
-          if (requesterUid == null || finalStatus == null) return;
-
-          if (finalStatus == 'rejected') {
-            await ScoringService.applyRejectedPleaPenalty(requesterUid!);
-          }
-
-          await ScoringService.syncFocusScore(requesterUid!);
-        });
+    final callable = _functions.httpsCallable('castVote');
+    await callable.call({
+      'pleaId': pleaId,
+      'choice': normalizedVote,
+    });
   }
 
   /// Returns a stream of approved pleas for a specific user.
@@ -320,9 +256,8 @@ class SquadService {
   static Future<void> joinPleaSession(String pleaId, String uid) async {
     final normalizedUid = uid.trim();
     if (normalizedUid.isEmpty) return;
-    await _firestore.collection('pleas').doc(pleaId).set({
-      'participants': FieldValue.arrayUnion([normalizedUid]),
-    }, SetOptions(merge: true));
+    final callable = _functions.httpsCallable('joinPleaSession');
+    await callable.call({'pleaId': pleaId});
   }
 
   static Future<String> sendPleaMessage({
@@ -336,27 +271,26 @@ class SquadService {
       throw Exception('MESSAGE CANNOT BE EMPTY.');
     }
 
-    final messagesRef = _firestore
-        .collection('pleas')
-        .doc(pleaId)
-        .collection('messages');
-    final messageRef = messagesRef.doc();
-    await messageRef.set({
-      'senderId': senderId,
-      'senderName': senderName,
+    // Server-authoritative message send (anti-spam enforced in callable).
+    final callable = _functions.httpsCallable('sendPleaMessage');
+    final response = await callable.call({
+      'pleaId': pleaId,
       'text': normalizedText,
-      'timestamp': FieldValue.serverTimestamp(),
     });
-    return messageRef.id;
+
+    final data = Map<String, dynamic>.from(response.data as Map? ?? const {});
+    final messageId = (data['messageId'] as String?)?.trim();
+    if (messageId == null || messageId.isEmpty) {
+      throw Exception('INVALID_MESSAGE_ID');
+    }
+    return messageId;
   }
 
   static Future<void> markPleaForDeletion(String pleaId) async {
     final normalizedPleaId = pleaId.trim();
     if (normalizedPleaId.isEmpty) return;
-    await _firestore.collection('pleas').doc(normalizedPleaId).set({
-      'markedForDeletion': true,
-      'deletionMarkedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final callable = _functions.httpsCallable('markPleaForDeletion');
+    await callable.call({'pleaId': normalizedPleaId});
   }
 
   static Stream<List<PleaMessageModel>> getPleaMessagesStream(String pleaId) {
@@ -371,6 +305,26 @@ class SquadService {
               .map((doc) => PleaMessageModel.fromJson(doc.data(), doc.id))
               .toList();
         });
+  }
+
+  static Stream<List<SquadLogModel>> getSquadLogs(String squadId) {
+    final normalizedSquadId = squadId.trim();
+    if (normalizedSquadId.isEmpty) {
+      return Stream.value(const <SquadLogModel>[]);
+    }
+
+    return _firestore
+        .collection('squads')
+        .doc(normalizedSquadId)
+        .collection('logs')
+        .orderBy('timestamp', descending: true)
+        .limit(50)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => SquadLogModel.fromFirestore(doc))
+              .toList(),
+        );
   }
 
   /// Removes a user from their squad.

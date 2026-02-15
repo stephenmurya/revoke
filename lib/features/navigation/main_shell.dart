@@ -1,27 +1,122 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-class MainShell extends StatelessWidget {
+import '../../core/services/auth_service.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/revoke_logo.dart';
+
+class MainShell extends StatefulWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
 
   @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  late Future<Map<String, dynamic>?> _userDataFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _userDataFuture = AuthService.getUserData();
+  }
+
+  Widget _buildProfileAvatar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FutureBuilder<Map<String, dynamic>?>(
+        future: _userDataFuture,
+        builder: (context, snapshot) {
+          final data = snapshot.data;
+          final photoUrl = (data?['photoUrl'] as String?)?.trim();
+          final displayName =
+              (data?['fullName'] as String?)?.trim() ??
+              (data?['nickname'] as String?)?.trim() ??
+              'U';
+          final initial = displayName.isNotEmpty ? displayName[0] : 'U';
+
+          return InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: () => context.push('/controls'),
+            child: CircleAvatar(
+              radius: 16,
+              backgroundColor: AppSemanticColors.surface,
+              backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
+                  ? CachedNetworkImageProvider(photoUrl)
+                  : null,
+              child: (photoUrl == null || photoUrl.isEmpty)
+                  ? Text(
+                      initial.toUpperCase(),
+                      style: AppTheme.smBold.copyWith(
+                        color: AppSemanticColors.accentText,
+                      ),
+                    )
+                  : null,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Get the current location to determine which tab is active
-    final String location = GoRouterState.of(context).uri.toString();
+    // Only show the HUD header on the three shell root tabs.
+    // Avoid using `.uri.toString()` here, because query params can change while
+    // still being on the same tab, and non-go_router pushes won't update it.
+    final String location = GoRouterState.of(context).matchedLocation;
+    final bool showHudTopBar =
+        location == '/home' || location == '/squad' || location == '/challenges';
     int selectedIndex = 0;
-    if (location.startsWith('/squad')) {
-      selectedIndex = 1;
-    } else if (location.startsWith('/analytics')) {
+    if (location == '/challenges') {
       selectedIndex = 2;
-    } else if (location.startsWith('/controls')) {
-      selectedIndex = 3;
+    } else if (location == '/squad') {
+      selectedIndex = 1;
     }
 
     return Scaffold(
-      body: child,
+      backgroundColor: AppSemanticColors.background,
+      appBar: showHudTopBar
+          ? AppBar(
+              backgroundColor: AppSemanticColors.background,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              automaticallyImplyLeading: false,
+              titleSpacing: 16,
+              title: Row(
+                children: [
+                  const RevokeLogo(size: 30),
+                  const SizedBox(width: 10),
+                  Text(
+                    'REVOKE',
+                    style: AppTheme.lgMedium.copyWith(
+                      color: AppSemanticColors.secondaryText,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => context.push('/notifications'),
+                    icon: PhosphorIcon(PhosphorIcons.notification()),
+                    color: AppSemanticColors.secondaryText,
+                    tooltip: 'Notifications',
+                  ),
+                  IconButton(
+                    onPressed: () => context.push('/analytics'),
+                    icon: PhosphorIcon(PhosphorIcons.chartBar()),
+                    color: AppSemanticColors.secondaryText,
+                    tooltip: 'Analytics',
+                  ),
+                  _buildProfileAvatar(context),
+                ],
+              ),
+            )
+          : null,
+      body: widget.child,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: selectedIndex,
         onTap: (index) {
@@ -33,10 +128,7 @@ class MainShell extends StatelessWidget {
               context.go('/squad');
               break;
             case 2:
-              context.go('/analytics');
-              break;
-            case 3:
-              context.go('/controls');
+              context.go('/challenges');
               break;
           }
         },
@@ -53,17 +145,14 @@ class MainShell extends StatelessWidget {
             activeIcon: PhosphorIcon(
               PhosphorIcons.users(PhosphorIconsStyle.fill),
             ),
-            label: 'The Squad',
+            label: 'Squad',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_rounded),
-            activeIcon: Icon(Icons.bar_chart_rounded),
-            label: 'Analytics',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
-            label: 'Controls',
+          BottomNavigationBarItem(
+            icon: PhosphorIcon(PhosphorIcons.flag()),
+            activeIcon: PhosphorIcon(
+              PhosphorIcons.flag(PhosphorIconsStyle.fill),
+            ),
+            label: 'Challenges',
           ),
         ],
       ),

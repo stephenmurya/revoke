@@ -117,21 +117,6 @@ class AuthService {
   }
 
   static Future<void> initializeMessagingTokenSync() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    try {
-      final token = await FirebaseMessaging.instance.getToken();
-      if (token != null && token.isNotEmpty) {
-        await _firestore.collection('users').doc(user.uid).set({
-          'fcmToken': token,
-          'lastLogin': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-    } catch (e) {
-      print('AUTH_DEBUG: Failed to sync initial FCM token: $e');
-    }
-
     _tokenRefreshSub ??= FirebaseMessaging.instance.onTokenRefresh.listen((
       token,
     ) async {
@@ -146,6 +131,21 @@ class AuthService {
         print('AUTH_DEBUG: Failed to sync refreshed FCM token: $e');
       }
     });
+
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null && token.isNotEmpty) {
+        await _firestore.collection('users').doc(user.uid).set({
+          'fcmToken': token,
+          'lastLogin': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('AUTH_DEBUG: Failed to sync initial FCM token: $e');
+    }
   }
 
   static Future<void> updateNickname(String nickname) async {

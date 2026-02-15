@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -83,6 +84,10 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(true)
                 }
+                "requestBatteryOptimizations" -> {
+                    requestIgnoreBatteryOptimizations()
+                    result.success(true)
+                }
                 "getInstalledApps" -> {
                     // Running on a background thread to prevent UI stutter
                     Thread {
@@ -108,11 +113,13 @@ class MainActivity : FlutterActivity() {
                     val perms = checkPermissions()
                     val hasUsageStats = perms["usage_stats"] == true
                     val hasOverlay = perms["overlay"] == true
+                    val hasBatteryOptOut =
+                        perms["battery_optimization_ignored"] == true
 
-                    if (!hasUsageStats || !hasOverlay) {
+                    if (!hasUsageStats || !hasOverlay || !hasBatteryOptOut) {
                         result.error(
                             "PERMISSION_DENIED",
-                            "Usage Stats and Overlay permissions are required before starting service.",
+                            "Usage Stats, Overlay, and Battery Optimization exemption are required before starting service.",
                             null
                         )
                         return@setMethodCallHandler
@@ -181,6 +188,11 @@ class MainActivity : FlutterActivity() {
                 }
                 "getTemporaryApprovals" -> {
                     result.success(getTemporaryApprovals())
+                }
+                "pauseMonitoring" -> {
+                    val minutes = call.argument<Int>("minutes") ?: 60
+                    setAmnestyExpiry(minutes)
+                    result.success(true)
                 }
                 else -> result.notImplemented()
             }
@@ -351,10 +363,35 @@ class MainActivity : FlutterActivity() {
             true
         }
 
+        val batteryOptimizationIgnored = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            pm.isIgnoringBatteryOptimizations(packageName)
+        } else {
+            true
+        }
+
         return mapOf(
             "usage_stats" to usageStats,
-            "overlay" to overlay
+            "overlay" to overlay,
+            "battery_optimization_ignored" to batteryOptimizationIgnored
         )
+    }
+
+    private fun requestIgnoreBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        try {
+            val intent = Intent(
+                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
+                // Ignore
+            }
+        }
     }
 
     private fun getTemporaryApprovals(): List<String> {
@@ -385,5 +422,14 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    private fun setAmnestyExpiry(minutes: Int) {
+        val safeMinutes = minutes.coerceAtLeast(0)
+        val now = System.currentTimeMillis()
+        val expiry = now + (safeMinutes.toLong() * 60L * 1000L)
+        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+        prefs.edit().putLong("amnesty_expiry", expiry).apply()
+        android.util.Log.d("RevokeAmnesty", "Monitoring paused for $safeMinutes minute(s).")
     }
 }

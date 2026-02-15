@@ -4,6 +4,10 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null;
     }
+    
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
 
     function isSelf(userId) {
       return signedIn() && request.auth.uid == userId;
@@ -33,41 +37,90 @@ service cloud.firestore {
         currentUserSquadId() == pleaData.squadId;
     }
 
+    function isMockPlea(pleaData) {
+      return pleaData.isMockSession == true;
+    }
+
+    function canReadUserDoc(userId, userData) {
+      return isSelf(userId) ||
+        (signedIn() &&
+          userData.squadId is string &&
+          currentUserSquadId() == userData.squadId);
+    }
+
+    function isValidPleaMessageCreate(messageData) {
+      return messageData.keys().hasOnly([
+          'senderId',
+          'senderName',
+          'text',
+          'timestamp',
+          'isSystem',
+        ]) &&
+        messageData.senderId is string &&
+        messageData.senderId == request.auth.uid &&
+        messageData.senderName is string &&
+        messageData.senderName.size() > 0 &&
+        messageData.senderName.size() <= 64 &&
+        messageData.text is string &&
+        messageData.text.size() > 0 &&
+        messageData.text.size() <= 400 &&
+        messageData.timestamp is timestamp &&
+        (!messageData.keys().hasAny(['isSystem']) ||
+          messageData.isSystem == false);
+    }
+
     // User profiles
     match /users/{userId} {
-      // Needed for squad HUD/scoreboards
-      allow read: if signedIn();
+      // Self read or same-squad read.
+      allow read: if isAdmin() || canReadUserDoc(userId, resource.data);
 
       // Own profile management (create/update/delete account doc)
-      allow create, update, delete: if isSelf(userId);
+      allow create, update, delete: if isAdmin() || isSelf(userId);
+
+      // Cloud-synced regimes live under the user's document.
+      match /regimes/{regimeId} {
+        allow read, write: if isAdmin() || isSelf(userId);
+      }
     }
 
     // Squad collaboration
     match /squads/{squadId} {
-      allow create, read: if signedIn();
+      allow create, read: if isAdmin() || signedIn();
 
       // Allows joining/leaving/updating squad membership for authenticated users
       // and supports deleting an emptied squad during account delete/leave flow.
-      allow update, delete: if isCurrentSquadMember() || isResultingSquadMember();
+      allow update, delete: if isAdmin() || isCurrentSquadMember() || isResultingSquadMember();
+
+      // Squad log (server-written audit trail)
+      match /logs/{logId} {
+        allow read: if isAdmin() || (signedIn() && currentUserSquadId() == squadId);
+        allow create, update, delete: if false;
+      }
     }
 
     // Plea creation/voting
     match /pleas/{pleaId} {
-      allow create: if signedIn() &&
-        request.resource.data.userId == request.auth.uid &&
-        canAccessPleaData(request.resource.data);
-      allow read, update: if canAccessPleaData(resource.data);
+      // Plea documents are created/updated by Cloud Functions (Admin SDK), not by clients.
+      allow create: if false;
+      allow read: if isAdmin() || canAccessPleaData(resource.data) || isMockPlea(resource.data);
+      allow update, delete: if false;
 
       // Session chat messages
       match /messages/{messageId} {
-        allow create, read: if signedIn() &&
-          canAccessPleaData(get(/databases/$(database)/documents/pleas/$(pleaId)).data);
+        allow read: if isAdmin() || (signedIn() &&
+          (canAccessPleaData(get(/databases/$(database)/documents/pleas/$(pleaId)).data) ||
+            isMockPlea(get(/databases/$(database)/documents/pleas/$(pleaId)).data)));
+
+        // Client message writes are disabled; normal users must send via callable.
+        // Admin clients may still write system messages directly if needed.
+        allow create: if isAdmin();
+        allow update, delete: if false;
       }
     }
     
     // Default deny all other access
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
   }
 }

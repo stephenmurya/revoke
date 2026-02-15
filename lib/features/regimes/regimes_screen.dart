@@ -26,7 +26,7 @@ class RegimesScreen extends StatelessWidget {
         // Rebuild the existing dashboard when regime data changes.
         return KeyedSubtree(
           key: ValueKey(refreshKey),
-          child: const HomeScreen(),
+          child: HomeScreen(schedules: regimes),
         );
       },
     );

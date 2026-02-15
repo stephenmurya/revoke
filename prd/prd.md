@@ -1,128 +1,155 @@
-🛡️ Project Revoke: Technical PRD (Android MVP)
+# Project Revoke: Technical PRD (Re-baselined)
 
-Version: 1.0 (Feb 2026)
+Version: 1.1 (Feb 2026)
 
-Status: Draft / Ready for Implementation
+Status: Active (Aligned to repository implementation)
 
-Platform: Android (Primary)
+Primary Platform: Android (iOS scaffolding exists; enforcement is Android-only)
 
-Core Philosophy: Social accountability through friction, shame, and peer-governed access.
-1. Executive Summary
+Core Philosophy: Social accountability through friction and peer-governed access.
 
-Revoke is a social time-management application that replaces traditional "soft" app limits with a "hard" social locking mechanism. When a user runs out of time on a blacklisted app, they must beg their friends for more. Friends can approve, reject, or humiliate the user to discourage further use.
-2. Technical Stack
+## 1. Executive Summary
 
-    Frontend: Flutter (v3.x+)
+Revoke is a discipline app with:
 
-    Backend: Firebase (Auth, Firestore for real-time state, Cloud Functions for logic, FCM for notifications)
+1. A hard enforcement layer on Android (Usage Stats + Overlay + Foreground Service).
+2. A social governance layer (Squads + Tribunals) for temporary clearance.
 
-    Native Bridge: Kotlin (MethodChannels for UsageStatsManager, SystemAlertWindow, and WallpaperManager)
+When a blocked app is opened during an active regime, a native overlay blocks access. Users can request temporary clearance via a Tribunal where squad members attend, chat, and vote. Verdict resolution is server-authoritative.
 
-    State Management: Riverpod (for reactive UI updates)
+## 2. Current Technical Stack
 
-3. Functional Requirements
-3.1 The "Monitor" (Core Engine)
+- Flutter app (routing via `go_router`).
+- Firebase: Auth, Firestore, Cloud Functions (Node.js 22), FCM.
+- Native Android: Kotlin foreground service (`AppMonitorService`) + overlay + MethodChannel bridge.
+- State management: service-layer patterns (no Riverpod dependency in current implementation).
 
-    App Tracking: Use UsageStatsManager to poll the active package name and duration.
+## 3. System Requirements (Current Baseline)
 
-    The Blacklist: Users select apps to track (e.g., TikTok, Instagram, Twitter).
+### 3.1 Android Enforcement
 
-    Foreground Service: A persistent Android service that ensures the app isn't killed by the OS.
+- Foreground service monitors foreground apps using `UsageStatsManager` and blocks restricted apps using an overlay.
+- Adaptive polling:
+  - 2s in high-risk situations (restricted app detected / immediately after a block).
+  - 5s during an active schedule window.
+  - 9s otherwise.
+  - 10s and skip enforcement when screen is off.
+- Boot persistence:
+  - Service restarts on device boot (`BOOT_COMPLETED` receiver).
+  - Best-effort restart strategy on service/task removal.
+- Battery optimization:
+  - App requires exemption from battery optimizations for reliability.
 
-3.2 The "Blocker" (The Overlay)
+### 3.2 Regimes (Schedules)
 
-    System Alert Window: When a limit is hit, trigger a full-screen Flutter overlay using TYPE_APPLICATION_OVERLAY.
+- Users define regimes (time blocks and usage limits) and the apps affected.
+- Regimes are cloud-synced and survive reinstall/new devices:
+  - `/users/{uid}/regimes/{regimeId}`
+- Native enforcement consumes regimes via MethodChannel schedule sync.
 
-    Hard Lock: The overlay must prevent "Back" button presses and "Recent Apps" navigation (via intent-based redirection if necessary).
+### 3.3 Squads
 
-3.3 The "Savage" Features (Social Hooks)
-A. The Simp Protocol (Begging Mechanism)
+- Users create/join a squad via a code.
+- Squad HUD shows member list and active Tribunal entry points.
 
-    Logic: To send a "Time Request," the user must type a randomized, self-deprecating phrase (e.g., "I am a slave to the algorithm and I have no self-control").
+### 3.4 Tribunals (Plea Sessions)
 
-    Validation: Regex-based matching. Request button is disabled until the text is 100% accurate.
+Terminology:
+- A "plea" document is a Tribunal session.
+- Attendance = `participants` list (users who enter or act in the room).
+- Eligible voters = `participants` excluding `userId` (the requester).
 
-B. Wallpaper Vandalism (The Shame Penalty)
+Flow:
+1. Requester composes plea (app icon, time chips, reason).
+2. Server creates `/pleas/{pleaId}` and notifies squad members via FCM.
+3. Members enter Tribunal, chat, and cast votes.
+4. Server finalizes verdict and updates plea status.
+5. If approved, requester receives a temporary unlock for the requested package and duration (enforced by native service).
 
-    Logic: If a "Time Request" is rejected by a majority of the squad, the app uses WallpaperManager to change the user’s phone wallpaper to a "Loser" image uploaded by the friends.
+Quorum:
+- Attendance-based quorum is the global model.
+- Completion condition: all eligible voters in `participants` have cast a vote.
+- Tie-breaker: tie resolves to `rejected`.
+- Timeout: stale active pleas auto-finalize on the server (tie/incomplete defaults to reject).
 
-    Frequency: Triggers immediately upon a failed vote.
+## 4. Backend Architecture (Current)
 
-C. Mutually Assured Destruction (MAD)
+### 4.1 Firestore Collections
 
-    Logic: Users join "Squads." If any squad member "Cheats" (uninstalls the app or forces it to stop—detected via heartbeat), all members lose 30% of their time allowance for the next 24 hours.
+`/users/{uid}`
+- `uid`, `email`, `fullName`, `nickname`
+- `squadId`, `squadCode`
+- `focusScore`
+- `fcmToken`
 
-    Backend: Cloud Function monitors "Last Seen" timestamps in Firestore.
+`/users/{uid}/regimes/{regimeId}`
+- `name`, `apps`, `daysOfWeek`, `startTime`, `endTime`, `isEnabled`
+- Compatibility fields used by native sync (e.g., `targetApps`, `days`, `startHour`, etc.)
 
-D. Bounty Hunter (Location + App Detection)
+`/squads/{squadId}`
+- `squadCode`, `creatorId`, `memberIds`
 
-    Logic: If the user is at a "Work Geofence" but opens a "Leisure App," a "Bounty" is placed on their focus.
+`/pleas/{pleaId}`
+- `userId` (requester), `userName`
+- `squadId`
+- `appName`, `packageName`
+- `durationMinutes`, `reason`
+- `status`: `active | approved | rejected`
+- `participants`: array of uids
+- `votes`: map `{ uid: accept|reject }`
+- `voteCounts`: map `{ accept: number, reject: number }`
+- `createdAt`, `resolvedAt`
+- lifecycle metadata: `markedForDeletion`, `deletionMarkedAt`, `outcomeSource`, etc.
 
-    Reward: Friends who vote to "Lock" the user earn "Discipline Points" (Gamified leaderboard).
+`/pleas/{pleaId}/messages/{messageId}`
+- `senderId`, `senderName`, `text`, `timestamp`
+- optional `isSystem`
 
-4. Technical Architecture & Schema
-4.1 Firestore Schema (Draft)
-TypeScript
+`/limits/{uid}` (anti-spam)
+- rolling timestamp arrays and cooldown state for plea creation and messages
 
-/users/{userId}
-  - displayName: string
-  - dailyAllowance: map { appId: duration }
-  - currentStatus: "focus" | "begging" | "locked"
-  - squadId: string
+### 4.2 Cloud Functions (Server Authority)
 
-/squads/{squadId}
-  - members: array[userId]
-  - activeRequests: array[requestId]
-  - penaltyPool: number
+Callables:
+- `createPlea`
+- `castVote`
+- `joinPleaSession`
+- `sendPleaMessage`
+- `markPleaForDeletion`
 
-/requests/{requestId}
-  - requesterId: userId
-  - requestedMinutes: number
-  - phraseToType: string
-  - votes: map { userId: "approve" | "reject" }
-  - status: "pending" | "approved" | "rejected"
+Firestore triggers:
+- `broadcastPleaCreated` (FCM fanout)
+- `resolvePleaVerdict` (verdict finalizer)
 
-5. Permissions (The "God Mode" Suite)
+Schedulers:
+- `autoFinalizeStalePleas`
+- `cleanupPleaData`
 
-To function as intended on Android, the app requires:
+### 4.3 Security Model (Rules + Authority)
 
-    PACKAGE_USAGE_STATS: To see which apps are open.
+- Plea documents are server-only mutable (clients cannot create/update/delete `/pleas/{pleaId}`).
+- Chat messages are sent via callable; direct client writes are blocked.
+- User doc reads are restricted to self or same-squad.
+- Regimes are read/write for self (and admin).
 
-    SYSTEM_ALERT_WINDOW: To draw the blocking overlay.
+## 5. Admin ("God Mode") Baseline
 
-    SET_WALLPAPER: For the Vandalism feature.
+- Admin is controlled by Firebase custom claim `admin: true`.
+- Admin dashboard exists as a dedicated screen.
+- Admin can view global stats and perform privileged operations via callables/privileged writes.
 
-    ACCESS_FINE_LOCATION: For Bounty Hunter geofencing.
+## 6. Planned Migration Milestones
 
-    REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: To keep the service alive.
+P0:
+- Optional migration to a vote subcollection model (Option A) for simpler integrity boundaries:
+  - `/pleas/{pleaId}/votes/{uid}`
+  - Aggregate counts and verdicts computed from vote docs.
 
-6. Development Phases
-Phase 1: The Cage (Local Blocking)
+P1:
+- Stronger Android reliability on OEM-kill devices:
+  - WorkManager fallback + stricter “service running” UX gate.
 
-    Implement UsageStatsManager in Kotlin.
+P2:
+- Reintroduce / prioritize previously drafted features if desired:
+  - Vandalism (wallpaper), Simp Protocol, MAD heartbeat, leaderboards.
 
-    Build the Flutter Overlay UI.
-
-    Local timer logic (App closes when time > limit).
-
-Phase 2: The Social Circle (Firebase Integration)
-
-    Squad creation and friend invites.
-
-    Real-time "Request for Time" flow with Push Notifications.
-
-    Voting UI for friends.
-
-Phase 3: The Punishment (Savage Logic)
-
-    Implement Wallpaper Vandalism.
-
-    Implement the Simp Protocol (Input validation).
-
-    Implement MAD (Heartbeat monitoring).
-
-7. Success Metrics
-
-    Friction Score: Amount of time saved by users vs. baseline.
-
-    Shame Engagement: Number of "Rejections" vs "Approvals" (The higher the rejections, the better the app is working).

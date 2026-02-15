@@ -15,6 +15,7 @@ class _PermissionScreenState extends State<PermissionScreen>
     with WidgetsBindingObserver {
   bool _hasUsageStats = false;
   bool _hasOverlay = false;
+  bool _hasBatteryOptOut = false;
   StreamSubscription? _permissionSubscription;
 
   @override
@@ -50,6 +51,7 @@ class _PermissionScreenState extends State<PermissionScreen>
       setState(() {
         _hasUsageStats = perms['usage_stats'] ?? false;
         _hasOverlay = perms['overlay'] ?? false;
+        _hasBatteryOptOut = perms['battery_optimization_ignored'] ?? false;
       });
     }
   }
@@ -75,7 +77,7 @@ class _PermissionScreenState extends State<PermissionScreen>
               const SizedBox(height: 8),
               Text(
                 'You revoked our access. We cannot see your activity.',
-                style: AppTheme.bodySmall.copyWith(
+                style: AppTheme.baseRegular.copyWith(
                   color: AppSemanticColors.primaryText,
                 ),
               ),
@@ -96,11 +98,20 @@ class _PermissionScreenState extends State<PermissionScreen>
                 onGrant: () => NativeBridge.requestOverlay(),
                 color: AppSemanticColors.accent,
               ),
+              const SizedBox(height: 20),
+              _buildPermissionCard(
+                title: 'Battery optimization',
+                description:
+                    'Required so Revoke can survive background restrictions and reboots.',
+                isGranted: _hasBatteryOptOut,
+                onGrant: () => NativeBridge.requestBatteryOptimizations(),
+                color: AppSemanticColors.accent,
+              ),
               const Spacer(),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: (_hasUsageStats && _hasOverlay)
+                  onPressed: (_hasUsageStats && _hasOverlay && _hasBatteryOptOut)
                       ? () => context.go('/home')
                       : null,
                   style: AppTheme.primaryButtonStyle,
@@ -139,11 +150,11 @@ class _PermissionScreenState extends State<PermissionScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppTheme.h3),
+                Text(title, style: AppTheme.lgMedium),
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: AppTheme.bodySmall.copyWith(
+                  style: AppTheme.baseRegular.copyWith(
                     color: AppSemanticColors.secondaryText,
                   ),
                 ),

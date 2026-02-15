@@ -5,14 +5,13 @@ import '../../core/theme/app_theme.dart';
 import '../../core/native_bridge.dart';
 import '../../core/models/schedule_model.dart';
 import '../../core/services/schedule_service.dart';
-import 'create_schedule_screen.dart';
 import 'widgets/focus_score_card.dart';
 import 'widgets/single_app_icon.dart';
 import '../../core/services/auth_service.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final List<ScheduleModel> schedules;
+  const HomeScreen({super.key, required this.schedules});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -24,7 +23,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isMissingPermissions = false;
   StreamSubscription? _permissionSubscription;
   StreamSubscription? _temporaryApprovalSubscription;
-  late Future<Map<String, dynamic>?> _userDataFuture;
   Set<String> _temporaryApprovedPackages = const <String>{};
 
   @override
@@ -33,10 +31,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     NativeBridge.setupOverlayListener();
     NativeBridge.startService();
-    _userDataFuture = AuthService.getUserData();
     _checkPermissions();
     _refreshTemporaryApprovals();
-    _loadSchedules();
+    _schedules = widget.schedules;
+    _isLoading = false;
     AuthService.validateSession();
 
     // Periodic check every 5 seconds while UI is open
@@ -65,7 +63,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _checkPermissions();
       _refreshTemporaryApprovals();
       _loadSchedules();
-      _userDataFuture = AuthService.getUserData();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Keep UI in sync with cloud-backed stream from RegimesScreen.
+    final oldKey = oldWidget.schedules
+        .map((s) => '${s.id}:${s.isActive ? 1 : 0}:${s.name}:${s.targetApps.length}')
+        .join('|');
+    final newKey = widget.schedules
+        .map((s) => '${s.id}:${s.isActive ? 1 : 0}:${s.name}:${s.targetApps.length}')
+        .join('|');
+    if (oldKey != newKey) {
+      setState(() {
+        _schedules = widget.schedules;
+      });
     }
   }
 
@@ -188,7 +202,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     SliverToBoxAdapter(
                       child: Column(
                         children: [
-                          _buildHeader(),
                           const FocusScoreCard(),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -235,73 +248,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       floatingActionButton: FloatingActionButton.large(
         onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const CreateScheduleScreen(),
-            ),
-          );
+          await context.push('/regime/new');
           _loadSchedules();
         },
         backgroundColor: AppSemanticColors.accent,
         child: const Icon(Icons.add, color: AppSemanticColors.background, size: 40),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Image.asset(
-                'assets/branding/icon_source_primary_transparent.png',
-                width: 32,
-                height: 32,
-                fit: BoxFit.contain,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'REVOKE',
-                style: AppTheme.xxlMedium.copyWith(
-                  color: AppSemanticColors.secondaryText,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          FutureBuilder<Map<String, dynamic>?>(
-            future: _userDataFuture,
-            builder: (context, snapshot) {
-              final userData = snapshot.data;
-              return GestureDetector(
-                onTap: () => context.push('/profile'),
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: AppTheme.avatarBorderStyle,
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppSemanticColors.surface,
-                    backgroundImage: userData?['photoUrl'] != null
-                        ? CachedNetworkImageProvider(userData!['photoUrl'])
-                        : null,
-                    child: userData?['photoUrl'] == null
-                        ? Text(
-                            (userData?['fullName'] ?? "U")[0].toUpperCase(),
-                            style: AppTheme.lgBold.copyWith(
-                              color: AppSemanticColors.accentText,
-                            ),
-                          )
-                        : null,
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
       ),
     );
   }
@@ -389,13 +340,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     return GestureDetector(
       onTap: () async {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                CreateScheduleScreen(existingSchedule: schedule),
-          ),
-        );
+        await context.push('/regime/edit', extra: schedule);
         _loadSchedules();
       },
       child: Container(

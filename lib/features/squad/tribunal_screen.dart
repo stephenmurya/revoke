@@ -1,4 +1,9 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/plea_message_model.dart';
@@ -7,6 +12,7 @@ import '../../core/native_bridge.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/squad_service.dart';
 import '../../core/theme/app_theme.dart';
+import 'widgets/chat_bubble.dart';
 
 class TribunalScreen extends StatefulWidget {
   final String pleaId;
@@ -18,7 +24,9 @@ class TribunalScreen extends StatefulWidget {
 }
 
 class _TribunalScreenState extends State<TribunalScreen> {
+  static const String _architectEmail = 'stephenmurya@gmail.com';
   final TextEditingController _messageController = TextEditingController();
+  final FocusNode _messageFocusNode = FocusNode();
   final ScrollController _messageScrollController = ScrollController();
   bool _sending = false;
   bool _voting = false;
@@ -26,37 +34,101 @@ class _TribunalScreenState extends State<TribunalScreen> {
   String? _resolvedStatusHandled;
   bool _showVerdictOverlay = false;
   String _verdictText = '';
-  int _lastMessageCount = 0;
+  bool _autoScrollQueued = false;
+  String? _lastLifecycleStatus;
   PleaMessageModel? _replyingTo;
+  bool _isAdminObserver = false;
+  bool _adminClaimChecked = false;
+  bool _sessionReady = false;
+  bool _ghostMode = false;
+  bool _applyingOverride = false;
+  bool _typingIntent = false;
+  Timer? _hideOverlayTimer;
+  Timer? _exitTimer;
 
   @override
   void initState() {
     super.initState();
+    _messageFocusNode.addListener(() {
+      // Some async rebuilds (streams, overlays, route transitions) can momentarily
+      // unmount/remount the TextField, dropping focus. If the user explicitly tapped
+      // into the composer, keep focus unless they dismiss it.
+      if (!_typingIntent) return;
+      if (_messageFocusNode.hasFocus) return;
+      scheduleMicrotask(() {
+        if (!mounted) return;
+        if (_typingIntent && !_messageFocusNode.hasFocus) {
+          _messageFocusNode.requestFocus();
+        }
+      });
+    });
     _bootstrapSession();
   }
 
   @override
   void dispose() {
+    _hideOverlayTimer?.cancel();
+    _exitTimer?.cancel();
     _messageController.dispose();
+    _messageFocusNode.dispose();
     _messageScrollController.dispose();
     super.dispose();
   }
 
   Future<void> _bootstrapSession() async {
-    final uid = AuthService.currentUser?.uid;
-    if (uid == null) return;
+    final user = AuthService.currentUser;
+    final uid = user?.uid;
+    if (uid == null) {
+      if (!mounted) return;
+      setState(() {
+        _adminClaimChecked = true;
+        _sessionReady = true;
+      });
+      return;
+    }
+
+    final email = user?.email?.trim().toLowerCase();
+    bool isAdmin = email == _architectEmail;
+    String resolvedSenderName = 'Member';
+
     try {
-      await SquadService.joinPleaSession(widget.pleaId, uid);
+      // Force refresh to avoid stale claim state when entering tribunal.
+      final tokenResult = await user?.getIdTokenResult(true);
+      isAdmin = isAdmin || tokenResult?.claims?['admin'] == true;
+    } catch (_) {
+      try {
+        // Fallback to cached claims when force refresh fails.
+        final tokenResult = await user?.getIdTokenResult();
+        isAdmin = isAdmin || tokenResult?.claims?['admin'] == true;
+      } catch (_) {}
+    }
+
+    if (!isAdmin) {
+      try {
+        await SquadService.joinPleaSession(widget.pleaId, uid);
+      } catch (_) {}
+    }
+
+    try {
+      final userData = await AuthService.getUserData();
+      final nickname = (userData?['nickname'] as String?)?.trim();
+      final fullName = (userData?['fullName'] as String?)?.trim();
+      final resolved = (nickname?.isNotEmpty == true)
+          ? nickname!
+          : ((fullName?.isNotEmpty == true) ? fullName! : 'Member');
+      resolvedSenderName = resolved;
     } catch (_) {}
 
-    final userData = await AuthService.getUserData();
-    final nickname = (userData?['nickname'] as String?)?.trim();
-    final fullName = (userData?['fullName'] as String?)?.trim();
-    final resolved = (nickname?.isNotEmpty == true)
-        ? nickname!
-        : ((fullName?.isNotEmpty == true) ? fullName! : 'Member');
     if (!mounted) return;
-    setState(() => _senderName = resolved);
+    setState(() {
+      _isAdminObserver = isAdmin;
+      _adminClaimChecked = true;
+      _sessionReady = true;
+      _senderName = resolvedSenderName;
+      // Default admin chat to Ghost Mode to avoid callable-layer rejection for admin users
+      // and make mock tribunal simulations immediately usable.
+      _ghostMode = isAdmin;
+    });
   }
 
   Future<void> _sendMessage() async {
@@ -66,12 +138,26 @@ class _TribunalScreenState extends State<TribunalScreen> {
 
     setState(() => _sending = true);
     try {
-      await SquadService.sendPleaMessage(
-        pleaId: widget.pleaId,
-        senderId: uid,
-        senderName: _senderName,
-        text: text,
-      );
+      if (_isAdminObserver && _ghostMode) {
+        await FirebaseFirestore.instance
+            .collection('pleas')
+            .doc(widget.pleaId)
+            .collection('messages')
+            .add({
+              'senderId': 'THE_ARCHITECT',
+              'senderName': 'The Architect',
+              'text': text,
+              'isSystem': true,
+              'timestamp': FieldValue.serverTimestamp(),
+            });
+      } else {
+        await SquadService.sendPleaMessage(
+          pleaId: widget.pleaId,
+          senderId: uid,
+          senderName: _senderName,
+          text: text,
+        );
+      }
       _messageController.clear();
       _replyingTo = null;
       _scrollMessagesToBottom();
@@ -85,19 +171,14 @@ class _TribunalScreenState extends State<TribunalScreen> {
     }
   }
 
-  void _scrollMessagesToBottom({bool animated = true}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+  void _scrollMessagesToBottom() {
+    if (_autoScrollQueued) return;
+    _autoScrollQueued = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _autoScrollQueued = false;
       if (!mounted || !_messageScrollController.hasClients) return;
       final target = _messageScrollController.position.maxScrollExtent;
-      if (animated) {
-        _messageScrollController.animateTo(
-          target,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        );
-      } else {
-        _messageScrollController.jumpTo(target);
-      }
+      _messageScrollController.jumpTo(target);
     });
   }
 
@@ -131,6 +212,168 @@ class _TribunalScreenState extends State<TribunalScreen> {
     }
   }
 
+  Future<void> _confirmAndOverride({
+    required String verdict,
+    required PleaModel plea,
+  }) async {
+    if (_applyingOverride) return;
+
+    final reasonController = TextEditingController();
+    final shouldProceed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppSemanticColors.surface,
+          title: Text('Force Resolve this plea?', style: AppTheme.h3),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${plea.userName} on ${plea.appName} (${plea.durationMinutes}m)',
+                style: AppTheme.bodySmall.copyWith(
+                  color: AppSemanticColors.secondaryText,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: AppTheme.defaultInputDecoration(
+                  hintText: 'Reason (optional)',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(verdict == 'approved' ? 'Approve' : 'Reject'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldProceed != true) return;
+
+    setState(() => _applyingOverride = true);
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'adminOverridePlea',
+      );
+      await callable.call({
+        'pleaId': widget.pleaId,
+        'verdict': verdict,
+        'reason': reasonController.text.trim(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Override applied: ${verdict.toUpperCase()}')),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      final message = e.message ?? e.code;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Override failed: $message')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Override failed: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _applyingOverride = false);
+      }
+    }
+  }
+
+  Widget _buildAdminTribunalControls(PleaModel plea) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppSemanticColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppSemanticColors.primaryText.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Admin Tribunal Controls', style: AppTheme.bodyMedium),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _applyingOverride
+                      ? null
+                      : () => _confirmAndOverride(
+                          verdict: 'approved',
+                          plea: plea,
+                        ),
+                  style: AppTheme.primaryButtonStyle.copyWith(
+                    backgroundColor: const WidgetStatePropertyAll(
+                      AppSemanticColors.approve,
+                    ),
+                    foregroundColor: const WidgetStatePropertyAll(
+                      AppSemanticColors.inverseText,
+                    ),
+                  ),
+                  child: const Text('Approve'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _applyingOverride
+                      ? null
+                      : () => _confirmAndOverride(
+                          verdict: 'rejected',
+                          plea: plea,
+                        ),
+                  style: AppTheme.dangerButtonStyle,
+                  child: const Text('Reject'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Ghost Mode', style: AppTheme.bodyMedium),
+                    Text(
+                      'Send as The Architect',
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppSemanticColors.secondaryText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: _ghostMode,
+                onChanged: (value) => setState(() => _ghostMode = value),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleResolutionLifecycle(PleaModel plea) {
     final status = plea.status.trim().toLowerCase();
     if (status != 'approved' && status != 'rejected') return;
@@ -149,6 +392,12 @@ class _TribunalScreenState extends State<TribunalScreen> {
       NativeBridge.temporaryUnlock(plea.packageName.trim(), grantedMinutes);
     }
 
+    // Admin observers should not auto-exit or trigger overlay transitions.
+    // They can keep watching the room state without lifecycle side-effects.
+    if (_isAdminObserver) {
+      return;
+    }
+
     final verdictText = status == 'approved'
         ? 'VERDICT: GRANTED'
         : 'VERDICT: REJECTED';
@@ -161,12 +410,15 @@ class _TribunalScreenState extends State<TribunalScreen> {
       });
     });
 
-    Future.delayed(const Duration(seconds: 3), () {
+    _hideOverlayTimer?.cancel();
+    _hideOverlayTimer = Timer(const Duration(seconds: 3), () {
       if (!mounted) return;
       setState(() => _showVerdictOverlay = false);
     });
 
-    Future.delayed(const Duration(seconds: 5), () async {
+    _exitTimer?.cancel();
+    _exitTimer = Timer(const Duration(seconds: 5), () async {
+      if (!mounted) return;
       await SquadService.markPleaForDeletion(widget.pleaId);
       if (!mounted) return;
       context.go('/squad');
@@ -188,7 +440,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: AppTheme.tribunalScoreboardDecoration,
       child: Column(
@@ -294,16 +546,44 @@ class _TribunalScreenState extends State<TribunalScreen> {
   Widget build(BuildContext context) {
     final currentUid = AuthService.currentUser?.uid;
 
+    if (!_adminClaimChecked || !_sessionReady) {
+      return Scaffold(
+        backgroundColor: AppSemanticColors.background,
+        appBar: AppBar(
+          backgroundColor: AppSemanticColors.background,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          title: Text('The Tribunal', style: AppTheme.h2),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: AppSemanticColors.accent),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppSemanticColors.background,
+      extendBodyBehindAppBar: false,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppSemanticColors.background,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         title: Text('The Tribunal', style: AppTheme.h2),
       ),
-      body: StreamBuilder<PleaModel?>(
-        stream: SquadService.getPleaStream(widget.pleaId),
-        builder: (context, snapshot) {
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // Some entry paths (dialogs/sheets) can yield an unbounded height.
+          // Clamp Tribunal to the viewport height to avoid layout/semantics crashes.
+          final boundedHeight = constraints.hasBoundedHeight
+              ? constraints.maxHeight
+              : MediaQuery.sizeOf(context).height;
+
+          return SizedBox(
+            height: boundedHeight,
+            width: double.infinity,
+            child: StreamBuilder<PleaModel?>(
+              stream: SquadService.getPleaStream(widget.pleaId),
+              builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
               child: Text(
@@ -331,12 +611,36 @@ class _TribunalScreenState extends State<TribunalScreen> {
             );
           }
 
-          _handleResolutionLifecycle(plea);
+          final lifecycleStatus = plea.status.trim().toLowerCase();
+          if (_lastLifecycleStatus != lifecycleStatus) {
+            _lastLifecycleStatus = lifecycleStatus;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              _handleResolutionLifecycle(plea);
+            });
+          }
+
+          final isParticipant =
+              currentUid != null && plea.participants.contains(currentUid);
+          final canAccessSession = isParticipant || _isAdminObserver;
+          if (!canAccessSession) {
+            return Center(
+              child: Text(
+                'ACCESS DENIED',
+                style: AppTheme.h3.copyWith(color: AppSemanticColors.errorText),
+              ),
+            );
+          }
 
           final userVote = currentUid == null ? null : plea.votes[currentUid];
           final isRequester = currentUid != null && currentUid == plea.userId;
           final canVote =
-              currentUid != null && plea.status == 'active' && !isRequester;
+              currentUid != null &&
+              plea.status == 'active' &&
+              !isRequester &&
+              !_isAdminObserver;
+          final isAdmin = _isAdminObserver;
+          final showObserverBanner = isAdmin && !isParticipant;
           final voteLocked = !canVote || _voting;
 
           return Stack(
@@ -344,6 +648,21 @@ class _TribunalScreenState extends State<TribunalScreen> {
               Column(
                 children: [
                   _buildTribunalHud(plea),
+                  if (showObserverBanner)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: AppTheme.warningBannerDecoration,
+                      child: Text(
+                        'SYSTEM OBSERVER ACTIVE',
+                        textAlign: TextAlign.center,
+                        style: AppTheme.warningBannerTextStyle,
+                      ),
+                    ),
                   Expanded(
                     child: StreamBuilder<List<PleaMessageModel>>(
                       stream: SquadService.getPleaMessagesStream(widget.pleaId),
@@ -360,10 +679,6 @@ class _TribunalScreenState extends State<TribunalScreen> {
                         }
 
                         final messages = msgSnapshot.data ?? const [];
-                        if (messages.length != _lastMessageCount) {
-                          _lastMessageCount = messages.length;
-                          _scrollMessagesToBottom();
-                        }
                         if (messages.isEmpty) {
                           return Center(
                             child: Text(
@@ -382,52 +697,12 @@ class _TribunalScreenState extends State<TribunalScreen> {
                           itemBuilder: (context, index) {
                             final message = messages[index];
                             final isMine = message.senderId == currentUid;
-                            return Align(
-                              alignment: isMine
-                                  ? Alignment.centerRight
-                                  : Alignment.centerLeft,
-                              child: GestureDetector(
-                                onHorizontalDragEnd: (details) {
-                                  if (details.primaryVelocity != null &&
-                                      details.primaryVelocity! > 220) {
-                                    _setReplyTarget(message);
-                                  }
-                                },
-                                child: Container(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 280,
-                                  ),
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  decoration: isMine
-                                      ? AppTheme.chatBubbleUserDecoration
-                                      : AppTheme.chatBubbleOtherDecoration,
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (!isMine)
-                                        Text(
-                                          message.senderName,
-                                          style: AppTheme.labelSmall.copyWith(
-                                            color: AppSemanticColors.accentText,
-                                          ),
-                                        ),
-                                      Text(
-                                        message.text,
-                                        style: AppTheme.bodyMedium.copyWith(
-                                          color: isMine
-                                              ? AppSemanticColors.inverseText
-                                              : AppSemanticColors.primaryText,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                            return ChatBubble(
+                              message: message,
+                              isMine: isMine,
+                              onSwipeReply: _isAdminObserver
+                                  ? null
+                                  : () => _setReplyTarget(message),
                             );
                           },
                         );
@@ -439,8 +714,13 @@ class _TribunalScreenState extends State<TribunalScreen> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (!isRequester) ...[
+                          if (isAdmin) ...[
+                            _buildAdminTribunalControls(plea),
+                            const SizedBox(height: 10),
+                          ],
+                          if (!isRequester && !isAdmin) ...[
                             Row(
                               children: [
                                 Expanded(
@@ -471,7 +751,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                             ),
                             const SizedBox(height: 10),
                           ],
-                          if (_replyingTo != null) ...[
+                          if (_replyingTo != null && !isAdmin) ...[
                             const SizedBox(height: 10),
                             Container(
                               width: double.infinity,
@@ -534,17 +814,30 @@ class _TribunalScreenState extends State<TribunalScreen> {
                             ),
                           ],
                           Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Expanded(
                                 child: SizedBox(
                                   height: 56,
                                   child: TextField(
+                                    key: const ValueKey(
+                                      'tribunal_message_input',
+                                    ),
                                     controller: _messageController,
+                                    focusNode: _messageFocusNode,
+                                    onTap: () => _typingIntent = true,
+                                    onTapOutside: (_) {
+                                      _typingIntent = false;
+                                      _messageFocusNode.unfocus();
+                                    },
                                     textCapitalization:
                                         TextCapitalization.sentences,
                                     decoration: AppTheme.defaultInputDecoration(
-                                      hintText: 'Type your argument...',
+                                      hintText: isAdmin
+                                          ? (_ghostMode
+                                                ? 'Ghost message as The Architect...'
+                                                : 'Send admin note...')
+                                          : 'Type your argument...',
                                     ),
                                   ),
                                 ),
@@ -590,6 +883,9 @@ class _TribunalScreenState extends State<TribunalScreen> {
                   ),
                 ),
             ],
+          );
+              },
+            ),
           );
         },
       ),

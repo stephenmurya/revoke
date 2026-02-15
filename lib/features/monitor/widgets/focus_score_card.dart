@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../home/focus_score_detail_screen.dart';
 
 class FocusScoreCard extends StatefulWidget {
   const FocusScoreCard({super.key});
@@ -63,9 +63,7 @@ class _FocusScoreCardState extends State<FocusScoreCard>
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const FocusScoreDetailScreen()),
-        );
+        context.push('/focus-score');
       },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),

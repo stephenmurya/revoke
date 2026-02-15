@@ -32,6 +32,9 @@ class PleaModel {
   });
 
   factory PleaModel.fromJson(Map<String, dynamic> json, String docId) {
+    // Be tolerant of partially-written documents (e.g. serverTimestamp fields that are
+    // temporarily null in the local snapshot). A model parse error would propagate as
+    // a Stream error and can cause UI flicker, focus loss, and "ACCESS DENIED" noise.
     final rawVotes = Map<String, dynamic>.from(json['votes'] as Map? ?? {});
     final normalizedVotes = <String, String>{};
     rawVotes.forEach((uid, vote) {
@@ -55,12 +58,17 @@ class PleaModel {
         (rawVoteCounts['reject'] as num?)?.toInt() ??
         normalizedVotes.values.where((v) => v == 'reject').length;
 
+    final createdAtRaw = json['createdAt'];
+    final createdAt = createdAtRaw is Timestamp
+        ? createdAtRaw.toDate()
+        : DateTime.now();
+
     return PleaModel(
       id: docId,
-      userId: json['userId'] as String,
-      userName: json['userName'] as String,
-      squadId: json['squadId'] as String,
-      appName: json['appName'] as String,
+      userId: json['userId'] as String? ?? '',
+      userName: json['userName'] as String? ?? 'Member',
+      squadId: json['squadId'] as String? ?? '',
+      appName: json['appName'] as String? ?? 'App',
       packageName: json['packageName'] as String? ?? '',
       durationMinutes: (json['durationMinutes'] as num?)?.toInt() ?? 5,
       reason: json['reason'] as String? ?? '',
@@ -70,7 +78,7 @@ class PleaModel {
       voteCounts: {'accept': acceptVotes, 'reject': rejectVotes},
       votes: normalizedVotes,
       status: json['status'] as String? ?? 'active',
-      createdAt: (json['createdAt'] as Timestamp).toDate(),
+      createdAt: createdAt,
     );
   }
 

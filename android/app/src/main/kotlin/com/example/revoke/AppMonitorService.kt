@@ -3,6 +3,8 @@ package com.example.revoke
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.app.Service
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
@@ -13,6 +15,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -28,9 +31,18 @@ class AppMonitorService : Service() {
     private var lastKnownForegroundPackage: String = ""
     private var lastLoggedApp: String = ""
     private var lastUsageStatsFallbackAt: Long = 0L
+    private var lastEventsQueryAt: Long = 0L
     private var activeSchedules: java.util.concurrent.CopyOnWriteArrayList<org.json.JSONObject> = java.util.concurrent.CopyOnWriteArrayList()
+    private var blockedAppsIndex: HashSet<String> = HashSet()
     private val tempUnlockedPackages = mutableMapOf<String, Long>()
     private val usageStatsFallbackIntervalMs = 12_000L
+    private var lastAmnestyLogAt: Long = 0L
+    private var lastRestrictedDetectedAt: Long = 0L
+    private var lastHealthWriteAt: Long = 0L
+    private var cachedRiskWindow: Boolean = false
+    private var lastRiskEvalAt: Long = 0L
+    private var monitorLoopStarted: Boolean = false
+    private lateinit var prefs: android.content.SharedPreferences
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
@@ -39,9 +51,9 @@ class AppMonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
         
         // Load persisted schedules
-        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
         val savedSchedules = prefs.getString("schedules", null)
         if (savedSchedules != null) {
             updateSchedules(savedSchedules)
@@ -52,8 +64,14 @@ class AppMonitorService : Service() {
         startForegroundService()
         
         // CRITICAL: Start the monitoring loop
-        handler.post(runnable)
+        startMonitorLoopIfNeeded()
         android.util.Log.d("RevokeMonitor", "Monitoring loop started")
+    }
+
+    private fun startMonitorLoopIfNeeded() {
+        if (monitorLoopStarted) return
+        monitorLoopStarted = true
+        handler.post(runnable)
     }
 
     private fun startForegroundService() {
@@ -83,14 +101,24 @@ class AppMonitorService : Service() {
 
     private val runnable = object : Runnable {
         override fun run() {
+            val now = System.currentTimeMillis()
+            var nextDelayMs = 5_000L
             try {
-                checkForegroundApp()
+                writeSelfHealth(now)
+
+                if (!isScreenInteractive()) {
+                    hideBlockerOverlay()
+                    nextDelayMs = 10_000L
+                } else {
+                    val restrictedDetected = checkForegroundApp(now)
+                    nextDelayMs = computeNextPollDelayMs(now, restrictedDetected)
+                }
             } catch (e: Exception) {
                 android.util.Log.e("RevokeMonitor", "Error in monitor loop: ${e.message}", e)
-            } finally {
-                // Poll every 2 seconds to reduce background aggressiveness
-                handler.postDelayed(this, 2000)
+                nextDelayMs = 5_000L
             }
+
+            handler.postDelayed(this, nextDelayMs)
         }
     }
 
@@ -114,7 +142,120 @@ class AppMonitorService : Service() {
             }
         }
         // Loop already started in onCreate()
+        startMonitorLoopIfNeeded()
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        scheduleRestart(3_000)
+        super.onTaskRemoved(rootIntent)
+    }
+
+    private fun writeSelfHealth(now: Long) {
+        if (now - lastHealthWriteAt < 5_000L) return
+        lastHealthWriteAt = now
+        prefs.edit().putLong("monitor_last_tick_ms", now).apply()
+    }
+
+    private fun isScreenInteractive(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return pm.isInteractive
+    }
+
+    private fun computeNextPollDelayMs(now: Long, restrictedDetected: Boolean): Long {
+        if (restrictedDetected) return 2_000L
+
+        // Stay in fast mode briefly after a block to reduce "open app then slip past" windows.
+        if (now - lastRestrictedDetectedAt < 20_000L) return 2_000L
+
+        return if (isRiskWindowNow(now)) 5_000L else 9_000L
+    }
+
+    private fun isRiskWindowNow(now: Long): Boolean {
+        if (now - lastRiskEvalAt < 15_000L) return cachedRiskWindow
+        cachedRiskWindow = computeRiskWindowNow()
+        lastRiskEvalAt = now
+        return cachedRiskWindow
+    }
+
+    private fun computeRiskWindowNow(): Boolean {
+        if (blockedAppsIndex.isEmpty()) return false
+
+        val calendar = java.util.Calendar.getInstance()
+        val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+        val modelDay = if (dayOfWeek == 1) 7 else dayOfWeek - 1
+
+        val currentHour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        val currentMinute = calendar.get(java.util.Calendar.MINUTE)
+        val currentTotalMin = currentHour * 60 + currentMinute
+
+        for (schedule in activeSchedules) {
+            if (!schedule.optBoolean("isActive", true)) continue
+
+            val days = schedule.optJSONArray("days") ?: continue
+            var dayMatch = false
+            for (i in 0 until days.length()) {
+                if (days.optInt(i, -1) == modelDay) {
+                    dayMatch = true
+                    break
+                }
+            }
+            if (!dayMatch) continue
+
+            val type = schedule.optInt("type")
+            if (type == 1) {
+                // Usage limit regimes are effectively "always on" during the matched day.
+                return true
+            }
+
+            if (type == 0) {
+                if (!schedule.has("startHour") || schedule.isNull("startHour") ||
+                    !schedule.has("endHour") || schedule.isNull("endHour")) {
+                    continue
+                }
+
+                val startHour = schedule.optInt("startHour", -1)
+                val startMin = schedule.optInt("startMinute", 0)
+                val endHour = schedule.optInt("endHour", -1)
+                val endMin = schedule.optInt("endMinute", 0)
+                if (startHour == -1 || endHour == -1) continue
+
+                val startTotalMin = startHour * 60 + startMin
+                val endTotalMin = endHour * 60 + endMin
+
+                val isWithinRange = if (startTotalMin <= endTotalMin) {
+                    currentTotalMin in startTotalMin..endTotalMin
+                } else {
+                    currentTotalMin >= startTotalMin || currentTotalMin <= endTotalMin
+                }
+
+                if (isWithinRange) return true
+            }
+        }
+
+        return false
+    }
+
+    private fun scheduleRestart(delayMs: Long) {
+        try {
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent("com.revoke.app.RESTART_SERVICE").apply {
+                setClass(this@AppMonitorService, ServiceRestartReceiver::class.java)
+            }
+            val pending = PendingIntent.getBroadcast(
+                this,
+                1001,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.set(
+                AlarmManager.RTC_WAKEUP,
+                System.currentTimeMillis() + delayMs.coerceAtLeast(0L),
+                pending
+            )
+        } catch (_: Exception) {
+            // Best effort.
+        }
     }
 
     private fun checkTempUnlock(packageName: String): Boolean {
@@ -125,13 +266,10 @@ class AppMonitorService : Service() {
             android.util.Log.d("RevokeMonitor", "Temp unlock expired for $packageName")
             return false
         }
-        val remainingMs = expiry - System.currentTimeMillis()
-        android.util.Log.d("RevokeMonitor", "Temp unlock active for $packageName (${remainingMs / 1000}s left)")
         return true
     }
 
     private fun loadTempUnlocks() {
-        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
         val raw = prefs.getString("temp_unlocks", null) ?: return
         val now = System.currentTimeMillis()
         try {
@@ -162,21 +300,31 @@ class AppMonitorService : Service() {
                 iterator.remove()
             }
         }
-        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
         prefs.edit().putString("temp_unlocks", json.toString()).apply()
     }
 
     private fun updateSchedules(json: String) {
         try {
             // Persist to SharedPreferences
-            val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
             prefs.edit().putString("schedules", json).apply()
             
             // Update memory
             val array = org.json.JSONArray(json)
             activeSchedules.clear()
+            blockedAppsIndex.clear()
             for (i in 0 until array.length()) {
-                activeSchedules.add(array.getJSONObject(i))
+                val schedule = array.getJSONObject(i)
+                activeSchedules.add(schedule)
+                // Build an index of targeted packages for fast hot-loop checks.
+                if (schedule.optBoolean("isActive", true)) {
+                    val apps = schedule.optJSONArray("targetApps")
+                    if (apps != null) {
+                        for (j in 0 until apps.length()) {
+                            val pkg = apps.optString(j, "").trim()
+                            if (pkg.isNotEmpty()) blockedAppsIndex.add(pkg)
+                        }
+                    }
+                }
             }
             
             android.util.Log.d("RevokeMonitor", "Synced ${activeSchedules.size} active schedules")
@@ -196,26 +344,36 @@ class AppMonitorService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(runnable)
+        scheduleRestart(5_000)
         super.onDestroy()
     }
 
-    private fun checkForegroundApp() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return
+    private fun checkForegroundApp(now: Long): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return false
+        if (isAmnestyActive()) {
+            hideBlockerOverlay()
+            return false
+        }
 
         val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val now = System.currentTimeMillis()
         
-        // Try queryEvents first with a larger 5-minute window
-        val usageEvents = usageStatsManager.queryEvents(now - 1000 * 60 * 5, now)
+        // queryEvents is cheaper than queryUsageStats, but it can still be heavy if the window is too large.
+        // Scan only recent events and keep fallback logic for reliability.
+        val start = if (lastEventsQueryAt <= 0L) {
+            now - 15_000
+        } else {
+            (lastEventsQueryAt - 2_000).coerceAtLeast(now - 30_000)
+        }
+        lastEventsQueryAt = now
+        val usageEvents = usageStatsManager.queryEvents(start, now)
         val event = UsageEvents.Event()
         var lastEventTime = 0L
-        var eventCount = 0
         var foundViaEvents = false
 
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event)
-            eventCount++
-            if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+            if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
                 if (event.timeStamp > lastEventTime) {
                     lastEventTime = event.timeStamp
                     lastKnownForegroundPackage = event.packageName
@@ -260,23 +418,31 @@ class AppMonitorService : Service() {
                 
                 val restrictedAppName = getRestrictedAppName(lastKnownForegroundPackage, shouldLogLogic)
                 if (restrictedAppName != null) {
+                    lastRestrictedDetectedAt = now
                     if (shouldLogLogic) android.util.Log.d("RevokeMonitor", "Blocking $restrictedAppName")
                     showBlockerOverlay(restrictedAppName, lastKnownForegroundPackage)
+                    return true
                 } else {
                     hideBlockerOverlay()
+                    return false
                 }
             } else {
                 // We are in Revoke, hide overlay
                 hideBlockerOverlay()
+                return false
             }
-        } else {
-            android.util.Log.d("RevokeMonitor", "No foreground app detected (Checked 5m window)")
         }
+        return false
     }
 
     private fun getRestrictedAppName(packageName: String, shouldLog: Boolean): String? {
         if (checkTempUnlock(packageName)) {
             if (shouldLog) android.util.Log.d("RevokeLogic", "App $packageName is temporarily unlocked.")
+            return null
+        }
+
+        // Fast path: if this package is not referenced by any active schedule, it cannot be blocked.
+        if (!blockedAppsIndex.contains(packageName)) {
             return null
         }
         val calendar = java.util.Calendar.getInstance()
@@ -355,7 +521,9 @@ class AppMonitorService : Service() {
                 // Check if time fields exist (not null)
                 if (!schedule.has("startHour") || schedule.isNull("startHour") || 
                     !schedule.has("endHour") || schedule.isNull("endHour")) {
-                    android.util.Log.d("RevokeLogic", "Schedule $index: Missing time data, skipping")
+                    if (shouldLog && !isLauncher) {
+                        android.util.Log.d("RevokeLogic", "Schedule $index: Missing time data, skipping")
+                    }
                     continue
                 }
                 
@@ -365,14 +533,18 @@ class AppMonitorService : Service() {
                 val endMin = schedule.optInt("endMinute", 0)
                 
                 if (startHour == -1 || endHour == -1) {
-                    android.util.Log.d("RevokeLogic", "Schedule $index: Invalid time values")
+                    if (shouldLog && !isLauncher) {
+                        android.util.Log.d("RevokeLogic", "Schedule $index: Invalid time values")
+                    }
                     continue
                 }
                 
                 val startTotalMin = startHour * 60 + startMin
                 val endTotalMin = endHour * 60 + endMin
                 
-                android.util.Log.d("RevokeLogic", "Schedule $index: TimeBlock ${startHour}:${startMin} - ${endHour}:${endMin} (${startTotalMin}-${endTotalMin})")
+                if (shouldLog && !isLauncher) {
+                    android.util.Log.d("RevokeLogic", "Schedule $index: TimeBlock ${startHour}:${startMin} - ${endHour}:${endMin} (${startTotalMin}-${endTotalMin})")
+                }
                 
                 val isWithinRange = if (startTotalMin <= endTotalMin) {
                     currentTotalMin in startTotalMin..endTotalMin
@@ -660,5 +832,26 @@ class AppMonitorService : Service() {
                 e.printStackTrace()
             }
         }
+    }
+
+    private fun isAmnestyActive(): Boolean {
+        val expiry = prefs.getLong("amnesty_expiry", 0L)
+        if (expiry <= 0L) return false
+
+        val now = System.currentTimeMillis()
+        if (now >= expiry) {
+            prefs.edit().putLong("amnesty_expiry", 0L).apply()
+            return false
+        }
+
+        if (now - lastAmnestyLogAt > 15_000L) {
+            lastAmnestyLogAt = now
+            val remainingSec = (expiry - now) / 1000L
+            android.util.Log.d(
+                "RevokeAmnesty",
+                "Amnesty active. Monitoring paused (${remainingSec}s remaining)."
+            )
+        }
+        return true
     }
 }

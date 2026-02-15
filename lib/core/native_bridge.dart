@@ -35,6 +35,11 @@ class NativeBridge {
     await _channel.invokeMethod('requestOverlay');
   }
 
+  /// Requests an exemption from battery optimizations (best effort).
+  static Future<void> requestBatteryOptimizations() async {
+    await _channel.invokeMethod('requestBatteryOptimizations');
+  }
+
   /// Fetches a list of installed apps.
   static Future<List<Map<String, dynamic>>> getInstalledApps() async {
     final List<dynamic> result = await _channel.invokeMethod(
@@ -84,5 +89,10 @@ class NativeBridge {
       'getTemporaryApprovals',
     );
     return result.map((e) => e.toString()).toList();
+  }
+
+  /// Pauses native monitoring/enforcement for a duration in minutes.
+  static Future<void> pauseMonitoring(int minutes) async {
+    await _channel.invokeMethod('pauseMonitoring', {'minutes': minutes});
   }
 }

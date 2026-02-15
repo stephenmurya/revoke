@@ -17,12 +17,17 @@ class ControlsHubScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppSemanticColors.background,
+      appBar: AppBar(
+        backgroundColor: AppSemanticColors.background,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: Text('Controls', style: AppTheme.h2),
+      ),
       body: SafeArea(
+        top: false,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
           children: [
-            const _ControlsTitle(),
-            const SizedBox(height: 16),
             ..._controlsSections.map(
               (section) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -106,15 +111,6 @@ class _ControlsTile extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _ControlsTitle extends StatelessWidget {
-  const _ControlsTitle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Text('Controls', style: AppTheme.h2);
   }
 }
 

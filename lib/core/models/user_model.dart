@@ -8,6 +8,7 @@ class UserModel {
   final String? fullName;
   final String? photoUrl;
   final String? nickname;
+  final String? currentStatus;
   final int focusScore;
   final List<int> scoreHistory;
   final DateTime? createdAt;
@@ -20,6 +21,7 @@ class UserModel {
     this.fullName,
     this.photoUrl,
     this.nickname,
+    this.currentStatus,
     required this.focusScore,
     this.scoreHistory = const [],
     this.createdAt,
@@ -49,6 +51,7 @@ class UserModel {
       fullName: json['fullName'] as String?,
       photoUrl: json['photoUrl'] as String?,
       nickname: json['nickname'] as String?,
+      currentStatus: (json['currentStatus'] as String?)?.trim(),
       focusScore: score,
       scoreHistory: history,
       createdAt: (json['createdAt'] as Timestamp?)?.toDate(),
@@ -64,6 +67,7 @@ class UserModel {
       'fullName': fullName,
       'photoUrl': photoUrl,
       'nickname': nickname,
+      'currentStatus': currentStatus,
       'focusScore': focusScore,
       'scoreHistory': scoreHistory,
       'createdAt': createdAt != null

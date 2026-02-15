@@ -49,3 +49,4 @@ functions/.env.*
 functions/firebase-debug.log
 functions/firestore-debug.log
 functions/ui-debug.log
+functions/scripts/*

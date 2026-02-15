@@ -7,7 +7,6 @@ import '../../core/native_bridge.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/squad_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../squad/tribunal_screen.dart';
 
 class BegForTimeScreen extends StatefulWidget {
   final String appName;
@@ -79,9 +78,9 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
       );
 
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => TribunalScreen(pleaId: newPleaId)),
-      );
+      // Use go_router so this opens as the canonical full-screen route, and
+      // so the MainShell HUD header does not remain visible.
+      context.go('/tribunal/$newPleaId');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(

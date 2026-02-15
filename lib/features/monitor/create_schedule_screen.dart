@@ -69,11 +69,14 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       durationLimit: _selectedType == ScheduleType.usageLimit
           ? Duration(hours: _limitHours, minutes: _limitMinutes)
           : null,
-      isActive: widget.existingSchedule?.isActive ?? true,
+      // Always activate immediately after save; user can disable later.
+      isActive: true,
     );
 
     await ScheduleService.saveSchedule(schedule);
-    if (mounted) Navigator.pop(context);
+    if (!mounted) return;
+    // Local-first: go back immediately; cloud save happens in the background.
+    Navigator.pop(context);
   }
 
   @override

@@ -13,6 +13,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await NotificationService.initialize();
+  await NotificationService.subscribeToGlobalCitizensTopic();
   await AuthService.initializeMessagingTokenSync();
   NativeBridge.setupOverlayListener();
   ScoringService.initializePeriodicSync();

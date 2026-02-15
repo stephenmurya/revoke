@@ -3,13 +3,17 @@ import 'package:go_router/go_router.dart';
 import '../features/navigation/main_shell.dart';
 import '../features/navigation/placeholder_screen.dart';
 import '../features/regimes/regimes_screen.dart';
+import '../features/regimes/challenges_screen.dart';
 import '../features/squad/squad_screen.dart';
 import '../features/squad/tribunal_screen.dart';
 import '../features/overlay/lock_screen.dart';
 import '../features/permissions/permission_screen.dart';
 import '../features/home/focus_score_detail_screen.dart';
 import '../features/plea/plea_compose_screen.dart';
+import '../features/monitor/create_schedule_screen.dart';
 import '../features/settings/controls_hub_screen.dart';
+import '../features/admin/god_mode_dashboard.dart';
+import '../core/models/schedule_model.dart';
 
 import '../core/services/auth_service.dart';
 import '../features/auth/onboarding_screen.dart';
@@ -36,9 +40,8 @@ class AppRouter {
 
   static bool _isShellLocation(String location) {
     return location == '/home' ||
-        location == '/squad' ||
-        location == '/analytics' ||
-        location == '/controls';
+        location == '/challenges' ||
+        location == '/squad';
   }
 
   static void clearSessionCaches() {
@@ -87,7 +90,9 @@ class AppRouter {
     _pendingPermissionsCheck ??= NativeBridge.checkPermissions()
         .then((perms) {
           final hasAll =
-              (perms['usage_stats'] ?? false) && (perms['overlay'] ?? false);
+              (perms['usage_stats'] ?? false) &&
+              (perms['overlay'] ?? false) &&
+              (perms['battery_optimization_ignored'] ?? false);
           _cachedHasAllPermissions = hasAll;
           _cachedPermissionsAt = DateTime.now();
           return hasAll;
@@ -206,20 +211,33 @@ class AppRouter {
             path: '/home',
             builder: (context, state) => const RegimesScreen(),
           ),
+          // Legacy route alias (pre-rename). Keeps older deep links / restored state working.
+          GoRoute(
+            path: '/marketplace',
+            redirect: (context, state) => '/challenges',
+          ),
+          GoRoute(
+            path: '/challenges',
+            builder: (context, state) => const ChallengesScreen(),
+          ),
           GoRoute(
             path: '/squad',
             builder: (context, state) => const SquadScreen(),
           ),
-          GoRoute(
-            path: '/analytics',
-            builder: (context, state) =>
-                const PlaceholderScreen(title: 'Analytics'),
-          ),
-          GoRoute(
-            path: '/controls',
-            builder: (context, state) => const ControlsHubScreen(),
-          ),
         ],
+      ),
+      GoRoute(
+        path: '/analytics',
+        builder: (context, state) => const PlaceholderScreen(title: 'Analytics'),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) =>
+            const PlaceholderScreen(title: 'Notifications'),
+      ),
+      GoRoute(
+        path: '/controls',
+        builder: (context, state) => const ControlsHubScreen(),
       ),
       GoRoute(
         path: '/lock_screen',
@@ -247,6 +265,24 @@ class AppRouter {
       GoRoute(
         path: '/focus-score',
         builder: (context, state) => const FocusScoreDetailScreen(),
+      ),
+      GoRoute(
+        path: '/regime/new',
+        builder: (context, state) => const CreateScheduleScreen(),
+      ),
+      GoRoute(
+        path: '/regime/edit',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is ScheduleModel) {
+            return CreateScheduleScreen(existingSchedule: extra);
+          }
+          return const CreateScheduleScreen();
+        },
+      ),
+      GoRoute(
+        path: '/god-mode',
+        builder: (context, state) => const GodModeDashboard(),
       ),
       GoRoute(
         path: '/tribunal/:pleaId',

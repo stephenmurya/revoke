@@ -11,6 +11,7 @@ import 'auth_service.dart';
 class RegimeService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _legacyKey = 'regime_schedules';
+  static const String _keyPrefix = 'regime_schedules_';
   static final Set<String> _migratedUsers = <String>{};
 
   static Future<String> _requireUid() async {
@@ -32,6 +33,23 @@ class RegimeService {
   static CollectionReference<Map<String, dynamic>> _regimesRef(String uid) {
     return _firestore.collection('users').doc(uid).collection('regimes');
   }
+
+  // Cross-user access: used by Squad HUD. Returns only enabled regimes.
+  // Note: This must be allowed by Firestore security rules (same-squad read).
+  static Future<List<ScheduleModel>> getRegimesForUser(String userId) async {
+    final normalized = userId.trim();
+    if (normalized.isEmpty) return const <ScheduleModel>[];
+    try {
+      final snapshot = await _regimesRef(normalized)
+          .where('isEnabled', isEqualTo: true)
+          .get();
+      return snapshot.docs.map(_fromFirestore).toList();
+    } catch (_) {
+      return const <ScheduleModel>[];
+    }
+  }
+
+  static String _localKeyForUid(String uid) => '$_keyPrefix$uid';
 
   static String _timeToString(TimeOfDay? time) {
     if (time == null) return '';
@@ -139,7 +157,18 @@ class RegimeService {
       return;
     }
 
-    final localRaw = prefs.getString(_legacyKey);
+    // Prefer per-user cache; fall back to legacy global key.
+    final perUserKey = _localKeyForUid(uid);
+    String? localRaw = prefs.getString(perUserKey);
+    if (localRaw == null || localRaw.trim().isEmpty) {
+      localRaw = prefs.getString(_legacyKey);
+      // If we found legacy data, re-home it under the user-scoped key to prevent
+      // cross-account leakage on the same device.
+      if (localRaw != null && localRaw.trim().isNotEmpty) {
+        await prefs.setString(perUserKey, localRaw);
+        await prefs.remove(_legacyKey);
+      }
+    }
     if (localRaw != null && localRaw.trim().isNotEmpty) {
       try {
         final existing = await _regimesRef(uid).limit(1).get();

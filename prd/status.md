@@ -2,7 +2,7 @@
 
 ## Completed
 - [x] Project Foundation & Permissions (Usage Stats, Overlay, Wallpaper, etc.)
-- [x] Design System (Black/Orange, Space Grotesk/Mono fonts)
+- [x] Design System (Black/Orange base palette + centralized theme system)
 - [x] Core Navigation Shell
 - [x] App Discovery (Fetching installed user apps with icons)
 - [x] Local Persistence (Saving restricted apps using SharedPreferences)
@@ -64,11 +64,24 @@
 - [x] Tribunal Rename + Routing (JudgementChatScreen renamed to TribunalScreen)
 - [x] Auto Tribunal Jump (BegForTime submit now pushReplacement into Tribunal)
 - [x] Tribunal Live Scoreboard (REJECT/APPROVE counters with winning-side color emphasis)
+- [x] Server-Authoritative Pleas (callables for create/vote/join/message + server-only plea mutations)
+- [x] Deadlock Fix (Requester excluded from eligible voter set in server verdict resolution)
+- [x] Firestore Rules Hardening (plea doc client writes disabled; chat writes via callable; same-squad user reads)
+- [x] Anti-spam Backend Throttles (plea + message rolling limits in callable layer)
+- [x] Stale Session Auto-finalization (scheduled timeout resolves long-active pleas server-side)
+- [x] Plea Lifecycle Cleanup (scheduled deletion of resolved/marked pleas + messages)
+- [x] Android Boot Restart (BOOT_COMPLETED receiver restarts AppMonitorService)
+- [x] Android Service Reliability (self-health tick + restart-on-task-removal strategy)
+- [x] Adaptive Polling (2s/5s/9s tiers + skip when screen off; reduced heavy checks)
+- [x] Battery Optimization Gate (explicit permission requirement in permissions UX and service start gating)
+- [x] Admin Flow Consolidation (GodModeDashboard is primary; legacy GodModeScreen removed)
 
 ## In Progress
 - [ ] Onboarding Final Polish (copy tuning + micro-interactions)
 - [ ] Website Blocker Flow Consolidation (single-source bottom sheet behavior)
 - [x] Social Hard-Lock (Squad Invites)
+- [ ] Option A Vote Subcollection Migration (reduce long-term integrity complexity)
+- [ ] Production Hardening Pass (remove debug prints, add index docs, emulator tests)
 
 ## Backlog
 - [ ] Vandalism Feature (Wallpaper changing)

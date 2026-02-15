@@ -5,6 +5,7 @@ class PleaMessageModel {
   final String senderId;
   final String senderName;
   final String text;
+  final bool isSystem;
   final DateTime timestamp;
 
   PleaMessageModel({
@@ -12,6 +13,7 @@ class PleaMessageModel {
     required this.senderId,
     required this.senderName,
     required this.text,
+    required this.isSystem,
     required this.timestamp,
   });
 
@@ -21,6 +23,7 @@ class PleaMessageModel {
       senderId: json['senderId'] as String? ?? '',
       senderName: json['senderName'] as String? ?? 'Member',
       text: json['text'] as String? ?? '',
+      isSystem: json['isSystem'] as bool? ?? false,
       timestamp: (json['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -30,6 +33,7 @@ class PleaMessageModel {
       'senderId': senderId,
       'senderName': senderName,
       'text': text,
+      'isSystem': isSystem,
       'timestamp': Timestamp.fromDate(timestamp),
     };
   }

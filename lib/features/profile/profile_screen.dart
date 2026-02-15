@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -16,17 +17,50 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late Future<Map<String, dynamic>?> _userDataFuture;
   bool _isSavingNickname = false;
+  bool _isGodMode = false;
 
   @override
   void initState() {
     super.initState();
     _userDataFuture = AuthService.getUserData();
+    _initializeStealthGodMode();
   }
 
   void _refreshUserData() {
     setState(() {
       _userDataFuture = AuthService.getUserData();
     });
+  }
+
+  Future<void> _loadAdminClaim({bool forceRefresh = false}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final tokenResult = await user.getIdTokenResult(forceRefresh);
+      final claims = tokenResult.claims ?? const <String, dynamic>{};
+      final isAdmin = claims['admin'] == true;
+      if (!mounted) return;
+      setState(() => _isGodMode = isAdmin);
+    } catch (_) {
+      // Non-fatal: profile UI should remain usable without claim visibility.
+    }
+  }
+
+  Future<void> _initializeStealthGodMode() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final email = user.email?.trim().toLowerCase() ?? '';
+    if (email != 'stephenmurya@gmail.com') {
+      if (!mounted) return;
+      setState(() => _isGodMode = false);
+      return;
+    }
+
+    try {
+      await user.getIdToken(true);
+    } catch (_) {}
+
+    await _loadAdminClaim(forceRefresh: true);
   }
 
   @override
@@ -87,6 +121,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         : null,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_isGodMode)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppSemanticColors.danger,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'GOD MODE',
+                          style: AppTheme.smBold.copyWith(
+                            color: AppSemanticColors.onDangerText,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 32),
 
                 // Info Cards
@@ -98,6 +156,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   "SQUAD NICKNAME",
                   userData['nickname'] ?? "No Nickname",
                 ),
+
+                if (_isGodMode) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => context.push('/god-mode'),
+                      style: AppTheme.primaryButtonStyle,
+                      icon: const Icon(Icons.visibility_rounded),
+                      label: const Text('Admin Dashboard'),
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 60),
 
@@ -271,7 +342,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _handleLogout(BuildContext context) {
-    context.go('/onboarding?force_auth=1');
     unawaited(AuthService.signOut().catchError((_) {}));
   }
 
@@ -326,7 +396,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: ElevatedButton(
                         onPressed: () async {
                           Navigator.pop(context);
-                          context.go('/onboarding?force_auth=1');
                           unawaited(
                             AuthService.deleteAccount().catchError((_) {}),
                           );
