@@ -18,6 +18,7 @@ Primary platform: Android. iOS scaffolding exists, but enforcement is Android-on
 - **Focus Score**
   - Animated Focus Score card, rank titles, and a dedicated explainer/details screen.
   - Score is surfaced throughout the app (0-1000 scale).
+  - The Focus Score detail page explains scoring drivers (penalties/rewards) with progressive disclosure (chips + "show the math").
 - **Squads**
   - Create/join squads via code, share squad code, and monitor member state.
   - **Squad HUD 2.0 ("The Barracks")**
@@ -25,6 +26,7 @@ Primary platform: Android. iOS scaffolding exists, but enforcement is Android-on
     - **Roster Strip**: status rings (`locked_in`, `vulnerable`, `idle`) + focus score pill per member.
     - **Squad Log**: dense timeline feed of audit events.
     - Member drilldown: tap a roster member to open their **Rap Sheet** (protocols, blacklist summary, plea stats).
+  - Pillory actions (callable-backed): Cast Stone (shame), Pray For (support), Post Bail (50-point transfer).
 - **Tribunals (Plea Sessions)**
   - Server-authoritative plea lifecycle via Cloud Functions callables.
   - Squad notification fanout via FCM.
@@ -34,6 +36,11 @@ Primary platform: Android. iOS scaffolding exists, but enforcement is Android-on
 - **Admin ("God Mode")**
   - Admin dashboard (claim-gated) for tribunal simulation and privileged operations.
   - Mock tribunal creation/destruction tools for testing the full lifecycle.
+  - Broadcast mandates: send a system-wide FCM message from the admin rail.
+- **Controls + Appearance**
+  - Personal HUD avatar routes directly to `Controls`.
+  - Controls Hub is searchable and routes into focused settings sub-pages.
+  - Appearance screen: ThemeMode (System/Light/Dark) + "Revoke" accent palette.
 
 ## Backend + Security Model
 - Firebase Auth (Google Sign-In).
@@ -45,13 +52,14 @@ Primary platform: Android. iOS scaffolding exists, but enforcement is Android-on
   - `/pleas/{pleaId}` + `/pleas/{pleaId}/messages/{messageId}` tribunal sessions.
 - Cloud Functions (Node.js 22):
   - Callables for plea creation/voting/joining/messaging, user status updates.
+  - Callables for Pillory interactions (castStone / prayFor / postBail).
   - Triggers for verdict resolution and push notification fanout.
   - Scheduled tasks for stale session finalization and data cleanup.
 - Rules: client writes to pleas are blocked; messaging is callable-authoritative; squad logs are server-written.
 
 ## UX Direction
 Revoke is intentionally judgmental.
-- Black/orange base palette with high-contrast “system” language.
+- Black/orange base palette with high-contrast "system" language.
 - Dense, data-forward surfaces that make behavior visible.
 - Tap-first interactions: drilldowns, copy actions, modal sheets, and fast navigation.
 
@@ -59,6 +67,7 @@ Revoke is intentionally judgmental.
 - Finish the **Challenges** pillar beyond the placeholder screen.
 - Rap Sheet hardening:
   - secure access rules or server-derived member snapshots for cross-user regime visibility
-  - implement reactions (“Salute”) as callable-backed writes
+  - implement reactions ("Salute") as callable-backed writes
 - Vote subcollection migration (optional PRD milestone) to simplify long-term integrity.
 - Production hardening pass: remove debug prints, add index docs, emulator tests, and OEM reliability checks.
+

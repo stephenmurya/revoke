@@ -1,6 +1,6 @@
 # Revoke Project Status
 
-Last updated: Feb 15, 2026
+Last updated: Feb 16, 2026
 
 Source of truth: repository implementation + PRD (`prd/prd.md`).
 
@@ -20,9 +20,12 @@ Source of truth: repository implementation + PRD (`prd/prd.md`).
 - [x] Native Schedule Sync (active regimes synced to Kotlin service)
 - [x] Home (Monitor) Dashboard (Focus Score + currently restricted + active regimes)
 - [x] Focus Score System (card + detail page)
+- [x] Focus Score Explainer UX (driver chips + "show the math" progressive disclosure + live scoringMeta fields)
 - [x] Core Navigation Shell (3 primary pillars: Home/Monitor, Squad, Challenges)
 - [x] Personal HUD Header (brand cluster + notifications/analytics + avatar -> controls)
 - [x] Challenges Pillar (placeholder screen + route + legacy alias)
+- [x] Controls Hub UX refresh (search + minimal list styling + Phosphor icons)
+- [x] Appearance Screen (ThemeMode + accent palette) wired to dynamic ThemeService
 - [x] Firebase Auth (Google Sign-In) + token refresh sync for FCM
 - [x] Smart Onboarding Resume (squad/profile-based redirect flow)
 - [x] Squad Data Layer (User & Squad models + create/join)
@@ -41,12 +44,15 @@ Source of truth: repository implementation + PRD (`prd/prd.md`).
 - [x] Roster strip with status rings + score pill
 - [x] Squad log feed (timeline UI; reactions stubbed)
 - [x] Member Rap Sheet sheet (protocols, blacklist summary, plea stats)
+- [x] Pillory Interaction Actions (Callable-backed Cast Stone / Pray For / Post Bail)
+- [x] Admin Broadcast Mandates (God Mode command rail -> broadcastSystemMandate callable)
 
 ## In Progress
 - [ ] Onboarding Final Polish (copy tuning + micro-interactions)
 - [ ] Website Blocker Flow Consolidation (single-source behavior + eliminate duplicate entry points)
 - [ ] Squad Log Reactions (implement callable-backed "salute" reactions, not stub)
 - [ ] Member Rap Sheet correctness hardening (secure cross-user regime visibility; see Next Steps)
+- [ ] Focus Score stats integrity (track real blocked-attempt events + align "stats" to true sources)
 - [ ] Production Hardening Pass (remove debug prints, add index docs, emulator tests)
 - [ ] Option A Vote Subcollection Migration (PRD milestone: votes as subcollection)
 
@@ -55,6 +61,7 @@ Source of truth: repository implementation + PRD (`prd/prd.md`).
 - [ ] Build a safe member snapshot for Rap Sheet
 - [ ] Challenges pillar implementation beyond placeholder
 - [ ] Notifications + Analytics pages (currently placeholders) and real dashboards
+- [ ] Focus Score: make "stats" real (blocked attempts, verdict impacts, consistency inputs) and document data sources on the detail screen
 - [ ] OEM reliability hardening (WorkManager fallback + stronger "service running" UX)
 - [ ] iOS strategy decision (scaffold only vs enforcement parity plan)
 
