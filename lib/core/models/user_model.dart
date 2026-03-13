@@ -14,6 +14,7 @@ class UserModel {
   final DateTime? createdAt;
   final String? squadId;
   final String? squadCode;
+  final Map<String, dynamic> notificationPrefs;
 
   UserModel({
     required this.uid,
@@ -27,6 +28,7 @@ class UserModel {
     this.createdAt,
     this.squadId,
     this.squadCode,
+    this.notificationPrefs = const <String, dynamic>{},
   });
 
   ScoreTrend get scoreTrend {
@@ -38,29 +40,42 @@ class UserModel {
     return ScoreTrend.neutral;
   }
 
-  factory UserModel.fromJson(Map<String, dynamic> json) {
-    final int score = (json['focusScore'] as num?)?.toInt() ?? 500;
+  bool get wantsShameAlerts => notificationPrefs['shameAlerts'] != false;
+  bool get wantsPleaRequests => notificationPrefs['pleaRequests'] != false;
+  bool get wantsVerdicts => notificationPrefs['verdicts'] != false;
+
+  factory UserModel.fromMap(Map<String, dynamic> map) {
+    final int score = (map['focusScore'] as num?)?.toInt() ?? 500;
     final List<int> history = List<int>.from(
-      (json['scoreHistory'] as List?)?.map((e) => (e as num).toInt()) ??
+      (map['scoreHistory'] as List?)?.map((e) => (e as num).toInt()) ??
           <int>[score],
     );
+    final rawPrefs = map['notificationPrefs'];
+    final prefs = rawPrefs is Map
+        ? Map<String, dynamic>.from(rawPrefs)
+        : <String, dynamic>{};
 
     return UserModel(
-      uid: json['uid'] as String,
-      email: json['email'] as String?,
-      fullName: json['fullName'] as String?,
-      photoUrl: json['photoUrl'] as String?,
-      nickname: json['nickname'] as String?,
-      currentStatus: (json['currentStatus'] as String?)?.trim(),
+      uid: map['uid'] as String,
+      email: map['email'] as String?,
+      fullName: map['fullName'] as String?,
+      photoUrl: map['photoUrl'] as String?,
+      nickname: map['nickname'] as String?,
+      currentStatus: (map['currentStatus'] as String?)?.trim(),
       focusScore: score,
       scoreHistory: history,
-      createdAt: (json['createdAt'] as Timestamp?)?.toDate(),
-      squadId: json['squadId'] as String?,
-      squadCode: json['squadCode'] as String?,
+      createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
+      squadId: map['squadId'] as String?,
+      squadCode: map['squadCode'] as String?,
+      notificationPrefs: prefs,
     );
   }
 
-  Map<String, dynamic> toJson() {
+  factory UserModel.fromJson(Map<String, dynamic> json) {
+    return UserModel.fromMap(json);
+  }
+
+  Map<String, dynamic> toMap() {
     return {
       'uid': uid,
       'email': email,
@@ -75,6 +90,11 @@ class UserModel {
           : FieldValue.serverTimestamp(),
       'squadId': squadId,
       'squadCode': squadCode,
+      'notificationPrefs': notificationPrefs,
     };
+  }
+
+  Map<String, dynamic> toJson() {
+    return toMap();
   }
 }

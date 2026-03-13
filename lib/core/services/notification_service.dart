@@ -3,8 +3,12 @@ import 'dart:math';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import '../native_bridge.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+
+import '../app_router.dart';
 import 'theme_service.dart';
 
 @pragma('vm:entry-point')
@@ -14,6 +18,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 class NotificationService {
+  static const MethodChannel _amnestyBridge = MethodChannel(
+    'com.revoke.app/overlay',
+  );
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -30,19 +37,6 @@ class NotificationService {
 
   static bool _initialized = false;
   static bool _localNotificationsInitialized = false;
-  static void Function(String pleaId)? _onPleaJudgementTap;
-  static String? _pendingPleaId;
-
-  static void registerPleaJudgementTapHandler(
-    void Function(String pleaId) handler,
-  ) {
-    _onPleaJudgementTap = handler;
-    final pending = _pendingPleaId;
-    if (pending != null && pending.isNotEmpty) {
-      _pendingPleaId = null;
-      handler(pending);
-    }
-  }
 
   static Future<void> initialize() async {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -76,18 +70,15 @@ class NotificationService {
       provisional: true,
       sound: true,
     );
-    print(
-      'FCM_DEBUG: Notification permission status = ${settings.authorizationStatus.name}',
-    );
+    if (settings.authorizationStatus == AuthorizationStatus.denied) {
+      // Best-effort only. App remains usable even if notifications are denied.
+    }
   }
 
   static Future<void> _subscribeToGlobalTopic() async {
     try {
       await _messaging.subscribeToTopic('global_citizens');
-      print('FCM_DEBUG: Subscribed to topic global_citizens');
-    } catch (e) {
-      print('FCM_DEBUG: Failed to subscribe to global_citizens: $e');
-    }
+    } catch (_) {}
   }
 
   static Future<void> _initializeLocalNotifications() async {
@@ -140,15 +131,8 @@ class NotificationService {
               : 'You have a new notification.');
 
       if (title.trim().isEmpty && body.trim().isEmpty) {
-        print(
-          'FCM_DEBUG: Foreground message ignored (empty title/body). id=${message.messageId}',
-        );
         return;
       }
-
-      print(
-        'FCM_DEBUG: Foreground message displayed. id=${message.messageId} data=${message.data}',
-      );
 
       await _showForegroundNotification(
         title: title,
@@ -168,41 +152,104 @@ class NotificationService {
   }
 
   static void _handleRemoteNotificationTap(RemoteMessage message) {
-    final type = message.data['type']?.toString().trim().toLowerCase();
-    final pleaId = message.data['pleaId']?.toString().trim();
-    if (type == 'plea_judgement' && pleaId != null && pleaId.isNotEmpty) {
-      _dispatchPleaTap(pleaId);
-    }
+    final route = _resolveTapRoute(message.data);
+    if (route == null || route.isEmpty) return;
+    _pushRoute(route);
   }
 
   static void _handleLocalNotificationTap(String? payload) {
     if (payload == null || payload.trim().isEmpty) return;
     try {
       final decoded = jsonDecode(payload) as Map<String, dynamic>;
-      final type = decoded['type']?.toString().trim().toLowerCase();
-      final pleaId = decoded['pleaId']?.toString().trim();
-      if (type == 'plea_judgement' && pleaId != null && pleaId.isNotEmpty) {
-        _dispatchPleaTap(pleaId);
-      }
+      final route = _resolveTapRoute(decoded);
+      if (route == null || route.isEmpty) return;
+      _pushRoute(route);
     } catch (_) {}
   }
 
-  static void _dispatchPleaTap(String pleaId) {
-    if (_onPleaJudgementTap != null) {
-      _onPleaJudgementTap!(pleaId);
-      return;
+  static void _pushRoute(String route) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        AppRouter.router.push(route);
+      } catch (_) {
+        // Best-effort routing. App-level navigation guards still apply.
+      }
+    });
+  }
+
+  static String? _resolveTapRoute(Map<String, dynamic> data) {
+    final type = _normalizeTapType(data['type']?.toString());
+    final pleaId = _extractPleaId(data);
+    final hasPleaId = pleaId != null && pleaId.isNotEmpty;
+    final isTribunal = type == 'plea' || type == 'verdict';
+
+    if (isTribunal && hasPleaId) {
+      return '/tribunal/$pleaId';
     }
-    _pendingPleaId = pleaId;
+
+    if (hasPleaId && type.isEmpty) {
+      return '/tribunal/$pleaId';
+    }
+
+    if (type.isNotEmpty) {
+      return '/notifications';
+    }
+
+    return null;
+  }
+
+  static String _normalizeTapType(String? rawType) {
+    final normalized = rawType?.trim().toLowerCase() ?? '';
+    switch (normalized) {
+      case 'plea_judgement':
+      case 'plea_request':
+      case 'plea-created':
+        return 'plea';
+      case 'verdict_reached':
+        return 'verdict';
+      case 'strength':
+      case 'freedom':
+        return 'support';
+      case 'system_mandate':
+      case 'broadcast':
+        return 'system';
+      default:
+        return normalized;
+    }
+  }
+
+  static String? _extractPleaId(Map<String, dynamic> data) {
+    final direct = data['pleaId']?.toString().trim();
+    if (direct != null && direct.isNotEmpty) return direct;
+
+    final metadataField = data['metadata'];
+    if (metadataField is String && metadataField.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(metadataField);
+        if (decoded is Map) {
+          final nested = decoded['pleaId']?.toString().trim();
+          if (nested != null && nested.isNotEmpty) return nested;
+        }
+      } catch (_) {}
+    }
+
+    if (metadataField is Map) {
+      final nested = metadataField['pleaId']?.toString().trim();
+      if (nested != null && nested.isNotEmpty) return nested;
+    }
+
+    return null;
   }
 
   static bool _isPleaMessage(RemoteMessage message) {
-    final type =
-        message.data['type']?.toString().toLowerCase() ??
-        message.data['event']?.toString().toLowerCase() ??
-        message.data['kind']?.toString().toLowerCase() ??
-        '';
-    if (type.contains('plea')) return true;
-    if (message.data.containsKey('pleaId')) return true;
+    final type = _normalizeTapType(
+      message.data['type']?.toString() ??
+          message.data['event']?.toString() ??
+          message.data['kind']?.toString(),
+    );
+    if (type == 'plea' || type == 'verdict') return true;
+    final pleaId = _extractPleaId(message.data);
+    if (pleaId != null && pleaId.isNotEmpty) return true;
 
     final notificationText =
         '${message.notification?.title ?? ''} ${message.notification?.body ?? ''}'
@@ -239,10 +286,17 @@ class NotificationService {
     );
 
     String? payload;
-    final type = data?['type']?.toString().trim().toLowerCase();
-    final pleaId = data?['pleaId']?.toString().trim();
-    if (type == 'plea_judgement' && pleaId != null && pleaId.isNotEmpty) {
-      payload = jsonEncode({'type': 'plea_judgement', 'pleaId': pleaId});
+    final payloadData = <String, dynamic>{};
+    final normalizedType = _normalizeTapType(data?['type']?.toString());
+    if (normalizedType.isNotEmpty) {
+      payloadData['type'] = normalizedType;
+    }
+    final pleaId = data == null ? null : _extractPleaId(data);
+    if (pleaId != null && pleaId.isNotEmpty) {
+      payloadData['pleaId'] = pleaId;
+    }
+    if (payloadData.isNotEmpty) {
+      payload = jsonEncode(payloadData);
     }
 
     final notificationId = Random().nextInt(1 << 31);
@@ -259,17 +313,27 @@ class NotificationService {
     final type = message.data['type']?.toString().trim().toUpperCase();
     if (type != 'AMNESTY') return false;
 
-    final rawDuration = message.data['duration']?.toString().trim() ?? '60';
+    final rawDuration =
+        message.data['durationMinutes']?.toString().trim() ??
+        message.data['duration']?.toString().trim() ??
+        '60';
     final durationMinutes = int.tryParse(rawDuration) ?? 60;
 
-    try {
-      await NativeBridge.pauseMonitoring(durationMinutes);
-    } catch (e) {
-      print('FCM_DEBUG: Failed to pause monitoring for amnesty: $e');
-    }
+    await _broadcastAmnestyIntent(durationMinutes);
 
     await _showAmnestyNotification(durationMinutes);
     return true;
+  }
+
+  static Future<void> _broadcastAmnestyIntent(int durationMinutes) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _amnestyBridge.invokeMethod('broadcastAmnestyGranted', {
+        'durationMinutes': durationMinutes,
+      });
+    } catch (_) {
+      // Best-effort only. Native FCM receiver is the primary fallback path.
+    }
   }
 
   static Future<void> _showAmnestyNotification(int durationMinutes) async {

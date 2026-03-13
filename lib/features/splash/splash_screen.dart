@@ -71,7 +71,9 @@ class _SplashScreenState extends State<SplashScreen> {
       setState(() => _status = 'Checking permissions...');
       final perms = await NativeBridge.checkPermissions();
       final hasAll =
-          (perms['usage_stats'] ?? false) && (perms['overlay'] ?? false);
+          (perms['usage_stats'] ?? false) &&
+          (perms['overlay'] ?? false) &&
+          (perms['exact_alarm'] ?? false);
 
       if (!hasAll) {
         if (mounted) context.go('/permissions');

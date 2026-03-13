@@ -19,12 +19,6 @@ service cloud.firestore {
         resource.data.memberIds.hasAny([request.auth.uid]);
     }
 
-    function isResultingSquadMember() {
-      return signedIn() &&
-        request.resource.data.memberIds is list &&
-        request.resource.data.memberIds.hasAny([request.auth.uid]);
-    }
-
     function currentUserSquadId() {
       return signedIn()
         ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.squadId
@@ -69,27 +63,76 @@ service cloud.firestore {
           messageData.isSystem == false);
     }
 
+    function canMarkNotificationRead() {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(['isRead']) &&
+        request.resource.data.isRead is bool;
+    }
+
+    function canBootstrapOwnSquadId() {
+      return resource.data.squadId == null &&
+        request.resource.data.squadId is string &&
+        getAfter(/databases/$(database)/documents/squads/$(request.resource.data.squadId)).data.memberIds is list &&
+        getAfter(/databases/$(database)/documents/squads/$(request.resource.data.squadId)).data.memberIds.size() == 1 &&
+        getAfter(/databases/$(database)/documents/squads/$(request.resource.data.squadId)).data.memberIds.hasAny([request.auth.uid]);
+    }
+
+    function canUpdateOwnUserDoc(userId) {
+      return isSelf(userId) &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['squadId']) ||
+          request.resource.data.squadId == null ||
+          canBootstrapOwnSquadId()
+        );
+    }
+
+    function squadHasNoMembers() {
+      return !(resource.data.memberIds is list) || resource.data.memberIds.size() == 0;
+    }
+
     // User profiles
     match /users/{userId} {
       // Self read or same-squad read.
       allow read: if isAdmin() || canReadUserDoc(userId, resource.data);
 
       // Own profile management (create/update/delete account doc)
-      allow create, update, delete: if isAdmin() || isSelf(userId);
+      allow create: if isAdmin() || isSelf(userId);
+      allow update: if isAdmin() || canUpdateOwnUserDoc(userId);
+      allow delete: if isAdmin() || isSelf(userId);
 
       // Cloud-synced regimes live under the user's document.
       match /regimes/{regimeId} {
         allow read, write: if isAdmin() || isSelf(userId);
       }
+
+      // Canonical score event stream (server-written).
+      match /scoreEvents/{eventId} {
+        allow read: if isAdmin() || isSelf(userId);
+        allow create, update, delete: if false;
+      }
+
+      // Daily score stats rollups (server-written).
+      match /focusStats/{dayId} {
+        allow read: if isAdmin() || isSelf(userId);
+        allow create, update, delete: if false;
+      }
+
+      // Persistent in-app notifications (server-written; user can only mark read state).
+      match /notifications/{notificationId} {
+        allow read: if isAdmin() || isSelf(userId);
+        allow update: if isAdmin() || (isSelf(userId) && canMarkNotificationRead());
+        allow create, delete: if false;
+      }
     }
 
     // Squad collaboration
     match /squads/{squadId} {
-      allow create, read: if isAdmin() || signedIn();
+      allow create: if isAdmin() || signedIn();
+      allow read: if isAdmin() || isCurrentSquadMember();
 
       // Allows joining/leaving/updating squad membership for authenticated users
       // and supports deleting an emptied squad during account delete/leave flow.
-      allow update, delete: if isAdmin() || isCurrentSquadMember() || isResultingSquadMember();
+      allow update: if isAdmin() || isCurrentSquadMember() || (signedIn() && squadHasNoMembers());
+      allow delete: if isAdmin() || isCurrentSquadMember();
 
       // Squad log (server-written audit trail)
       match /logs/{logId} {
@@ -115,6 +158,14 @@ service cloud.firestore {
         // Admin clients may still write system messages directly if needed.
         allow create: if isAdmin();
         allow update, delete: if false;
+      }
+
+      // Canonical vote documents (server-only writes via callables/Admin SDK).
+      match /votes/{voteUid} {
+        allow read: if isAdmin() || (signedIn() &&
+          (canAccessPleaData(get(/databases/$(database)/documents/pleas/$(pleaId)).data) ||
+            isMockPlea(get(/databases/$(database)/documents/pleas/$(pleaId)).data)));
+        allow create, update, delete: if false;
       }
     }
     

@@ -1,4 +1,4 @@
-package com.example.revoke
+package com.crescence.revoke
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -24,6 +24,14 @@ import androidx.core.app.NotificationCompat
 import org.json.JSONObject
 
 class AppMonitorService : Service() {
+    companion object {
+        @Volatile
+        private var running: Boolean = false
+
+        fun isRunning(): Boolean = running
+    }
+
+    private data class TimeWindow(val startTotalMin: Int, val endTotalMin: Int)
 
     private val handler = Handler(Looper.getMainLooper())
     private var windowManager: WindowManager? = null
@@ -42,6 +50,9 @@ class AppMonitorService : Service() {
     private var cachedRiskWindow: Boolean = false
     private var lastRiskEvalAt: Long = 0L
     private var monitorLoopStarted: Boolean = false
+    private var suppressAutoRestart: Boolean = false
+    private var lastBlockedEventPackage: String = ""
+    private var lastBlockedEventAtMs: Long = 0L
     private lateinit var prefs: android.content.SharedPreferences
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -50,6 +61,7 @@ class AppMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running = true
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
         
@@ -70,6 +82,7 @@ class AppMonitorService : Service() {
 
     private fun startMonitorLoopIfNeeded() {
         if (monitorLoopStarted) return
+        suppressAutoRestart = false
         monitorLoopStarted = true
         handler.post(runnable)
     }
@@ -104,6 +117,15 @@ class AppMonitorService : Service() {
             val now = System.currentTimeMillis()
             var nextDelayMs = 5_000L
             try {
+                if (shouldStopForIdle(now)) {
+                    android.util.Log.d(
+                        "RevokeMonitor",
+                        "No active regimes or temporary overrides. Stopping foreground service."
+                    )
+                    stopMonitoringForIdle()
+                    return
+                }
+
                 writeSelfHealth(now)
 
                 if (!isScreenInteractive()) {
@@ -118,11 +140,14 @@ class AppMonitorService : Service() {
                 nextDelayMs = 5_000L
             }
 
-            handler.postDelayed(this, nextDelayMs)
+            if (monitorLoopStarted && !suppressAutoRestart) {
+                handler.postDelayed(this, nextDelayMs)
+            }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        suppressAutoRestart = false
         when (intent?.action) {
             "com.revoke.app.SYNC_SCHEDULES" -> {
                 val schedulesJson = intent.getStringExtra("schedules")
@@ -140,6 +165,20 @@ class AppMonitorService : Service() {
                     android.util.Log.d("RevokeMonitor", "Temporarily unlocking $pkg for $mins minutes.")
                 }
             }
+            PackageRemovedReceiver.ACTION_REMOVE_TEMP_UNLOCK -> {
+                val packageName = intent.getStringExtra(PackageRemovedReceiver.EXTRA_PACKAGE_NAME)
+                    ?.trim()
+                    .orEmpty()
+                if (packageName.isNotEmpty()) {
+                    if (tempUnlockedPackages.remove(packageName) != null) {
+                        persistTempUnlocks()
+                        android.util.Log.d(
+                            "RevokeMonitor",
+                            "Removed temporary unlock for uninstalled package: $packageName"
+                        )
+                    }
+                }
+            }
         }
         // Loop already started in onCreate()
         startMonitorLoopIfNeeded()
@@ -147,7 +186,9 @@ class AppMonitorService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        scheduleRestart(3_000)
+        if (!suppressAutoRestart) {
+            scheduleRestart(3_000)
+        }
         super.onTaskRemoved(rootIntent)
     }
 
@@ -179,60 +220,89 @@ class AppMonitorService : Service() {
     }
 
     private fun computeRiskWindowNow(): Boolean {
-        if (blockedAppsIndex.isEmpty()) return false
+        return getCurrentlyActiveRegimes(System.currentTimeMillis()).isNotEmpty()
+    }
 
-        val calendar = java.util.Calendar.getInstance()
-        val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
-        val modelDay = if (dayOfWeek == 1) 7 else dayOfWeek - 1
+    private fun parseHourMinuteStringToTotalMin(raw: String?): Int? {
+        val value = raw?.trim()
+        if (value.isNullOrEmpty()) return null
+        val parts = value.split(":")
+        if (parts.size != 2) return null
+        val hour = parts[0].toIntOrNull() ?: return null
+        val minute = parts[1].toIntOrNull() ?: return null
+        if (hour !in 0..23 || minute !in 0..59) return null
+        return hour * 60 + minute
+    }
 
-        val currentHour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
-        val currentMinute = calendar.get(java.util.Calendar.MINUTE)
-        val currentTotalMin = currentHour * 60 + currentMinute
+    private fun toTimeWindow(
+        startHour: Int,
+        startMinute: Int,
+        endHour: Int,
+        endMinute: Int
+    ): TimeWindow? {
+        if (startHour !in 0..23 || endHour !in 0..23) return null
+        if (startMinute !in 0..59 || endMinute !in 0..59) return null
+        val startTotalMin = startHour * 60 + startMinute
+        val endTotalMin = endHour * 60 + endMinute
+        if (startTotalMin == endTotalMin) return null
+        return TimeWindow(startTotalMin, endTotalMin)
+    }
 
-        for (schedule in activeSchedules) {
-            if (!schedule.optBoolean("isActive", true)) continue
-
-            val days = schedule.optJSONArray("days") ?: continue
-            var dayMatch = false
-            for (i in 0 until days.length()) {
-                if (days.optInt(i, -1) == modelDay) {
-                    dayMatch = true
-                    break
+    private fun extractTimeWindows(schedule: JSONObject): List<TimeWindow> {
+        val windows = mutableListOf<TimeWindow>()
+        val blocks = schedule.optJSONArray("blocks")
+        if (blocks != null) {
+            for (i in 0 until blocks.length()) {
+                val block = blocks.optJSONObject(i) ?: continue
+                val startHour = block.optInt("startHour", -1)
+                val startMinute = block.optInt("startMinute", -1)
+                val endHour = block.optInt("endHour", -1)
+                val endMinute = block.optInt("endMinute", -1)
+                val window = toTimeWindow(startHour, startMinute, endHour, endMinute)
+                if (window != null) {
+                    windows.add(window)
                 }
-            }
-            if (!dayMatch) continue
-
-            val type = schedule.optInt("type")
-            if (type == 1) {
-                // Usage limit regimes are effectively "always on" during the matched day.
-                return true
-            }
-
-            if (type == 0) {
-                if (!schedule.has("startHour") || schedule.isNull("startHour") ||
-                    !schedule.has("endHour") || schedule.isNull("endHour")) {
-                    continue
-                }
-
-                val startHour = schedule.optInt("startHour", -1)
-                val startMin = schedule.optInt("startMinute", 0)
-                val endHour = schedule.optInt("endHour", -1)
-                val endMin = schedule.optInt("endMinute", 0)
-                if (startHour == -1 || endHour == -1) continue
-
-                val startTotalMin = startHour * 60 + startMin
-                val endTotalMin = endHour * 60 + endMin
-
-                val isWithinRange = if (startTotalMin <= endTotalMin) {
-                    currentTotalMin in startTotalMin..endTotalMin
-                } else {
-                    currentTotalMin >= startTotalMin || currentTotalMin <= endTotalMin
-                }
-
-                if (isWithinRange) return true
             }
         }
+        if (windows.isNotEmpty()) return windows
 
+        val legacyWindow = toTimeWindow(
+            schedule.optInt("startHour", -1),
+            schedule.optInt("startMinute", -1),
+            schedule.optInt("endHour", -1),
+            schedule.optInt("endMinute", -1)
+        )
+        if (legacyWindow != null) {
+            windows.add(legacyWindow)
+            return windows
+        }
+
+        val startTimeRaw = schedule.optString("startTime").trim().takeIf { it.isNotEmpty() }
+        val endTimeRaw = schedule.optString("endTime").trim().takeIf { it.isNotEmpty() }
+        val startTotalMin = parseHourMinuteStringToTotalMin(startTimeRaw)
+        val endTotalMin = parseHourMinuteStringToTotalMin(endTimeRaw)
+        if (startTotalMin != null && endTotalMin != null && startTotalMin != endTotalMin) {
+            windows.add(TimeWindow(startTotalMin, endTotalMin))
+        }
+
+        return windows
+    }
+
+    private fun isMinuteWithinWindow(window: TimeWindow, currentTotalMin: Int): Boolean {
+        return if (window.startTotalMin < window.endTotalMin) {
+            currentTotalMin >= window.startTotalMin && currentTotalMin < window.endTotalMin
+        } else {
+            currentTotalMin >= window.startTotalMin || currentTotalMin < window.endTotalMin
+        }
+    }
+
+    private fun isWithinAnyTimeBlock(schedule: JSONObject, currentTotalMin: Int): Boolean {
+        val windows = extractTimeWindows(schedule)
+        for (window in windows) {
+            if (isMinuteWithinWindow(window, currentTotalMin)) {
+                return true
+            }
+        }
         return false
     }
 
@@ -260,11 +330,30 @@ class AppMonitorService : Service() {
 
     private fun checkTempUnlock(packageName: String): Boolean {
         val expiry = tempUnlockedPackages[packageName] ?: return false
-        if (System.currentTimeMillis() > expiry) {
+        val now = System.currentTimeMillis()
+
+        // If package was uninstalled (or is missing), immediately purge stale approval.
+        if (!isPackageInstalled(packageName)) {
+            tempUnlockedPackages.remove(packageName)
+            persistTempUnlocks()
+            android.util.Log.d("RevokeMonitor", "Temp unlock cleared for missing package $packageName")
+            return false
+        }
+
+        // Keep in-memory approvals aligned with SharedPreferences updates from native receivers.
+        val persistedExpiry = getPersistedTempUnlockExpiry(packageName)
+        if (persistedExpiry <= now) {
             tempUnlockedPackages.remove(packageName)
             persistTempUnlocks()
             android.util.Log.d("RevokeMonitor", "Temp unlock expired for $packageName")
             return false
+        }
+        if (persistedExpiry <= 0L) {
+            tempUnlockedPackages.remove(packageName)
+            return false
+        }
+        if (persistedExpiry != expiry) {
+            tempUnlockedPackages[packageName] = persistedExpiry
         }
         return true
     }
@@ -278,7 +367,7 @@ class AppMonitorService : Service() {
             while (keys.hasNext()) {
                 val pkg = keys.next()
                 val expiry = json.optLong(pkg, 0L)
-                if (expiry > now) {
+                if (expiry > now && isPackageInstalled(pkg)) {
                     tempUnlockedPackages[pkg] = expiry
                 }
             }
@@ -294,13 +383,119 @@ class AppMonitorService : Service() {
         val iterator = tempUnlockedPackages.entries.iterator()
         while (iterator.hasNext()) {
             val entry = iterator.next()
-            if (entry.value > now) {
+            if (entry.value > now && isPackageInstalled(entry.key)) {
                 json.put(entry.key, entry.value)
             } else {
                 iterator.remove()
             }
         }
         prefs.edit().putString("temp_unlocks", json.toString()).apply()
+    }
+
+    private fun getPersistedTempUnlockExpiry(packageName: String): Long {
+        val raw = prefs.getString("temp_unlocks", null) ?: return 0L
+        return try {
+            val json = JSONObject(raw)
+            json.optLong(packageName, 0L)
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private fun isPackageInstalled(packageName: String): Boolean {
+        if (packageName.isBlank()) return false
+        return try {
+            packageManager.getApplicationInfo(packageName, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun pruneExpiredTempUnlocks(now: Long) {
+        var changed = false
+        val iterator = tempUnlockedPackages.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            val packageName = entry.key
+            val expiry = entry.value
+            if (expiry <= now || !isPackageInstalled(packageName)) {
+                iterator.remove()
+                changed = true
+            }
+        }
+
+        if (changed) {
+            persistTempUnlocks()
+        }
+    }
+
+    private fun hasActiveTemporaryState(now: Long): Boolean {
+        pruneExpiredTempUnlocks(now)
+        return tempUnlockedPackages.isNotEmpty() || isAmnestyActive()
+    }
+
+    private fun getCurrentlyActiveRegimes(now: Long): List<JSONObject> {
+        if (blockedAppsIndex.isEmpty()) return emptyList()
+
+        val calendar = java.util.Calendar.getInstance().apply {
+            timeInMillis = now
+        }
+        val dayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+        val modelDay = if (dayOfWeek == 1) 7 else dayOfWeek - 1
+        val currentHour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        val currentMinute = calendar.get(java.util.Calendar.MINUTE)
+        val currentTotalMin = currentHour * 60 + currentMinute
+
+        val matches = mutableListOf<JSONObject>()
+        for (schedule in activeSchedules) {
+            if (!schedule.optBoolean("isActive", true)) continue
+
+            val days = schedule.optJSONArray("days") ?: continue
+            var dayMatch = false
+            for (i in 0 until days.length()) {
+                if (days.optInt(i, -1) == modelDay) {
+                    dayMatch = true
+                    break
+                }
+            }
+            if (!dayMatch) continue
+
+            when (schedule.optInt("type")) {
+                0 -> {
+                    if (isWithinAnyTimeBlock(schedule, currentTotalMin)) {
+                        matches.add(schedule)
+                    }
+                }
+                1 -> {
+                    matches.add(schedule)
+                }
+            }
+        }
+
+        return matches
+    }
+
+    private fun shouldStopForIdle(now: Long): Boolean {
+        val activeRegimes = getCurrentlyActiveRegimes(now)
+        return activeRegimes.isEmpty() && !hasActiveTemporaryState(now)
+    }
+
+    private fun stopMonitoringForIdle() {
+        if (suppressAutoRestart) return
+
+        suppressAutoRestart = true
+        monitorLoopStarted = false
+        handler.removeCallbacks(runnable)
+        hideBlockerOverlay()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        stopSelf()
     }
 
     private fun updateSchedules(json: String) {
@@ -343,8 +538,12 @@ class AppMonitorService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
         handler.removeCallbacks(runnable)
-        scheduleRestart(5_000)
+        monitorLoopStarted = false
+        if (!suppressAutoRestart) {
+            scheduleRestart(5_000)
+        }
         super.onDestroy()
     }
 
@@ -518,48 +717,51 @@ class AppMonitorService : Service() {
             val type = schedule.optInt("type") 
             var isBlocked = false
             if (type == 0) { // TimeBlock
-                // Check if time fields exist (not null)
-                if (!schedule.has("startHour") || schedule.isNull("startHour") || 
-                    !schedule.has("endHour") || schedule.isNull("endHour")) {
+                val windows = extractTimeWindows(schedule)
+                if (windows.isEmpty()) {
                     if (shouldLog && !isLauncher) {
-                        android.util.Log.d("RevokeLogic", "Schedule $index: Missing time data, skipping")
+                        android.util.Log.d(
+                            "RevokeLogic",
+                            "Schedule $index: Missing/invalid time block data"
+                        )
                     }
                     continue
-                }
-                
-                val startHour = schedule.optInt("startHour", -1)
-                val startMin = schedule.optInt("startMinute", 0)
-                val endHour = schedule.optInt("endHour", -1)
-                val endMin = schedule.optInt("endMinute", 0)
-                
-                if (startHour == -1 || endHour == -1) {
-                    if (shouldLog && !isLauncher) {
-                        android.util.Log.d("RevokeLogic", "Schedule $index: Invalid time values")
-                    }
-                    continue
-                }
-                
-                val startTotalMin = startHour * 60 + startMin
-                val endTotalMin = endHour * 60 + endMin
-                
-                if (shouldLog && !isLauncher) {
-                    android.util.Log.d("RevokeLogic", "Schedule $index: TimeBlock ${startHour}:${startMin} - ${endHour}:${endMin} (${startTotalMin}-${endTotalMin})")
-                }
-                
-                val isWithinRange = if (startTotalMin <= endTotalMin) {
-                    currentTotalMin in startTotalMin..endTotalMin
-                } else {
-                    // Overnight range (e.g., 9 PM to 2 AM) OR until midnight (e.g. 9 AM to 0 AM)
-                    currentTotalMin >= startTotalMin || currentTotalMin <= endTotalMin
                 }
 
-                if (isWithinRange) {
+                if (shouldLog && !isLauncher) {
+                    android.util.Log.d(
+                        "RevokeLogic",
+                        "Schedule $index: Evaluating ${windows.size} time block(s)"
+                    )
+                }
+
+                if (windows.any { isMinuteWithinWindow(it, currentTotalMin) }) {
                     isBlocked = true
-                    if (shouldLog && !isLauncher) android.util.Log.d("RevokeLogic", "Schedule $index: ✓ MATCH - Time within range")
+                    if (shouldLog && !isLauncher) android.util.Log.d("RevokeLogic", "Schedule $index: MATCH - Time within range")
                 } else {
-                    if (shouldLog && !isLauncher) android.util.Log.d("RevokeLogic", "Schedule $index: ✗ Time outside range")
+                    if (shouldLog && !isLauncher) android.util.Log.d("RevokeLogic", "Schedule $index: MISS - Time outside range")
                 }
             } else if (type == 1) { // UsageLimit
+                val windows = extractTimeWindows(schedule)
+                if (windows.isNotEmpty() && !windows.any { isMinuteWithinWindow(it, currentTotalMin) }) {
+                    isBlocked = true
+                    if (shouldLog && !isLauncher) {
+                        android.util.Log.d(
+                            "RevokeLogic",
+                            "Schedule $index: MATCH - Outside allowed usage window"
+                        )
+                    }
+                    if (isBlocked) {
+                        return try {
+                            val pm = packageManager
+                            val ai = pm.getApplicationInfo(packageName, 0)
+                            pm.getApplicationLabel(ai).toString()
+                        } catch (e: Exception) {
+                            packageName
+                        }
+                    }
+                }
+
                 val limitMinutes = when {
                     schedule.has("limitMinutes") && !schedule.isNull("limitMinutes") ->
                         schedule.optInt("limitMinutes", -1)
@@ -640,6 +842,8 @@ class AppMonitorService : Service() {
     private fun showBlockerOverlay(blockedAppName: String, packageNameStr: String) {
         // Prevent flicker: If already showing for the same app, do nothing
         if (overlayView != null && currentBlockedApp == blockedAppName) return
+
+        val blockedAttemptsToday = emitBlockedAttempt(blockedAppName, packageNameStr)
         
         handler.post {
             try {
@@ -716,7 +920,7 @@ class AppMonitorService : Service() {
                     typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
                 }
                 val stats = TextView(context).apply {
-                    text = "ATTEMPTS TODAY: 1"
+                    text = "ATTEMPTS TODAY: $blockedAttemptsToday"
                     setTextColor(android.graphics.Color.GRAY)
                     textSize = 11f
                     gravity = Gravity.CENTER
@@ -819,6 +1023,59 @@ class AppMonitorService : Service() {
         }
     }
 
+    private fun emitBlockedAttempt(appName: String, packageNameStr: String): Int {
+        val now = System.currentTimeMillis()
+        val isDuplicate =
+            packageNameStr == lastBlockedEventPackage &&
+            now - lastBlockedEventAtMs < 4000L
+
+        if (!isDuplicate) {
+            lastBlockedEventPackage = packageNameStr
+            lastBlockedEventAtMs = now
+
+            val intent = Intent("com.revoke.app.BLOCKED_ATTEMPT").apply {
+                putExtra("appName", appName)
+                putExtra("packageName", packageNameStr)
+                putExtra("blockedAtMs", now)
+            }
+            sendBroadcast(intent)
+            return incrementBlockedAttemptsToday(now)
+        }
+
+        return readBlockedAttemptsToday(now)
+    }
+
+    private fun readBlockedAttemptsToday(now: Long): Int {
+        val today = dayKey(now)
+        val storedDay = prefs.getString("blocked_attempt_day", "") ?: ""
+        return if (storedDay == today) {
+            prefs.getInt("blocked_attempt_count", 0)
+        } else {
+            0
+        }
+    }
+
+    private fun incrementBlockedAttemptsToday(now: Long): Int {
+        val today = dayKey(now)
+        val storedDay = prefs.getString("blocked_attempt_day", "") ?: ""
+        val nextCount = if (storedDay == today) {
+            prefs.getInt("blocked_attempt_count", 0) + 1
+        } else {
+            1
+        }
+        prefs.edit()
+            .putString("blocked_attempt_day", today)
+            .putInt("blocked_attempt_count", nextCount)
+            .apply()
+        return nextCount
+    }
+
+    private fun dayKey(now: Long): String {
+        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        formatter.timeZone = java.util.TimeZone.getDefault()
+        return formatter.format(java.util.Date(now))
+    }
+
     private fun hideBlockerOverlay() {
         if (overlayView == null) return
         handler.post {
@@ -855,3 +1112,4 @@ class AppMonitorService : Service() {
         return true
     }
 }
+

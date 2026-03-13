@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../core/services/theme_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -24,9 +25,7 @@ class AppearanceScreen extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Appearance'),
-      ),
+      appBar: AppBar(title: const Text('Appearance')),
       body: SafeArea(
         top: false,
         child: ListView(
@@ -129,7 +128,7 @@ class _PreviewCard extends StatelessWidget {
                     color: scheme.primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(Icons.shield_rounded, color: scheme.onPrimary),
+                  child: Icon(PhosphorIcons.shield(), color: scheme.onPrimary),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -142,10 +141,7 @@ class _PreviewCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: () {},
-                  child: const Text('ENFORCE'),
-                ),
+                ElevatedButton(onPressed: () {}, child: const Text('ENFORCE')),
               ],
             ),
           ),
@@ -173,7 +169,7 @@ class _ThemeModePicker extends StatelessWidget {
               scheme: scheme,
               title: 'System',
               subtitle: 'Obey device settings.',
-              icon: Icons.settings_suggest_rounded,
+              icon: PhosphorIcons.slidersHorizontal(),
               selected: mode == ThemeMode.system,
               onTap: () => svc.setThemeMode(ThemeMode.system),
             ),
@@ -182,7 +178,7 @@ class _ThemeModePicker extends StatelessWidget {
               scheme: scheme,
               title: 'Day Shift',
               subtitle: 'Light mode.',
-              icon: Icons.wb_sunny_rounded,
+              icon: PhosphorIcons.sun(),
               selected: mode == ThemeMode.light,
               onTap: () => svc.setThemeMode(ThemeMode.light),
             ),
@@ -191,7 +187,7 @@ class _ThemeModePicker extends StatelessWidget {
               scheme: scheme,
               title: 'Night Shift',
               subtitle: 'Dark mode.',
-              icon: Icons.nights_stay_rounded,
+              icon: PhosphorIcons.moonStars(),
               selected: mode == ThemeMode.dark,
               onTap: () => svc.setThemeMode(ThemeMode.dark),
             ),
@@ -222,7 +218,9 @@ class _ModeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? scheme.primary.withValues(alpha: 0.14) : Colors.transparent,
+      color: selected
+          ? scheme.primary.withValues(alpha: 0.14)
+          : Colors.transparent,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -244,12 +242,16 @@ class _ModeCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: selected ? scheme.primary : scheme.onSurface.withValues(alpha: 0.08),
+                  color: selected
+                      ? scheme.primary
+                      : scheme.onSurface.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   icon,
-                  color: selected ? scheme.onPrimary : scheme.onSurface.withValues(alpha: 0.85),
+                  color: selected
+                      ? scheme.onPrimary
+                      : scheme.onSurface.withValues(alpha: 0.85),
                 ),
               ),
               const SizedBox(width: 12),
@@ -269,10 +271,14 @@ class _ModeCard extends StatelessWidget {
                 ),
               ),
               if (selected)
-                Icon(Icons.check_circle_rounded, color: scheme.primary, size: 20)
+                Icon(
+                  PhosphorIcons.checkCircle(),
+                  color: scheme.primary,
+                  size: 20,
+                )
               else
                 Icon(
-                  Icons.circle_outlined,
+                  PhosphorIcons.circle(),
                   color: scheme.onSurface.withValues(alpha: 0.45),
                   size: 20,
                 ),
@@ -305,7 +311,8 @@ class _AccentPicker extends StatelessWidget {
                 color: color,
                 scheme: scheme,
                 selected: color.toARGB32() == selectedAccent.toARGB32(),
-                label: AppearanceScreen._accentNames[color.toARGB32()] ?? 'Accent',
+                label:
+                    AppearanceScreen._accentNames[color.toARGB32()] ?? 'Accent',
                 onTap: () => svc.setAccentColor(color),
               ),
           ],
@@ -332,8 +339,9 @@ class _AccentSwatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Brightness bubbleBrightness =
-        ThemeData.estimateBrightnessForColor(color);
+    final Brightness bubbleBrightness = ThemeData.estimateBrightnessForColor(
+      color,
+    );
     final swatchScheme = ColorScheme.fromSeed(
       seedColor: color,
       brightness: bubbleBrightness,
@@ -375,7 +383,7 @@ class _AccentSwatch extends StatelessWidget {
                       : null,
                 ),
                 child: selected
-                    ? Icon(Icons.check_rounded, color: checkColor, size: 24)
+                    ? Icon(PhosphorIcons.check(), color: checkColor, size: 24)
                     : null,
               ),
             ),

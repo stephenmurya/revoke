@@ -12,7 +12,7 @@
       "android": {
         "default": {
           "projectId": "revoke-ebb5e",
-          "appId": "1:70325101052:android:35fc98fb8a93ae7e179279",
+          "appId": "1:70325101052:android:9ac0303d99d134ff179279",
           "fileOutput": "android/app/google-services.json"
         }
       },
@@ -20,7 +20,7 @@
         "lib/firebase_options.dart": {
           "projectId": "revoke-ebb5e",
           "configurations": {
-            "android": "1:70325101052:android:35fc98fb8a93ae7e179279"
+            "android": "1:70325101052:android:9ac0303d99d134ff179279"
           }
         }
       }

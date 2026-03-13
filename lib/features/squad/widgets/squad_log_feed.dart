@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/models/squad_log_model.dart';
 import '../../../core/theme/app_theme.dart';
@@ -7,11 +8,13 @@ import '../../../core/utils/theme_extensions.dart';
 class SquadLogFeed extends StatelessWidget {
   final List<SquadLogModel> logs;
   final Future<void> Function(SquadLogModel log)? onSalute;
+  final String? viewerUid;
 
   const SquadLogFeed({
     super.key,
     required this.logs,
     this.onSalute,
+    this.viewerUid,
   });
 
   @override
@@ -24,9 +27,7 @@ class SquadLogFeed extends StatelessWidget {
           decoration: BoxDecoration(
             color: context.scheme.surface,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: context.scheme.outlineVariant,
-            ),
+            border: Border.all(color: context.scheme.outlineVariant),
           ),
           child: Text(
             'No incidents logged. This silence is suspicious.',
@@ -52,7 +53,11 @@ class SquadLogFeed extends StatelessWidget {
 
         return GestureDetector(
           onDoubleTap: onSalute != null ? () => onSalute!(log) : null,
-          child: _TimelineRow(log: log, drawTail: !isLast),
+          child: _TimelineRow(
+            log: log,
+            drawTail: !isLast,
+            viewerUid: viewerUid,
+          ),
         );
       },
     );
@@ -62,8 +67,13 @@ class SquadLogFeed extends StatelessWidget {
 class _TimelineRow extends StatelessWidget {
   final SquadLogModel log;
   final bool drawTail;
+  final String? viewerUid;
 
-  const _TimelineRow({required this.log, required this.drawTail});
+  const _TimelineRow({
+    required this.log,
+    required this.drawTail,
+    required this.viewerUid,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +95,11 @@ class _TimelineRow extends StatelessWidget {
                   color: accent.withValues(alpha: 0.16),
                   border: Border.all(color: accent.withValues(alpha: 0.40)),
                 ),
-                child: Icon(icon, size: 18, color: accent.withValues(alpha: 0.95)),
+                child: Icon(
+                  icon,
+                  size: 18,
+                  color: accent.withValues(alpha: 0.95),
+                ),
               ),
               if (drawTail)
                 Container(
@@ -107,9 +121,7 @@ class _TimelineRow extends StatelessWidget {
             decoration: BoxDecoration(
               color: context.scheme.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: context.scheme.outlineVariant,
-              ),
+              border: Border.all(color: context.scheme.outlineVariant),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,7 +130,9 @@ class _TimelineRow extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        log.title.trim().isNotEmpty ? log.title.trim() : 'Event',
+                        log.title.trim().isNotEmpty
+                            ? log.title.trim()
+                            : 'Event',
                         style: AppTheme.baseMedium.copyWith(
                           color: context.scheme.onSurface,
                           height: 1.15,
@@ -144,6 +158,7 @@ class _TimelineRow extends StatelessWidget {
                     ),
                   ),
                 ],
+                ..._buildReactionRow(context),
               ],
             ),
           ),
@@ -156,15 +171,15 @@ class _TimelineRow extends StatelessWidget {
     final type = (typeRaw).trim().toLowerCase();
     switch (type) {
       case 'plea_request':
-        return Icons.campaign_rounded;
+        return PhosphorIcons.megaphone();
       case 'verdict':
-        return Icons.gavel_rounded;
+        return PhosphorIcons.gavel();
       case 'violation':
-        return Icons.warning_amber_rounded;
+        return PhosphorIcons.warning();
       case 'regime_adopt':
-        return Icons.flag_rounded;
+        return PhosphorIcons.flag();
       default:
-        return Icons.receipt_long_rounded;
+        return PhosphorIcons.receipt();
     }
   }
 
@@ -186,12 +201,59 @@ class _TimelineRow extends StatelessWidget {
 
   static String _formatTimestamp(DateTime dt) {
     final now = DateTime.now();
-    final sameDay = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    final sameDay =
+        dt.year == now.year && dt.month == now.month && dt.day == now.day;
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
     if (sameDay) return '$h:$m';
     final mon = dt.month.toString().padLeft(2, '0');
     final day = dt.day.toString().padLeft(2, '0');
     return '$mon/$day $h:$m';
+  }
+
+  List<Widget> _buildReactionRow(BuildContext context) {
+    int saluteCount = 0;
+    for (final reaction in log.reactions.values) {
+      if (reaction.trim().toLowerCase() == 'salute') {
+        saluteCount += 1;
+      }
+    }
+    if (saluteCount <= 0) return const <Widget>[];
+
+    final hasViewerSaluted =
+        viewerUid != null &&
+        viewerUid!.trim().isNotEmpty &&
+        (log.reactions[viewerUid!]?.trim().toLowerCase() == 'salute');
+    final accent = hasViewerSaluted
+        ? context.scheme.primary
+        : context.colors.textSecondary;
+
+    return <Widget>[
+      const SizedBox(height: 10),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'SALUTE',
+              style: AppTheme.labelSmall.copyWith(
+                color: accent,
+                letterSpacing: 0.6,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$saluteCount',
+              style: AppTheme.smBold.copyWith(color: accent),
+            ),
+          ],
+        ),
+      ),
+    ];
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../native_bridge.dart';
 import 'auth_service.dart';
@@ -8,8 +9,13 @@ import 'schedule_service.dart';
 
 class ScoringService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+    region: 'us-central1',
+  );
   static Timer? _syncTimer;
   static bool _initialized = false;
+  static String _lastBlockedPackage = '';
+  static int _lastBlockedAtMs = 0;
 
   static const int _baselineScore = 500;
   static const int _minScore = 0;
@@ -130,6 +136,46 @@ class ScoringService {
 
   static Future<void> applyRejectedPleaPenalty(String uid) async {
     await _applyDelta(uid, -100);
+  }
+
+  static Future<void> recordBlockedAttempt({
+    required String appName,
+    required String packageName,
+    required int blockedAtMs,
+  }) async {
+    final currentUid = AuthService.currentUser?.uid;
+    if (currentUid == null || currentUid.trim().isEmpty) return;
+
+    final normalizedPackage = packageName.trim();
+    if (normalizedPackage.isEmpty) return;
+
+    final normalizedMs = blockedAtMs > 0
+        ? blockedAtMs
+        : DateTime.now().millisecondsSinceEpoch;
+
+    // Client-side dedupe to reduce needless callable traffic.
+    final duplicatePackage = _lastBlockedPackage == normalizedPackage;
+    final duplicateWindow = (normalizedMs - _lastBlockedAtMs).abs() < 4000;
+    if (duplicatePackage && duplicateWindow) {
+      return;
+    }
+
+    _lastBlockedPackage = normalizedPackage;
+    _lastBlockedAtMs = normalizedMs;
+
+    try {
+      final callable = _functions.httpsCallable('recordBlockedAttempt');
+      await callable.call({
+        'packageName': normalizedPackage,
+        'appName': appName.trim(),
+        'blockedAtMs': normalizedMs,
+        'eventDay': _dateOnly(
+          DateTime.fromMillisecondsSinceEpoch(normalizedMs),
+        ),
+      });
+    } catch (_) {
+      // Non-fatal: score sync should continue even if event ingestion fails.
+    }
   }
 
   static Future<void> _applyDelta(String uid, int delta) async {

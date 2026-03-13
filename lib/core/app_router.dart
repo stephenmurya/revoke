@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../features/navigation/main_shell.dart';
-import '../features/navigation/placeholder_screen.dart';
 import '../features/regimes/regimes_screen.dart';
-import '../features/regimes/challenges_screen.dart';
 import '../features/squad/squad_screen.dart';
 import '../features/squad/tribunal_screen.dart';
 import '../features/overlay/lock_screen.dart';
@@ -13,7 +12,12 @@ import '../features/plea/plea_compose_screen.dart';
 import '../features/monitor/create_schedule_screen.dart';
 import '../features/settings/controls_hub_screen.dart';
 import '../features/settings/appearance_screen.dart';
+import '../features/notifications/notifications_screen.dart';
+import '../features/settings/notifications_screen.dart'
+    as settings_notifications;
 import '../features/admin/god_mode_dashboard.dart';
+import '../features/admin/ui_tests/prototypes/squad_hud_v2_prototype.dart';
+import '../features/admin/ui_tests/ui_test_directory_screen.dart';
 import '../core/models/schedule_model.dart';
 
 import '../core/services/auth_service.dart';
@@ -36,13 +40,14 @@ class AppRouter {
   static bool? _cachedHasAllPermissions;
   static DateTime? _cachedPermissionsAt;
   static Future<bool>? _pendingPermissionsCheck;
+  static bool? _cachedIsAdmin;
+  static DateTime? _cachedIsAdminAt;
+  static Future<bool>? _pendingAdminCheck;
 
   static bool _hasSessionBootstrap = false;
 
   static bool _isShellLocation(String location) {
-    return location == '/home' ||
-        location == '/challenges' ||
-        location == '/squad';
+    return location == '/home' || location == '/squad';
   }
 
   static void clearSessionCaches() {
@@ -53,7 +58,20 @@ class AppRouter {
     _cachedHasAllPermissions = null;
     _cachedPermissionsAt = null;
     _pendingPermissionsCheck = null;
+    _cachedIsAdmin = null;
+    _cachedIsAdminAt = null;
+    _pendingAdminCheck = null;
     _hasSessionBootstrap = false;
+  }
+
+  static void invalidatePermissionCache() {
+    _cachedHasAllPermissions = null;
+    _cachedPermissionsAt = null;
+    _pendingPermissionsCheck = null;
+  }
+
+  static bool _isAdminLocation(String location) {
+    return location == '/god-mode' || location.startsWith('/admin/');
   }
 
   static Future<Map<String, dynamic>?> _getCachedUserData(String uid) async {
@@ -93,7 +111,7 @@ class AppRouter {
           final hasAll =
               (perms['usage_stats'] ?? false) &&
               (perms['overlay'] ?? false) &&
-              (perms['battery_optimization_ignored'] ?? false);
+              (perms['exact_alarm'] ?? false);
           _cachedHasAllPermissions = hasAll;
           _cachedPermissionsAt = DateTime.now();
           return hasAll;
@@ -101,6 +119,32 @@ class AppRouter {
         .whenComplete(() => _pendingPermissionsCheck = null);
 
     return _pendingPermissionsCheck!;
+  }
+
+  static Future<bool> _getCachedIsAdmin(User user) async {
+    final now = DateTime.now();
+    if (_cachedIsAdmin != null &&
+        _cachedIsAdminAt != null &&
+        now.difference(_cachedIsAdminAt!) < _cacheTtl) {
+      return _cachedIsAdmin!;
+    }
+
+    _pendingAdminCheck ??= user
+        .getIdTokenResult()
+        .then((result) {
+          final isAdmin = result.claims?['admin'] == true;
+          _cachedIsAdmin = isAdmin;
+          _cachedIsAdminAt = DateTime.now();
+          return isAdmin;
+        })
+        .catchError((_) {
+          _cachedIsAdmin = false;
+          _cachedIsAdminAt = DateTime.now();
+          return false;
+        })
+        .whenComplete(() => _pendingAdminCheck = null);
+
+    return _pendingAdminCheck!;
   }
 
   static final router = GoRouter(
@@ -119,7 +163,8 @@ class AppRouter {
 
       if (user == null) {
         clearSessionCaches();
-        if (isSplash || isGoingToOnboarding) return null;
+        // Never stay on splash when unauthenticated; route to onboarding.
+        if (isGoingToOnboarding) return null;
         return '/onboarding';
       }
 
@@ -141,6 +186,16 @@ class AppRouter {
       final nickname = (userData?['nickname'] as String?)?.trim();
       final hasSquad = squadId != null && squadId.isNotEmpty;
       final hasNickname = nickname != null && nickname.isNotEmpty;
+      final isAdminLocation = _isAdminLocation(location);
+
+      if (isAdminLocation) {
+        final isAdmin = await _getCachedIsAdmin(user);
+        if (!isAdmin) {
+          if (hasSquad) return '/home';
+          if (hasNickname) return '/onboarding?step=share_squad';
+          return '/onboarding';
+        }
+      }
 
       if (hasSquad && (isSplash || isGoingToOnboarding)) {
         return '/home';
@@ -187,8 +242,7 @@ class AppRouter {
         }
 
         return null;
-      } catch (e) {
-        print("Router Error: $e");
+      } catch (_) {
         return null;
       }
     },
@@ -213,14 +267,7 @@ class AppRouter {
             builder: (context, state) => const RegimesScreen(),
           ),
           // Legacy route alias (pre-rename). Keeps older deep links / restored state working.
-          GoRoute(
-            path: '/marketplace',
-            redirect: (context, state) => '/challenges',
-          ),
-          GoRoute(
-            path: '/challenges',
-            builder: (context, state) => const ChallengesScreen(),
-          ),
+          GoRoute(path: '/marketplace', redirect: (context, state) => '/home'),
           GoRoute(
             path: '/squad',
             builder: (context, state) => const SquadScreen(),
@@ -228,13 +275,8 @@ class AppRouter {
         ],
       ),
       GoRoute(
-        path: '/analytics',
-        builder: (context, state) => const PlaceholderScreen(title: 'Analytics'),
-      ),
-      GoRoute(
         path: '/notifications',
-        builder: (context, state) =>
-            const PlaceholderScreen(title: 'Notifications'),
+        builder: (context, state) => const NotificationsScreen(),
       ),
       GoRoute(
         path: '/controls',
@@ -243,6 +285,11 @@ class AppRouter {
       GoRoute(
         path: '/settings/appearance',
         builder: (context, state) => const AppearanceScreen(),
+      ),
+      GoRoute(
+        path: '/settings/notifications',
+        builder: (context, state) =>
+            const settings_notifications.NotificationsScreen(),
       ),
       GoRoute(
         path: '/lock_screen',
@@ -288,6 +335,14 @@ class AppRouter {
       GoRoute(
         path: '/god-mode',
         builder: (context, state) => const GodModeDashboard(),
+      ),
+      GoRoute(
+        path: '/admin/ui-tests',
+        builder: (context, state) => const UITestDirectoryScreen(),
+      ),
+      GoRoute(
+        path: '/admin/ui-tests/squad-hud-v2',
+        builder: (context, state) => const SquadHudV2Prototype(),
       ),
       GoRoute(
         path: '/tribunal/:pleaId',

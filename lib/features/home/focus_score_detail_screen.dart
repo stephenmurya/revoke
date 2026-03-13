@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,6 +19,9 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
   Map<String, dynamic>? _scoringMeta;
   List<int> _history = const [];
   DateTime? _metaUpdatedAt;
+  int _blockedAttemptsToday = 0;
+  int _approvedPleasToday = 0;
+  int _rejectedPleasToday = 0;
   bool _loadingRemote = false;
 
   @override
@@ -41,21 +45,50 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
 
     setState(() => _loadingRemote = true);
     try {
-      final snap = await FirebaseFirestore.instance
+      final userRef = FirebaseFirestore.instance
           .collection('users')
-          .doc(user.uid)
-          .get();
+          .doc(user.uid);
+      final snap = await userRef.get();
       if (!snap.exists) return;
 
       final data = snap.data() ?? <String, dynamic>{};
       final meta = (data['scoringMeta'] as Map?)?.cast<String, dynamic>();
       final historyRaw = (data['scoreHistory'] as List?) ?? const [];
-      final history =
-          historyRaw.map((e) => (e as num).toInt()).toList(growable: false);
+      final history = historyRaw
+          .map((e) => (e as num).toInt())
+          .toList(growable: false);
 
       DateTime? updatedAt;
       final ts = meta?['updatedAt'];
       if (ts is Timestamp) updatedAt = ts.toDate();
+
+      final now = DateTime.now();
+      final todayKey = _dateOnly(now);
+      final statsSnap = await userRef
+          .collection('focusStats')
+          .doc(todayKey)
+          .get();
+      final blockedAttemptsToday =
+          (statsSnap.data()?['blockedAttempts'] as num?)?.toInt() ?? 0;
+
+      final pleasSnap = await FirebaseFirestore.instance
+          .collection('pleas')
+          .where('userId', isEqualTo: user.uid)
+          .get();
+
+      int approvedPleasToday = 0;
+      int rejectedPleasToday = 0;
+      for (final doc in pleasSnap.docs) {
+        final status =
+            (doc.data()['status'] as String?)?.trim().toLowerCase() ?? '';
+        if (status != 'approved' && status != 'rejected') continue;
+        final resolvedAtRaw = doc.data()['resolvedAt'];
+        if (resolvedAtRaw is! Timestamp) continue;
+        final resolvedAt = resolvedAtRaw.toDate();
+        if (!_isSameLocalDay(resolvedAt, now)) continue;
+        if (status == 'approved') approvedPleasToday += 1;
+        if (status == 'rejected') rejectedPleasToday += 1;
+      }
 
       final remoteScore = (data['focusScore'] as num?)?.toInt();
       if (!mounted) return;
@@ -66,6 +99,9 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
         _scoringMeta = meta;
         _history = history;
         _metaUpdatedAt = updatedAt;
+        _blockedAttemptsToday = blockedAttemptsToday;
+        _approvedPleasToday = approvedPleasToday;
+        _rejectedPleasToday = rejectedPleasToday;
       });
     } catch (_) {
       // Non-fatal: screen should still be readable without cloud metadata.
@@ -95,9 +131,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Focus Score', style: AppTheme.xxlMedium),
-      ),
+      appBar: AppBar(title: Text('Focus Score', style: AppTheme.xxlMedium)),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -110,6 +144,9 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
             restrictedHours: restrictedHours,
             decayApplied: decayApplied,
             rewardApplied: rewardApplied,
+            blockedAttemptsToday: _blockedAttemptsToday,
+            approvedPleasToday: _approvedPleasToday,
+            rejectedPleasToday: _rejectedPleasToday,
           ),
           const SizedBox(height: 12),
           _buildStatsDisclaimerCard(),
@@ -229,9 +266,10 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
                 ),
               ),
               Tooltip(
-                message: 'These are the exact point drivers currently implemented.',
+                message:
+                    'These are the exact point drivers currently implemented.',
                 child: Icon(
-                  Icons.info_outline_rounded,
+                  PhosphorIcons.info(),
                   size: 18,
                   color: context.colors.textSecondary,
                 ),
@@ -327,7 +365,8 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
                 context,
                 label: 'Overage penalty',
                 delta: '-50 / hour',
-                detail: 'For each full hour you exceed your vow on restricted apps.',
+                detail:
+                    'For each full hour you exceed your vow on restricted apps.',
                 deltaColor: context.colors.danger,
               ),
               const SizedBox(height: 10),
@@ -335,7 +374,8 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
                 context,
                 label: 'Daily regime reward',
                 delta: '+15',
-                detail: 'If you have an active regime and you stayed within your vow.',
+                detail:
+                    'If you have an active regime and you stayed within your vow.',
                 deltaColor: context.colors.success,
               ),
               const SizedBox(height: 12),
@@ -400,15 +440,10 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
         children: [
           Text(
             label,
-            style: AppTheme.smMedium.copyWith(
-              color: context.scheme.onSurface,
-            ),
+            style: AppTheme.smMedium.copyWith(color: context.scheme.onSurface),
           ),
           const SizedBox(width: 8),
-          Text(
-            delta,
-            style: AppTheme.smBold.copyWith(color: color),
-          ),
+          Text(delta, style: AppTheme.smBold.copyWith(color: color)),
         ],
       ),
     );
@@ -419,9 +454,12 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
     required double? restrictedHours,
     required int? decayApplied,
     required int? rewardApplied,
+    required int blockedAttemptsToday,
+    required int approvedPleasToday,
+    required int rejectedPleasToday,
   }) {
-    String fmtHours(double? v) => v == null ? '—' : v.toStringAsFixed(1);
-    String fmtInt(int? v) => v == null ? '—' : v.toString();
+    String fmtHours(double? v) => v == null ? '--' : v.toStringAsFixed(1);
+    String fmtInt(int? v) => v == null ? '--' : v.toString();
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -435,9 +473,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
         children: [
           Text(
             'Today\'s Stats',
-            style: AppTheme.xlBold.copyWith(
-              color: context.scheme.onSurface,
-            ),
+            style: AppTheme.xlBold.copyWith(color: context.scheme.onSurface),
           ),
           const SizedBox(height: 10),
           _statRow(context, label: 'Vow (hours)', value: fmtHours(vowHours)),
@@ -458,6 +494,24 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
             context,
             label: 'Reward earned today',
             value: fmtInt(rewardApplied),
+          ),
+          const SizedBox(height: 8),
+          _statRow(
+            context,
+            label: 'Blocked attempts',
+            value: '$blockedAttemptsToday',
+          ),
+          const SizedBox(height: 8),
+          _statRow(
+            context,
+            label: 'Approved pleas (today)',
+            value: '$approvedPleasToday',
+          ),
+          const SizedBox(height: 8),
+          _statRow(
+            context,
+            label: 'Rejected pleas (today)',
+            value: '$rejectedPleasToday',
           ),
           const SizedBox(height: 10),
           Text(
@@ -485,13 +539,11 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
         children: [
           Text(
             'About Stats',
-            style: AppTheme.xlBold.copyWith(
-              color: context.scheme.onSurface,
-            ),
+            style: AppTheme.xlBold.copyWith(color: context.scheme.onSurface),
           ),
           const SizedBox(height: 10),
           Text(
-            'Stats are measurements (what happened). The calculation rules above are the levers (what changes your score). We keep them separate so it\'s easier to understand what you can control.',
+            'Data sources: blocked attempts are from users/{uid}/focusStats/{day} (native overlay via callable), plea outcomes are from resolved plea docs, and vow/usage/decay/reward are from users/{uid}.scoringMeta.',
             style: AppTheme.baseRegular.copyWith(
               color: context.colors.textSecondary,
               height: 1.35,
@@ -503,7 +555,9 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
   }
 
   Widget _buildHistoryCard(List<int> history) {
-    final items = history.length > 7 ? history.sublist(history.length - 7) : history;
+    final items = history.length > 7
+        ? history.sublist(history.length - 7)
+        : history;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -516,13 +570,11 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
         children: [
           Text(
             'Recent History',
-            style: AppTheme.xlBold.copyWith(
-              color: context.scheme.onSurface,
-            ),
+            style: AppTheme.xlBold.copyWith(color: context.scheme.onSurface),
           ),
           const SizedBox(height: 10),
           Text(
-            items.join('  ·  '),
+            items.join('  |  '),
             style: AppTheme.baseMedium.copyWith(
               color: context.scheme.onSurface,
             ),
@@ -586,12 +638,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
             ),
           ),
           Expanded(
-            child: Text(
-              label,
-              style: AppTheme.baseBold.copyWith(
-                color: color,
-              ),
-            ),
+            child: Text(label, style: AppTheme.baseBold.copyWith(color: color)),
           ),
         ],
       ),
@@ -630,12 +677,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
           ),
         ),
         const SizedBox(width: 12),
-        Text(
-          delta,
-          style: AppTheme.baseBold.copyWith(
-            color: deltaColor,
-          ),
-        ),
+        Text(delta, style: AppTheme.baseBold.copyWith(color: deltaColor)),
       ],
     );
   }
@@ -657,9 +699,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
         ),
         Text(
           value,
-          style: AppTheme.baseBold.copyWith(
-            color: context.scheme.onSurface,
-          ),
+          style: AppTheme.baseBold.copyWith(color: context.scheme.onSurface),
         ),
       ],
     );
@@ -682,5 +722,15 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
     final month = two(dt.month);
     final day = two(dt.day);
     return '$month/$day $h:$m';
+  }
+
+  static String _dateOnly(DateTime dt) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    final year = dt.year.toString().padLeft(4, '0');
+    return '$year-${two(dt.month)}-${two(dt.day)}';
+  }
+
+  static bool _isSameLocalDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../app_router.dart';
 import 'squad_service.dart';
@@ -12,72 +13,55 @@ class AuthService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   static StreamSubscription<String>? _tokenRefreshSub;
+  static const int _deleteBatchSize = 400;
 
   static User? get currentUser => _auth.currentUser;
 
   static Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   static void _redirectToAuthFlow() {
-    try {
-      AppRouter.router.go('/onboarding?force_auth=1');
-    } catch (_) {
-      // Router might not be ready during app bootstrap; ignore safely.
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        AppRouter.router.go('/onboarding?force_auth=1');
+      } catch (_) {
+        // Router might not be ready during app bootstrap; ignore safely.
+      }
+    });
   }
 
   static Future<User?> signInWithGoogle() async {
     try {
-      print('AUTH_DEBUG: Starting Google Sign In process...');
-
       await _googleSignIn.initialize(
         serverClientId:
             '70325101052-aae5kl5ie7npv94dqtgrktur0ql1ln01.apps.googleusercontent.com',
       );
 
-      print('AUTH_DEBUG: Triggering authenticate()...');
-      final GoogleSignInAccount? googleUser = await _googleSignIn
-          .authenticate();
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
 
-      if (googleUser == null) {
-        print(
-          'AUTH_DEBUG: googleUser is null (User canceled or configuration error).',
-        );
-        return null;
-      }
-
-      print('AUTH_DEBUG: Authenticated Google user: ${googleUser.email}');
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
       final String? idToken = googleAuth.idToken;
       if (idToken == null) {
-        print(
-          'AUTH_DEBUG ERROR: idToken is NULL. Check SHA-1 and Web Client ID in Firebase.',
-        );
         throw Exception(
           "ID Token is missing. Verify Firebase configuration and SHA-1.",
         );
       }
 
-      print('AUTH_DEBUG: idToken found. Creating Firebase credential...');
       final AuthCredential credential = GoogleAuthProvider.credential(
         idToken: idToken,
       );
 
-      print('AUTH_DEBUG: Signing into Firebase with credential...');
       final UserCredential userCredential = await _auth.signInWithCredential(
         credential,
       );
       final User? user = userCredential.user;
 
       if (user != null) {
-        print('AUTH_DEBUG: Firebase sign-in SUCCESS: ${user.uid}');
         await _ensureUserDocument(user);
       }
 
       return user;
-    } catch (e, stack) {
-      print('AUTH_DEBUG EXCEPTION: $e');
-      print('AUTH_DEBUG STACK: $stack');
+    } catch (e) {
       rethrow;
     }
   }
@@ -110,8 +94,7 @@ class AuthService {
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
-    } catch (e) {
-      print('AUTH_DEBUG ERROR: Failed to ensure user document: $e');
+    } catch (_) {
       rethrow;
     }
   }
@@ -127,9 +110,7 @@ class AuthService {
           'fcmToken': token,
           'lastLogin': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
-      } catch (e) {
-        print('AUTH_DEBUG: Failed to sync refreshed FCM token: $e');
-      }
+      } catch (_) {}
     });
 
     final user = _auth.currentUser;
@@ -143,9 +124,7 @@ class AuthService {
           'lastLogin': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
-    } catch (e) {
-      print('AUTH_DEBUG: Failed to sync initial FCM token: $e');
-    }
+    } catch (_) {}
   }
 
   static Future<void> updateNickname(String nickname) async {
@@ -157,6 +136,18 @@ class AuthService {
 
     await _firestore.collection('users').doc(user.uid).update({
       'nickname': normalized,
+    });
+  }
+
+  static Future<void> updateNotificationPref(String key, bool value) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final normalizedKey = key.trim();
+    if (normalizedKey.isEmpty) return;
+
+    await _firestore.collection('users').doc(user.uid).update({
+      'notificationPrefs.$normalizedKey': value,
     });
   }
 
@@ -216,8 +207,15 @@ class AuthService {
         await SquadService.leaveSquad(uid, squadId);
       }
 
-      // 2. Delete known user sub-collections
-      await _deleteSubcollection(userRef, 'regimes');
+      // 2. Delete known user sub-collections before removing the root user doc.
+      for (final subcollection in const <String>[
+        'notifications',
+        'scoreEvents',
+        'focusStats',
+        'regimes',
+      ]) {
+        await _deleteSubcollection(userRef, subcollection);
+      }
 
       // 3. Delete user document
       await userRef.delete();
@@ -236,14 +234,21 @@ class AuthService {
     DocumentReference<Map<String, dynamic>> userRef,
     String subcollection,
   ) async {
-    final snapshot = await userRef.collection(subcollection).get();
-    if (snapshot.docs.isEmpty) return;
+    while (true) {
+      final snapshot = await userRef
+          .collection(subcollection)
+          .limit(_deleteBatchSize)
+          .get();
+      if (snapshot.docs.isEmpty) return;
 
-    final batch = _firestore.batch();
-    for (final doc in snapshot.docs) {
-      batch.delete(doc.reference);
+      final batch = _firestore.batch();
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      if (snapshot.docs.length < _deleteBatchSize) return;
     }
-    await batch.commit();
   }
 
   static Future<void> _deleteAuthUserWithReauth(User user) async {

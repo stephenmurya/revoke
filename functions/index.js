@@ -1,10 +1,11 @@
 const {
   onDocumentCreated,
-  onDocumentUpdated,
+  onDocumentWritten,
 } = require("firebase-functions/v2/firestore");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
+const admin = require("firebase-admin");
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
@@ -68,6 +69,9 @@ async function _loadUserProfileOrThrow(uid, label) {
     name: _deriveUserDisplayName(data),
     avatar: (data.photoUrl || "").toString().trim(),
     token: (data.fcmToken || "").toString().trim(),
+    wantsShameAlerts: _wantsNotification(data, "shameAlerts"),
+    wantsPleaRequests: _wantsNotification(data, "pleaRequests"),
+    wantsVerdicts: _wantsNotification(data, "verdicts"),
     focusScore: Number(data.focusScore),
   };
 }
@@ -102,6 +106,127 @@ async function _sendUserNotificationBestEffort(token, title, body, data) {
   }
 }
 
+function _normalizeNotificationMetadata(metadata) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    const safeKey = (key || "").toString().trim();
+    if (!safeKey || value === undefined) continue;
+    normalized[safeKey] = value;
+  }
+  return normalized;
+}
+
+function _buildInAppNotificationPayload(payload, idOverride) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const normalizedTitle = (source.title || "").toString().trim();
+  const normalizedBody = (source.body || "").toString().trim();
+  const normalizedType = (source.type || "system")
+      .toString()
+      .trim()
+      .toLowerCase() || "system";
+
+  return {
+    id: (idOverride || "").toString().trim(),
+    title: normalizedTitle,
+    body: normalizedBody,
+    type: normalizedType,
+    isRead: false,
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    metadata: _normalizeNotificationMetadata(source.metadata),
+  };
+}
+
+async function createInAppNotification(uid, payload) {
+  const normalizedUid = (uid || "").toString().trim();
+  if (!normalizedUid) return false;
+
+  try {
+    const notificationRef = admin
+        .firestore()
+        .collection("users")
+        .doc(normalizedUid)
+        .collection("notifications")
+        .doc();
+
+    await notificationRef.set(_buildInAppNotificationPayload(
+        payload,
+        notificationRef.id,
+    ));
+    return true;
+  } catch (error) {
+    // Explicit console error for quick inspection in Cloud logs.
+    console.error(
+        `Failed to create in-app notification for ${normalizedUid}:`,
+        error,
+    );
+    return false;
+  }
+}
+
+async function _createInAppNotificationsBatch(userIds, payload) {
+  const normalizedIds = [...new Set(
+      (Array.isArray(userIds) ? userIds : [])
+          .map((uid) => (uid || "").toString().trim())
+          .filter((uid) => Boolean(uid)),
+  )];
+  if (normalizedIds.length === 0) return 0;
+
+  let writes = 0;
+  const safePayload = payload && typeof payload === "object" ? payload : {};
+  const firestore = admin.firestore();
+
+  for (let i = 0; i < normalizedIds.length; i += 400) {
+    const chunk = normalizedIds.slice(i, i + 400);
+    const batch = firestore.batch();
+
+    for (const uid of chunk) {
+      const notificationRef = firestore
+          .collection("users")
+          .doc(uid)
+          .collection("notifications")
+          .doc();
+      batch.set(notificationRef, _buildInAppNotificationPayload(
+          safePayload,
+          notificationRef.id,
+      ));
+    }
+
+    try {
+      await batch.commit();
+      writes += chunk.length;
+    } catch (error) {
+      logger.warn("createInAppNotificationsBatch commit failed.", {
+        chunkSize: chunk.length,
+        type: (safePayload.type || "system")
+            .toString()
+            .trim()
+            .toLowerCase() || "system",
+        errorMessage: error?.message || String(error),
+      });
+    }
+  }
+
+  return writes;
+}
+
+function _readNotificationPrefs(userData) {
+  if (!userData || typeof userData !== "object") return {};
+  const prefs = userData.notificationPrefs;
+  if (!prefs || typeof prefs !== "object" || Array.isArray(prefs)) {
+    return {};
+  }
+  return prefs;
+}
+
+function _wantsNotification(userData, prefKey) {
+  const prefs = _readNotificationPrefs(userData);
+  return prefs[prefKey] !== false;
+}
+
 // -----------------------------
 // Abuse controls & lifecycle
 // -----------------------------
@@ -120,6 +245,12 @@ const ACTIVE_PLEA_TIMEOUT_MS = 5 * 60 * 1000;
 const RESOLVED_PLEA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MARKED_FOR_DELETION_TTL_MS = 10 * 60 * 1000;
 const CLEANUP_BATCH_LIMIT = 100;
+
+// Vote migration flags.
+// Keep dual-write enabled during migration so existing clients remain stable.
+const ENABLE_LEGACY_PLEA_VOTE_MAP_WRITE = true;
+// Keep this enabled until all client runtime paths no longer read plea.votes.
+const ENABLE_LEGACY_PLEA_VOTE_MAP_SYNC = true;
 
 const MOCK_SQUAD_ID = "mock_squad_core";
 const MOCK_SQUAD_CODE = "MOCK-CORE";
@@ -196,23 +327,52 @@ exports.broadcastPleaCreated = onDocumentCreated({
         .get();
 
     const tokens = [];
+    const eligibleVoterIds = [];
+    let optOutCount = 0;
     for (const userDoc of usersSnap.docs) {
       const data = userDoc.data() || {};
-      const memberUid = (data.uid || userDoc.id || "").toString();
+      const memberUid = (data.uid || userDoc.id || "").toString().trim();
       const token = (data.fcmToken || "").toString().trim();
+      const wantsReq = _wantsNotification(data, "pleaRequests");
       if (!memberUid || memberUid === requesterUid) continue;
+      eligibleVoterIds.push(memberUid);
+      if (!wantsReq) {
+        optOutCount += 1;
+        continue;
+      }
       if (!token) continue;
       tokens.push(token);
     }
 
+    const uniqueEligibleVoterIds = [...new Set(eligibleVoterIds)];
     const uniqueTokens = [...new Set(tokens)];
+    const inAppBody = `${requesterName} is begging the Squad. Cast your vote.`;
+    const inAppPromises = uniqueEligibleVoterIds.map((memberId) =>
+      createInAppNotification(memberId, {
+        title: "TRIBUNAL SUMMONED",
+        body: inAppBody,
+        type: "plea",
+        metadata: {
+          pleaId: String(pleaId),
+          squadId: String(squadId),
+          requesterUid: String(requesterUid),
+        },
+      }),
+    );
+    const inAppResults = await Promise.all(inAppPromises);
+    const inAppWrites = inAppResults.filter((created) => created).length;
+
     if (uniqueTokens.length === 0) {
-      logger.info("No target tokens for plea broadcast.", {pleaId, squadId});
+      logger.info("No target tokens for plea broadcast.", {
+        pleaId,
+        squadId,
+        inAppWrites,
+      });
       return;
     }
 
     const title = "JUDGMENT REQUIRED";
-    const body = `${requesterName} is begging for ${durationMinutes} mins on ${appName}!`;
+    const body = inAppBody;
     let successCount = 0;
     let failureCount = 0;
 
@@ -231,7 +391,8 @@ exports.broadcastPleaCreated = onDocumentCreated({
           },
         },
         data: {
-          type: "plea_judgement",
+          type: "plea",
+          event: "plea_created",
           pleaId: String(pleaId),
           squadId: String(squadId),
         },
@@ -255,7 +416,10 @@ exports.broadcastPleaCreated = onDocumentCreated({
     logger.info("Plea broadcast completed.", {
       pleaId,
       squadId,
+      inAppRecipients: uniqueEligibleVoterIds.length,
+      inAppWrites,
       recipients: uniqueTokens.length,
+      optedOut: optOutCount,
       successCount,
       failureCount,
     });
@@ -269,73 +433,100 @@ exports.broadcastPleaCreated = onDocumentCreated({
   }
 });
 
-exports.resolvePleaVerdict = onDocumentUpdated({
-  document: "pleas/{pleaId}",
+exports.resolvePleaVerdict = onDocumentWritten({
+  document: "pleas/{pleaId}/votes/{voterUid}",
   region: "us-central1",
 }, async (event) => {
-  const pleaId = event.params?.pleaId;
+  const pleaId = (event.params?.pleaId || "").toString().trim();
+  const voterUid = (event.params?.voterUid || "").toString().trim();
+
   try {
-    const before = event.data?.before?.data() || {};
-    const after = event.data?.after?.data() || {};
+    if (!pleaId || !voterUid) return;
 
-    const beforeVotes = _normalizeVotes(before.votes);
-    const afterVotes = _normalizeVotes(after.votes);
+    const beforeData = event.data?.before?.data() || {};
+    const afterData = event.data?.after?.data() || {};
+    const beforeChoice = _normalizeVoteChoice(beforeData.choice);
+    const afterChoice = _normalizeVoteChoice(afterData.choice);
+    const beforeVoteUid = (beforeData.uid || voterUid).toString().trim();
+    const afterVoteUid = (afterData.uid || voterUid).toString().trim();
 
-    if (_votesAreEqual(beforeVotes, afterVotes)) {
+    if (
+      beforeChoice === afterChoice &&
+      beforeVoteUid === afterVoteUid
+    ) {
       return;
     }
 
-    const status = (after.status || "active").toString().trim().toLowerCase();
+    const pleaRef = db.collection("pleas").doc(pleaId);
+    const pleaSnap = await pleaRef.get();
+    if (!pleaSnap.exists) {
+      logger.warn("resolvePleaVerdict skipped missing plea.", {pleaId, voterUid});
+      return;
+    }
+
+    const pleaData = pleaSnap.data() || {};
+    const status = (pleaData.status || "active").toString().trim().toLowerCase();
     if (status !== "active") {
+      logger.info("resolvePleaVerdict skipped non-active plea.", {
+        pleaId,
+        voterUid,
+        status,
+      });
       return;
     }
 
-    const requesterId = (after.userId || "").toString().trim();
-    const participantsRaw = Array.isArray(after.participants) ?
-      after.participants : [];
-    const participants = [...new Set(
-      participantsRaw
-          .map((id) => id?.toString().trim())
-          .filter((id) => Boolean(id)),
-    )];
+    const summary = await _computePleaVoteSummary(pleaRef, pleaData);
+    const updates = _buildPleaVoteUpdates(pleaData, summary);
 
-    // Deadlock fix: requester attends, but requester does not vote.
-    const voters = participants.filter((id) => id !== requesterId);
-    const voterSet = new Set(voters);
-
-    let acceptVotes = 0;
-    let rejectVotes = 0;
-    let votesCast = 0;
-
-    for (const [uid, vote] of Object.entries(afterVotes)) {
-      if (!voterSet.has(uid)) continue;
-      votesCast += 1;
-      if (vote === "accept") acceptVotes += 1;
-      if (vote === "reject") rejectVotes += 1;
+    if (!updates) {
+      return;
     }
 
-    const updates = {
-      voteCounts: {
-        accept: acceptVotes,
-        reject: rejectVotes,
-      },
-    };
-
-    if (votesCast >= voters.length && voters.length > 0) {
-      updates.status = acceptVotes > rejectVotes ? "approved" : "rejected";
-      updates.resolvedAt = FieldValue.serverTimestamp();
-    }
-
-    await event.data.after.ref.update(updates);
+    await pleaRef.set(updates, {merge: true});
 
     if (updates.status) {
       try {
-        const squadId = (after.squadId || "").toString().trim();
-        const requesterName = (after.userName || "").toString().trim() || "A Member";
+        const squadId = (pleaData.squadId || "").toString().trim();
+        const requesterName = (pleaData.userName || "").toString().trim() || "A Member";
+        let requesterToken = "";
+        let requesterWantsVerdicts = true;
         let avatar = "";
-        if (requesterId) {
-          const userSnap = await db.collection("users").doc(requesterId).get();
-          avatar = (userSnap.data()?.photoUrl || "").toString().trim();
+        const isApproved = updates.status === "approved";
+        const outcome = isApproved ? "APPROVED" : "REJECTED";
+        const inAppVerdictTitle = `VERDICT: ${isApproved ? "GRANTED" : "DENIED"}`;
+        const inAppVerdictBody = "The Conclave has decided your fate.";
+        const verdictBody = `Your plea for ${pleaData.appName || "access"} was ${outcome.toLowerCase()}.`;
+        if (summary.requesterId) {
+          const userSnap = await db.collection("users").doc(summary.requesterId).get();
+          const requesterData = userSnap.data() || {};
+          avatar = (requesterData.photoUrl || "").toString().trim();
+          requesterToken = (requesterData.fcmToken || "").toString().trim();
+          requesterWantsVerdicts = _wantsNotification(requesterData, "verdicts");
+
+          await createInAppNotification(summary.requesterId, {
+            title: inAppVerdictTitle,
+            body: inAppVerdictBody,
+            type: "verdict",
+            metadata: {
+                pleaId: String(pleaId),
+                squadId: String(squadId),
+                verdict: String(updates.status),
+            },
+          });
+        }
+
+        if (requesterToken && requesterWantsVerdicts) {
+          await _sendUserNotificationBestEffort(
+              requesterToken,
+              `VERDICT: ${outcome}`,
+              verdictBody,
+              {
+                type: "verdict",
+                pleaId: String(pleaId),
+                squadId: String(squadId),
+                verdict: String(updates.status),
+              },
+          );
         }
 
         const title = `Verdict: ${updates.status.toUpperCase()} for ${requesterName}.`;
@@ -343,12 +534,16 @@ exports.resolvePleaVerdict = onDocumentUpdated({
             squadId,
             "verdict",
             title,
-            {userId: requesterId, userName: requesterName, userAvatar: avatar},
+            {
+              userId: summary.requesterId,
+              userName: requesterName,
+              userAvatar: avatar,
+            },
             {
               pleaId: String(pleaId),
               verdict: updates.status,
-              acceptVotes,
-              rejectVotes,
+              acceptVotes: summary.acceptVotes,
+              rejectVotes: summary.rejectVotes,
             },
         );
       } catch (_) {
@@ -356,20 +551,22 @@ exports.resolvePleaVerdict = onDocumentUpdated({
       }
     }
 
-    logger.info("resolvePleaVerdict processed vote update.", {
+    logger.info("resolvePleaVerdict processed vote doc update.", {
       pleaId,
-      requesterId,
-      participants: participants.length,
-      voters: voters.length,
-      votesCast,
-      acceptVotes,
-      rejectVotes,
+      voterUid,
+      requesterId: summary.requesterId,
+      participants: summary.participants.length,
+      voters: summary.voters.length,
+      votesCast: summary.votesCast,
+      acceptVotes: summary.acceptVotes,
+      rejectVotes: summary.rejectVotes,
       resolved: Boolean(updates.status),
-      status: updates.status || "active",
+      status: updates.status || (pleaData.status || "active"),
     });
   } catch (error) {
     logger.error("resolvePleaVerdict crashed.", {
       pleaId,
+      voterUid,
       errorMessage: error?.message || String(error),
       errorStack: error?.stack,
     });
@@ -466,11 +663,22 @@ exports.adminOverridePlea = onCall({
     if (!pleaSnap.exists) {
       throw new HttpsError("not-found", "Plea not found.");
     }
+    const plea = pleaSnap.data() || {};
+    const currentStatus = (plea.status || "active").toString().trim().toLowerCase();
+    if (currentStatus !== "active") {
+      throw new HttpsError(
+          "failed-precondition",
+          "Plea is already resolved.",
+      );
+    }
 
     await pleaRef.set({
       status: verdict,
       resolvedAt: FieldValue.serverTimestamp(),
       outcomeSource: "admin_override",
+      markedForDeletion: true,
+      deletionMarkedAt: FieldValue.serverTimestamp(),
+      deletionMarkedBy: request.auth.uid,
     }, {merge: true});
 
     const architectMessage = `The Architect has intervened. Verdict: ${verdict.toUpperCase()}. Reason: ${reason || "No reason provided."}`;
@@ -527,11 +735,17 @@ exports.broadcastSystemMandate = onCall({
   }
 
   try {
+    const usersSnap = await db.collection("users").get();
+    const targetUserIds = usersSnap.docs
+        .map((doc) => (doc.id || "").toString().trim())
+        .filter((uid) => Boolean(uid));
+
     const messageId = await messaging.send({
       topic: "global_citizens",
       notification: {title, body},
       data: {
-        type: "SYSTEM_MANDATE",
+        type: "system",
+        event: "broadcast",
         title,
         body,
       },
@@ -551,11 +765,32 @@ exports.broadcastSystemMandate = onCall({
       },
     });
 
+    const inAppWrites = await _createInAppNotificationsBatch(
+        targetUserIds,
+        {
+          title,
+          body,
+          type: "system",
+          metadata: {
+          source: "admin_broadcast",
+          messageId: String(messageId),
+          actorUid: request.auth.uid,
+          },
+        },
+    );
+
     logger.info("broadcastSystemMandate sent.", {
       actorUid: request.auth.uid,
       messageId,
+      targetUsers: targetUserIds.length,
+      inAppWrites,
     });
-    return {success: true, messageId};
+    return {
+      success: true,
+      messageId,
+      targetUsers: targetUserIds.length,
+      inAppWrites,
+    };
   } catch (error) {
     logger.error("broadcastSystemMandate crashed.", {
       errorMessage: error?.message || String(error),
@@ -606,7 +841,9 @@ exports.grantAmnesty = onCall({
       token,
       data: {
         type: "AMNESTY",
+        nativeAction: "com.revoke.app.AMNESTY_GRANTED",
         duration: String(durationMinutes),
+        durationMinutes: String(durationMinutes),
       },
       android: {
         priority: "high",
@@ -695,8 +932,12 @@ exports.createPlea = onCall({
     const requesterRef = db.collection("users").doc(requestedUid);
     const limitsRef = db.collection("limits").doc(requestedUid);
     const pleaRef = db.collection("pleas").doc();
+    const highScoreWardenApproval = Math.random() >= 0.5;
 
     const nowMs = Date.now();
+    let createdStatus = "active";
+    let outcomeSource = "human_tribunal";
+    let usedWarden = false;
 
     await db.runTransaction(async (tx) => {
       const requesterSnap = await tx.get(requesterRef);
@@ -706,8 +947,42 @@ exports.createPlea = onCall({
       const requesterData = requesterSnap.data() || {};
       const squadId = (requesterData.squadId || "").toString().trim();
       if (!squadId) {
-        throw new HttpsError("failed-precondition", "Requester is not in a squad.");
+        throw new HttpsError(
+            "failed-precondition",
+            "Requester is not in a squad.",
+            {
+              reasonCode: "NO_SQUAD",
+              requesterUid: requestedUid,
+            },
+        );
       }
+      const squadRef = db.collection("squads").doc(squadId);
+      const squadSnap = await tx.get(squadRef);
+      if (!squadSnap.exists) {
+        throw new HttpsError(
+            "failed-precondition",
+            "Requester squad is missing.",
+            {
+              reasonCode: "SQUAD_MISSING",
+              requesterUid: requestedUid,
+              squadId,
+            },
+        );
+      }
+      const squadData = squadSnap.data() || {};
+      const rawMemberIds = Array.isArray(squadData.memberIds) ?
+        squadData.memberIds :
+        [];
+      const normalizedMemberIds = [...new Set(
+          rawMemberIds
+              .map((id) => id?.toString().trim())
+              .filter((id) => Boolean(id)),
+      )];
+      if (!normalizedMemberIds.includes(requestedUid)) {
+        normalizedMemberIds.push(requestedUid);
+      }
+      const eligibleVoters = normalizedMemberIds.filter((id) => id !== requestedUid);
+      const isSoloPlea = eligibleVoters.length === 0;
 
       const limitsSnap = await tx.get(limitsRef);
       const limits = limitsSnap.exists ? (limitsSnap.data() || {}) : {};
@@ -730,7 +1005,7 @@ exports.createPlea = onCall({
       }
 
       const userName = _deriveUserDisplayName(requesterData);
-      tx.set(pleaRef, {
+      const basePleaDoc = {
         userId: requestedUid,
         userName,
         squadId,
@@ -738,13 +1013,68 @@ exports.createPlea = onCall({
         packageName,
         durationMinutes,
         reason,
-        participants: [requestedUid],
-        voteCounts: {accept: 0, reject: 0},
-        votes: {},
-        status: "active",
         createdAt: FieldValue.serverTimestamp(),
         createdBy: callerUid,
-      });
+      };
+
+      if (isSoloPlea) {
+        const focusScoreRaw = Number(requesterData.focusScore);
+        const focusScore = Number.isFinite(focusScoreRaw) ?
+          Math.floor(focusScoreRaw) :
+          0;
+
+        let isApproved = false;
+        let wardenReason = "Score too low. The Warden denies your request.";
+
+        if (focusScore >= 500) {
+          isApproved = highScoreWardenApproval;
+          wardenReason = isApproved ?
+            "The Warden grants you mercy. Do not waste this time." :
+            "The Warden has spoken. Plea denied.";
+        }
+
+        const verdict = isApproved ? "approved" : "rejected";
+        createdStatus = verdict;
+        outcomeSource = "system_warden";
+        usedWarden = true;
+
+        tx.set(pleaRef, {
+          ...basePleaDoc,
+          participants: [requestedUid, "SYSTEM_WARDEN"],
+          voteCounts: {
+            accept: isApproved ? 1 : 0,
+            reject: isApproved ? 0 : 1,
+          },
+          votes: {
+            SYSTEM_WARDEN: isApproved ? "accept" : "reject",
+          },
+          status: verdict,
+          resolvedAt: FieldValue.serverTimestamp(),
+          outcomeSource: "system_warden",
+          wardenReason,
+          eligibleVoterCount: 0,
+        });
+
+        const verdictMessage = isApproved ?
+          "The Warden grants you mercy. Do not waste this time." :
+          "The Warden has spoken. Plea denied.";
+        tx.set(pleaRef.collection("messages").doc(), {
+          senderId: "SYSTEM_WARDEN",
+          senderName: "The Warden",
+          isSystem: true,
+          text: verdictMessage,
+          timestamp: FieldValue.serverTimestamp(),
+        });
+      } else {
+        tx.set(pleaRef, {
+          ...basePleaDoc,
+          participants: [requestedUid],
+          voteCounts: {accept: 0, reject: 0},
+          votes: {},
+          status: "active",
+          eligibleVoterCount: eligibleVoters.length,
+        });
+      }
 
       tx.set(limitsRef, {
         pleaEvents: [...existingEvents, nowMs].slice(-50),
@@ -758,7 +1088,24 @@ exports.createPlea = onCall({
       pleaId: pleaRef.id,
       durationMinutes,
       appName,
+      status: createdStatus,
+      outcomeSource,
+      usedWarden,
     });
+
+    if (usedWarden) {
+      const isApproved = createdStatus === "approved";
+      await createInAppNotification(requestedUid, {
+        title: `VERDICT: ${isApproved ? "GRANTED" : "DENIED"}`,
+        body: "The Conclave has decided your fate.",
+        type: "verdict",
+        metadata: {
+          pleaId: pleaRef.id,
+          outcomeSource,
+          source: "system_warden",
+        },
+      });
+    }
 
     // Best-effort squad log entry (outside transaction).
     try {
@@ -778,6 +1125,9 @@ exports.createPlea = onCall({
             appName,
             packageName,
             durationMinutes,
+            status: createdStatus,
+            outcomeSource,
+            usedWarden,
           },
       );
     } catch (_) {
@@ -787,6 +1137,9 @@ exports.createPlea = onCall({
     return {
       success: true,
       pleaId: pleaRef.id,
+      status: createdStatus,
+      outcomeSource,
+      usedWarden,
     };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
@@ -991,11 +1344,29 @@ exports.castVote = onCall({
         }
       }
 
-      tx.update(pleaRef, {
-        [`votes.${uid}`]: choice,
+      const voteRef = pleaRef.collection("votes").doc(uid);
+      const existingVoteSnap = await tx.get(voteRef);
+
+      const votePayload = {
+        uid,
+        choice,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (!existingVoteSnap.exists) {
+        votePayload.createdAt = FieldValue.serverTimestamp();
+      }
+
+      tx.set(voteRef, votePayload, {merge: true});
+
+      const pleaUpdates = {
         participants: FieldValue.arrayUnion(uid),
         lastVoteAt: FieldValue.serverTimestamp(),
-      });
+      };
+      if (ENABLE_LEGACY_PLEA_VOTE_MAP_WRITE) {
+        pleaUpdates[`votes.${uid}`] = choice;
+      }
+
+      tx.update(pleaRef, pleaUpdates);
     });
 
     logger.info("castVote callable completed.", {
@@ -1014,6 +1385,278 @@ exports.castVote = onCall({
       errorStack: error?.stack,
     });
     throw new HttpsError("internal", "Failed to cast vote.");
+  }
+});
+
+exports.backfillPleaVoteSubcollection = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+  if (request.auth.token?.admin !== true) {
+    throw new HttpsError("permission-denied", "Admin access required.");
+  }
+
+  const payload = request.data || {};
+  const allowedKeys = new Set(["limit", "cursor", "dryRun"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+    }
+  }
+
+  const requestedLimit = Number(payload.limit);
+  const normalizedLimit = Number.isFinite(requestedLimit) ?
+    Math.floor(requestedLimit) : 25;
+  const limit = Math.min(Math.max(normalizedLimit, 1), 100);
+  const cursor = (payload.cursor || "").toString().trim();
+  const dryRun = payload.dryRun === true;
+
+  try {
+    let query = db.collection("pleas").orderBy("__name__").limit(limit);
+    if (cursor) {
+      query = query.startAfter(cursor);
+    }
+
+    const pleasSnap = await query.get();
+    if (pleasSnap.empty) {
+      return {
+        success: true,
+        dryRun,
+        scannedPleas: 0,
+        touchedPleas: 0,
+        writtenVoteDocs: 0,
+        nextCursor: "",
+      };
+    }
+
+    let scannedPleas = 0;
+    let touchedPleas = 0;
+    let writtenVoteDocs = 0;
+
+    for (const pleaDoc of pleasSnap.docs) {
+      scannedPleas += 1;
+      const pleaRef = pleaDoc.ref;
+      const pleaData = pleaDoc.data() || {};
+      const legacyVotes = _normalizeVotes(pleaData.votes);
+      if (Object.keys(legacyVotes).length === 0) continue;
+
+      const existingVoteDocs = await _loadVoteSubcollectionVotes(pleaRef);
+      const writes = [];
+      for (const [uid, choice] of Object.entries(legacyVotes)) {
+        if (existingVoteDocs[uid] === choice) continue;
+        writes.push({uid, choice});
+      }
+
+      if (writes.length === 0 && !ENABLE_LEGACY_PLEA_VOTE_MAP_SYNC) {
+        continue;
+      }
+
+      touchedPleas += 1;
+
+      if (!dryRun && writes.length > 0) {
+        const batch = db.batch();
+        for (const write of writes) {
+          const voteRef = pleaRef.collection("votes").doc(write.uid);
+          batch.set(voteRef, {
+            uid: write.uid,
+            choice: write.choice,
+            migratedFromLegacy: true,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          }, {merge: true});
+        }
+        await batch.commit();
+      }
+
+      writtenVoteDocs += writes.length;
+
+      if (!dryRun) {
+        const refreshedPlea = await pleaRef.get();
+        if (!refreshedPlea.exists) continue;
+
+        const refreshedData = refreshedPlea.data() || {};
+        const summary = await _computePleaVoteSummary(pleaRef, refreshedData);
+        const updates = _buildPleaVoteUpdates(refreshedData, summary) || {};
+        updates.voteMigration = {
+          backfilledAt: FieldValue.serverTimestamp(),
+          backfilledBy: request.auth.uid,
+        };
+
+        await pleaRef.set(updates, {merge: true});
+      }
+    }
+
+    const nextCursor = pleasSnap.docs[pleasSnap.docs.length - 1]?.id || "";
+
+    logger.info("backfillPleaVoteSubcollection completed.", {
+      actorUid: request.auth.uid,
+      dryRun,
+      cursor: cursor || null,
+      limit,
+      scannedPleas,
+      touchedPleas,
+      writtenVoteDocs,
+      nextCursor: nextCursor || null,
+    });
+
+    return {
+      success: true,
+      dryRun,
+      scannedPleas,
+      touchedPleas,
+      writtenVoteDocs,
+      nextCursor,
+    };
+  } catch (error) {
+    logger.error("backfillPleaVoteSubcollection crashed.", {
+      actorUid: request.auth.uid,
+      dryRun,
+      limit,
+      cursor: cursor || null,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+    throw new HttpsError("internal", "Failed to backfill plea vote docs.");
+  }
+});
+
+exports.recordBlockedAttempt = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const uid = request.auth.uid;
+  const payload = request.data || {};
+  const allowedKeys = new Set(["packageName", "appName", "blockedAtMs", "eventDay"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+    }
+  }
+
+  const packageName = (payload.packageName || "").toString().trim();
+  const appName = (payload.appName || "").toString().trim();
+  const eventDayRaw = (payload.eventDay || "").toString().trim();
+  const blockedAtRaw = Number(payload.blockedAtMs);
+
+  if (!packageName) {
+    throw new HttpsError("invalid-argument", "packageName is required.");
+  }
+  if (packageName.length > 180) {
+    throw new HttpsError("invalid-argument", "packageName exceeds max length.");
+  }
+  if (appName.length > 100) {
+    throw new HttpsError("invalid-argument", "appName exceeds max length.");
+  }
+
+  const nowMs = Date.now();
+  let eventMs = nowMs;
+  if (Number.isFinite(blockedAtRaw)) {
+    const normalized = Math.floor(blockedAtRaw);
+    // Accept client event timestamps only if they are close to server time.
+    if (Math.abs(normalized - nowMs) <= 5 * 60 * 1000) {
+      eventMs = normalized;
+    }
+  }
+
+  const eventDay = /^\d{4}-\d{2}-\d{2}$/.test(eventDayRaw) ?
+    eventDayRaw :
+    _dateOnlyUtc(eventMs);
+
+  const limitsRef = db.collection("limits").doc(uid);
+  const dayStatsRef = db.collection("users").doc(uid).collection("focusStats").doc(eventDay);
+  const scoreEventRef = db.collection("users").doc(uid).collection("scoreEvents").doc();
+
+  let deduped = false;
+  let throttled = false;
+  let written = false;
+
+  try {
+    await db.runTransaction(async (tx) => {
+      const limitsSnap = await tx.get(limitsRef);
+      const limits = limitsSnap.exists ? (limitsSnap.data() || {}) : {};
+
+      const events = _pruneTimestamps(
+          limits.blockedAttemptEvents,
+          eventMs - (24 * 60 * 60 * 1000),
+          500,
+      );
+
+      const lastPackage = (limits.blockedAttemptLastPackage || "").toString().trim();
+      const lastAtMs = Number(limits.blockedAttemptLastAtMs) || 0;
+      if (lastPackage === packageName && eventMs - lastAtMs < 4000) {
+        deduped = true;
+        tx.set(limitsRef, {
+          blockedAttemptLastAtMs: eventMs,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: true});
+        return;
+      }
+
+      const recentWindowStart = eventMs - 60 * 1000;
+      const recentEvents = events.filter((ts) => ts >= recentWindowStart);
+      if (recentEvents.length >= 30) {
+        throttled = true;
+        tx.set(limitsRef, {
+          blockedAttemptEvents: events,
+          blockedAttemptLastPackage: packageName,
+          blockedAttemptLastAtMs: eventMs,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: true});
+        return;
+      }
+
+      const nextEvents = [...events, eventMs].slice(-500);
+      tx.set(limitsRef, {
+        blockedAttemptEvents: nextEvents,
+        blockedAttemptLastPackage: packageName,
+        blockedAttemptLastAtMs: eventMs,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+
+      tx.set(scoreEventRef, {
+        type: "blocked_attempt",
+        packageName,
+        appName: appName || packageName,
+        source: "native_overlay",
+        eventDay,
+        createdAtMs: eventMs,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      tx.set(dayStatsRef, {
+        day: eventDay,
+        blockedAttempts: FieldValue.increment(1),
+        lastBlockedPackage: packageName,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+
+      written = true;
+    });
+
+    return {
+      success: true,
+      deduped,
+      throttled,
+      written,
+      eventDay,
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("recordBlockedAttempt crashed.", {
+      uid,
+      packageName,
+      eventDay,
+      deduped,
+      throttled,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+    throw new HttpsError("internal", "Failed to record blocked attempt.");
   }
 });
 
@@ -1108,6 +1751,141 @@ exports.markPleaForDeletion = onCall({
   }
 });
 
+exports.getMemberRapSheetSnapshot = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const uid = request.auth.uid;
+  const isAdmin = request.auth.token?.admin === true;
+  const payload = request.data || {};
+  const allowedKeys = new Set(["targetUid"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+    }
+  }
+
+  const targetUid = (payload.targetUid || "").toString().trim();
+  if (!targetUid) {
+    throw new HttpsError("invalid-argument", "targetUid is required.");
+  }
+
+  try {
+    const targetUser = await _loadUserProfileOrThrow(targetUid, "Target");
+    if (!targetUser.squadId) {
+      throw new HttpsError("failed-precondition", "Target user is not in a squad.");
+    }
+
+    if (!isAdmin) {
+      const actorUser = await _loadUserProfileOrThrow(uid, "Actor");
+      if (!actorUser.squadId || actorUser.squadId !== targetUser.squadId) {
+        throw new HttpsError(
+            "permission-denied",
+            "User is not allowed to view this member snapshot.",
+        );
+      }
+    }
+
+    const regimesSnap = await db
+        .collection("users")
+        .doc(targetUid)
+        .collection("regimes")
+        .get();
+
+    const activeProtocols = [];
+    const blacklistApps = new Set();
+
+    for (const regimeDoc of regimesSnap.docs) {
+      const regime = regimeDoc.data() || {};
+      const isEnabled = Boolean(
+          regime.isEnabled ?? regime.isActive ?? true,
+      );
+      if (!isEnabled) continue;
+
+      const regimeName = (regime.name || "").toString().trim() || "REGIME";
+      activeProtocols.push(regimeName);
+
+      const targets = Array.isArray(regime.targetApps) ?
+        regime.targetApps :
+        (Array.isArray(regime.apps) ? regime.apps : []);
+      for (const app of targets) {
+        const appName = (app || "").toString().trim();
+        if (!appName) continue;
+        blacklistApps.add(appName);
+      }
+    }
+
+    const pleaBaseQuery = db
+        .collection("pleas")
+        .where("squadId", "==", targetUser.squadId)
+        .where("userId", "==", targetUid);
+
+    let totalPleas = 0;
+    let approvedPleas = 0;
+    let rejectedPleas = 0;
+
+    try {
+      const [totalAgg, approvedAgg, rejectedAgg] = await Promise.all([
+        pleaBaseQuery.count().get(),
+        pleaBaseQuery.where("status", "==", "approved").count().get(),
+        pleaBaseQuery.where("status", "==", "rejected").count().get(),
+      ]);
+
+      totalPleas = Number(totalAgg.data().count) || 0;
+      approvedPleas = Number(approvedAgg.data().count) || 0;
+      rejectedPleas = Number(rejectedAgg.data().count) || 0;
+    } catch (_) {
+      // Fallback path if aggregate query support is unavailable.
+      const pleasSnap = await pleaBaseQuery.get();
+      totalPleas = pleasSnap.size;
+      for (const pleaDoc of pleasSnap.docs) {
+        const status = (pleaDoc.data()?.status || "").toString().trim().toLowerCase();
+        if (status === "approved") approvedPleas += 1;
+        if (status === "rejected") rejectedPleas += 1;
+      }
+    }
+
+    const sortedProtocols = activeProtocols
+        .map((name) => name.toString().trim())
+        .filter((name) => Boolean(name))
+        .sort((a, b) => a.localeCompare(b));
+    const sortedBlacklist = [...blacklistApps].sort((a, b) => a.localeCompare(b));
+
+    const snapshot = {
+      targetUid,
+      squadId: targetUser.squadId,
+      activeProtocols: sortedProtocols,
+      activeProtocolCount: sortedProtocols.length,
+      blacklistApps: sortedBlacklist,
+      blacklistCount: sortedBlacklist.length,
+      pleaStats: {
+        total: totalPleas,
+        approved: approvedPleas,
+        rejected: rejectedPleas,
+      },
+      generatedAtMs: Date.now(),
+    };
+
+    return {
+      success: true,
+      snapshot,
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+
+    logger.error("getMemberRapSheetSnapshot crashed.", {
+      uid,
+      targetUid,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+    throw new HttpsError("internal", "Failed to get member snapshot.");
+  }
+});
+
 exports.updateUserStatus = onCall({
   region: "us-central1",
 }, async (request) => {
@@ -1140,6 +1918,101 @@ exports.updateUserStatus = onCall({
     });
     throw new HttpsError("internal", "Failed to update user status.");
   }
+});
+
+exports.joinSquadByCode = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const uid = request.auth.uid;
+  const payload = request.data || {};
+  const allowedKeys = new Set(["squadCode"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+    }
+  }
+
+  if (typeof payload.squadCode !== "string") {
+    throw new HttpsError("invalid-argument", "squadCode must be a string.");
+  }
+
+  const normalizedCode = payload.squadCode.trim().toUpperCase();
+  if (!normalizedCode) {
+    throw new HttpsError("invalid-argument", "squadCode is required.");
+  }
+
+  const squadMatch = await db
+      .collection("squads")
+      .where("joinCode", "==", normalizedCode)
+      .limit(1)
+      .get();
+
+  const squadSnap = squadMatch.empty ?
+    await db
+        .collection("squads")
+        .where("squadCode", "==", normalizedCode)
+        .limit(1)
+        .get() :
+    squadMatch;
+
+  if (squadSnap.empty) {
+    throw new HttpsError("not-found", "Invalid squad code");
+  }
+
+  const squadDoc = squadSnap.docs[0];
+  const squadId = squadDoc.id;
+  const squadRef = squadDoc.ref;
+  const userRef = db.collection("users").doc(uid);
+
+  await db.runTransaction(async (tx) => {
+    const [userSnap, freshSquadSnap] = await Promise.all([
+      tx.get(userRef),
+      tx.get(squadRef),
+    ]);
+
+    if (!freshSquadSnap.exists) {
+      throw new HttpsError("not-found", "Invalid squad code");
+    }
+
+    const currentUserData = userSnap.exists ? (userSnap.data() || {}) : {};
+    const oldSquadId = (currentUserData.squadId || "").toString().trim();
+
+    if (oldSquadId && oldSquadId !== squadId) {
+      const oldSquadRef = db.collection("squads").doc(oldSquadId);
+      const oldSquadSnap = await tx.get(oldSquadRef);
+      if (oldSquadSnap.exists) {
+        const oldMemberIds = Array.isArray(oldSquadSnap.data()?.memberIds) ?
+          [...oldSquadSnap.data().memberIds] :
+          [];
+        const nextOldMemberIds = oldMemberIds.filter((memberId) =>
+          (memberId || "").toString().trim() !== uid,
+        );
+
+        if (nextOldMemberIds.length === 0) {
+          tx.delete(oldSquadRef);
+        } else {
+          tx.update(oldSquadRef, {memberIds: nextOldMemberIds});
+        }
+      }
+    }
+
+    tx.update(squadRef, {
+      memberIds: FieldValue.arrayUnion(uid),
+      joinCode: normalizedCode,
+      squadCode: normalizedCode,
+    });
+
+    tx.set(userRef, {
+      squadId,
+      squadCode: normalizedCode,
+    }, {merge: true});
+  });
+
+  return {squadId};
 });
 
 exports.castStone = onCall({
@@ -1189,10 +2062,21 @@ exports.castStone = onCall({
   const callerName = caller.name || "A Member";
   const title = "JUDGMENT";
   const body = `${callerName} cast a stone at you.`;
-  await _sendUserNotificationBestEffort(target.token, title, body, {
-    type: "SHAME",
-    actorUid: uid,
-    squadId: String(squadId),
+  if (target.wantsShameAlerts) {
+    await _sendUserNotificationBestEffort(target.token, title, body, {
+      type: "shame",
+      actorUid: uid,
+      squadId: String(squadId),
+    });
+  }
+  await createInAppNotification(target.uid, {
+    title: "JUDGMENT",
+    body: `${callerName} cast a stone at you. Shame.`,
+    type: "shame",
+    metadata: {
+      actorUid: uid,
+      squadId: String(squadId),
+    },
   });
 
   await logSquadEvent(
@@ -1253,10 +2137,21 @@ exports.prayFor = onCall({
   const callerName = caller.name || "A Member";
   const title = "PRAYER";
   const body = `${callerName} is praying for your focus.`;
-  await _sendUserNotificationBestEffort(target.token, title, body, {
-    type: "STRENGTH",
-    actorUid: uid,
-    squadId: String(squadId),
+  if (target.wantsShameAlerts) {
+    await _sendUserNotificationBestEffort(target.token, title, body, {
+      type: "support",
+      actorUid: uid,
+      squadId: String(squadId),
+    });
+  }
+  await createInAppNotification(target.uid, {
+    title: "STRENGTH",
+    body: `${callerName} is praying for your discipline.`,
+    type: "support",
+    metadata: {
+      actorUid: uid,
+      squadId: String(squadId),
+    },
   });
 
   await logSquadEvent(
@@ -1373,17 +2268,49 @@ exports.postBail = onCall({
     });
   });
 
+  const scoreEventDay = _dateOnlyUtc(Date.now());
+  await Promise.all([
+    db.collection("users").doc(uid).collection("scoreEvents").add({
+      type: "bail_outgoing",
+      delta: -COST,
+      targetUserId: targetUserId,
+      source: "post_bail",
+      eventDay: scoreEventDay,
+      createdAtMs: Date.now(),
+      createdAt: FieldValue.serverTimestamp(),
+    }),
+    db.collection("users").doc(targetUserId).collection("scoreEvents").add({
+      type: "bail_incoming",
+      delta: COST,
+      actorUid: uid,
+      source: "post_bail",
+      eventDay: scoreEventDay,
+      createdAtMs: Date.now(),
+      createdAt: FieldValue.serverTimestamp(),
+    }),
+  ]);
+
   await _sendUserNotificationBestEffort(
       targetToken,
       "FREEDOM",
       `${callerName} posted bail for you (50 pts).`,
       {
-        type: "FREEDOM",
+        type: "support",
         actorUid: uid,
         squadId: String(squadId),
         amount: String(COST),
       },
   );
+  await createInAppNotification(targetUserId, {
+    title: "REDEMPTION",
+    body: `${callerName} sacrificed 50 points to bail you out.`,
+    type: "support",
+    metadata: {
+      actorUid: uid,
+      squadId: String(squadId),
+      amount: COST,
+    },
+  });
 
   await logSquadEvent(
       squadId,
@@ -1394,6 +2321,120 @@ exports.postBail = onCall({
   );
 
   return {success: true, amount: COST};
+});
+
+exports.saluteSquadLog = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const uid = request.auth.uid;
+  const isAdmin = request.auth.token?.admin === true;
+  const payload = request.data || {};
+  const allowedKeys = new Set(["squadId", "logId"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowedKeys.has(key)) {
+      throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+    }
+  }
+
+  const squadId = (payload.squadId || "").toString().trim();
+  const logId = (payload.logId || "").toString().trim();
+  if (!squadId) {
+    throw new HttpsError("invalid-argument", "squadId is required.");
+  }
+  if (!logId) {
+    throw new HttpsError("invalid-argument", "logId is required.");
+  }
+
+  const logRef = db.collection("squads").doc(squadId).collection("logs").doc(logId);
+  const limitsRef = db.collection("limits").doc(uid);
+  const nowMs = Date.now();
+
+  let alreadySaluted = false;
+  let saluteCount = 0;
+
+  try {
+    await db.runTransaction(async (tx) => {
+      if (!isAdmin) {
+        const callerRef = db.collection("users").doc(uid);
+        const callerSnap = await tx.get(callerRef);
+        if (!callerSnap.exists) {
+          throw new HttpsError("failed-precondition", "User profile is missing.");
+        }
+        const callerSquadId = (callerSnap.data()?.squadId || "").toString().trim();
+        if (!callerSquadId || callerSquadId !== squadId) {
+          throw new HttpsError("permission-denied", "User is not allowed to react to this log.");
+        }
+      }
+
+      const logSnap = await tx.get(logRef);
+      if (!logSnap.exists) {
+        throw new HttpsError("not-found", "Squad log not found.");
+      }
+      const logData = logSnap.data() || {};
+      const rawReactions = logData.reactions && typeof logData.reactions === "object" ?
+        logData.reactions :
+        {};
+
+      let existingSalutes = 0;
+      for (const reactionRaw of Object.values(rawReactions)) {
+        const reaction = (reactionRaw || "").toString().trim().toLowerCase();
+        if (reaction === "salute") existingSalutes += 1;
+      }
+
+      const currentReaction = (rawReactions[uid] || "").toString().trim().toLowerCase();
+      if (currentReaction === "salute") {
+        alreadySaluted = true;
+        saluteCount = existingSalutes;
+        return;
+      }
+
+      const limitsSnap = await tx.get(limitsRef);
+      const limits = limitsSnap.exists ? (limitsSnap.data() || {}) : {};
+      const recentSalutes = _pruneTimestamps(
+          limits.saluteEvents,
+          nowMs - 60 * 1000,
+          100,
+      );
+      if (recentSalutes.length >= 20) {
+        throw new HttpsError(
+            "resource-exhausted",
+            "Too many salute reactions. Try again shortly.",
+        );
+      }
+
+      tx.update(logRef, {
+        [`reactions.${uid}`]: "salute",
+        reactionsUpdatedAt: FieldValue.serverTimestamp(),
+      });
+
+      tx.set(limitsRef, {
+        saluteEvents: [...recentSalutes, nowMs].slice(-100),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+
+      saluteCount = existingSalutes + 1;
+    });
+
+    return {
+      success: true,
+      alreadySaluted,
+      saluteCount,
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("saluteSquadLog crashed.", {
+      uid,
+      squadId,
+      logId,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+    throw new HttpsError("internal", "Failed to react to squad log.");
+  }
 });
 
 exports.createMockTribunal = onCall({
@@ -1434,6 +2475,21 @@ exports.createMockTribunal = onCall({
       isMockSession: true,
       mockSessionOwnerUid: request.auth.uid,
       createdAt: FieldValue.serverTimestamp(),
+    });
+
+    await pleaRef.collection("votes").doc(MOCK_USERS[1].uid).set({
+      uid: MOCK_USERS[1].uid,
+      choice: "accept",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      seededBy: "mock_session",
+    });
+    await pleaRef.collection("votes").doc(MOCK_USERS[2].uid).set({
+      uid: MOCK_USERS[2].uid,
+      choice: "reject",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      seededBy: "mock_session",
     });
 
     const messagesRef = pleaRef.collection("messages");
@@ -1534,7 +2590,7 @@ exports.destroyMockTribunal = onCall({
         const isMock = data.isMockSession === true ||
           (data.squadId || "").toString().trim() === MOCK_SQUAD_ID;
         if (isMock) {
-          await _deletePleaWithMessages(pleaRef);
+          await _deletePleaWithChildren(pleaRef);
           deletedPleas = 1;
         }
       }
@@ -1584,38 +2640,22 @@ exports.autoFinalizeStalePleas = onSchedule({
 
       if (plea.isMockSession === true) continue;
 
-      const requesterId = (plea.userId || "").toString().trim();
-      const participantsRaw = Array.isArray(plea.participants) ? plea.participants : [];
-      const participants = [...new Set(
-          participantsRaw
-              .map((id) => id?.toString().trim())
-              .filter((id) => Boolean(id)),
-      )];
-      const voters = participants.filter((id) => id !== requesterId);
-      const voterSet = new Set(voters);
-      const votes = _normalizeVotes(plea.votes);
-
-      let acceptVotes = 0;
-      let rejectVotes = 0;
-      let votesCast = 0;
-
-      for (const [uid, vote] of Object.entries(votes)) {
-        if (!voterSet.has(uid)) continue;
-        votesCast += 1;
-        if (vote === "accept") acceptVotes += 1;
-        if (vote === "reject") rejectVotes += 1;
-      }
+      const summary = await _computePleaVoteSummary(pleaRef, plea);
 
       // Timeout verdict is always rejected on tie or incomplete quorum.
-      const verdict = acceptVotes > rejectVotes ? "approved" : "rejected";
+      const verdict = summary.acceptVotes > summary.rejectVotes ? "approved" : "rejected";
 
-      await pleaRef.set({
+      const timeoutUpdate = {
         status: verdict,
-        voteCounts: {accept: acceptVotes, reject: rejectVotes},
+        voteCounts: {accept: summary.acceptVotes, reject: summary.rejectVotes},
         resolvedAt: FieldValue.serverTimestamp(),
         outcomeSource: "timeout",
         timedOutAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
+      };
+      if (ENABLE_LEGACY_PLEA_VOTE_MAP_SYNC) {
+        timeoutUpdate.votes = summary.votes;
+      }
+      await pleaRef.set(timeoutUpdate, {merge: true});
 
       await pleaRef.collection("messages").add({
         senderId: "SYSTEM",
@@ -1625,15 +2665,30 @@ exports.autoFinalizeStalePleas = onSchedule({
         timestamp: FieldValue.serverTimestamp(),
       });
 
+      if (summary.requesterId) {
+        const isApproved = verdict === "approved";
+        await createInAppNotification(summary.requesterId, {
+          title: `VERDICT: ${isApproved ? "GRANTED" : "DENIED"}`,
+          body: "The Conclave has decided your fate.",
+          type: "verdict",
+          metadata: {
+            pleaId: doc.id,
+            squadId: (plea.squadId || "").toString().trim(),
+            verdict,
+            outcomeSource: "timeout",
+          },
+        });
+      }
+
       finalized += 1;
       logger.info("autoFinalizeStalePleas resolved plea.", {
         pleaId: doc.id,
-        requesterId,
-        participants: participants.length,
-        voters: voters.length,
-        votesCast,
-        acceptVotes,
-        rejectVotes,
+        requesterId: summary.requesterId,
+        participants: summary.participants.length,
+        voters: summary.voters.length,
+        votesCast: summary.votesCast,
+        acceptVotes: summary.acceptVotes,
+        rejectVotes: summary.rejectVotes,
         verdict,
       });
     }
@@ -1695,6 +2750,7 @@ exports.cleanupPleaData = onSchedule({
     });
 
     let messageDeletes = 0;
+    let voteDeletes = 0;
     let pleaDeletes = 0;
 
     for (const pleaRef of toDelete.values()) {
@@ -1702,6 +2758,11 @@ exports.cleanupPleaData = onSchedule({
       for (const msgRef of messages) {
         writer.delete(msgRef);
         messageDeletes += 1;
+      }
+      const votes = await pleaRef.collection("votes").listDocuments();
+      for (const voteRef of votes) {
+        writer.delete(voteRef);
+        voteDeletes += 1;
       }
       writer.delete(pleaRef);
       pleaDeletes += 1;
@@ -1712,6 +2773,7 @@ exports.cleanupPleaData = onSchedule({
     logger.info("cleanupPleaData completed.", {
       pleasDeleted: pleaDeletes,
       messagesDeleted: messageDeletes,
+      voteDocsDeleted: voteDeletes,
     });
   } catch (error) {
     logger.error("cleanupPleaData crashed.", {
@@ -1822,17 +2884,21 @@ async function _destroyMockSessions({staleSquadIds}) {
 
   let deleted = 0;
   for (const pleaRef of sessionRefs.values()) {
-    await _deletePleaWithMessages(pleaRef);
+    await _deletePleaWithChildren(pleaRef);
     deleted += 1;
   }
   return deleted;
 }
 
-async function _deletePleaWithMessages(pleaRef) {
+async function _deletePleaWithChildren(pleaRef) {
   const messagesSnap = await pleaRef.collection("messages").get();
+  const votesSnap = await pleaRef.collection("votes").get();
   const batch = db.batch();
   for (const messageDoc of messagesSnap.docs) {
     batch.delete(messageDoc.ref);
+  }
+  for (const voteDoc of votesSnap.docs) {
+    batch.delete(voteDoc.ref);
   }
   batch.delete(pleaRef);
   await batch.commit();
@@ -1863,14 +2929,124 @@ async function _assertUserCanAccessPlea(uid, pleaData) {
   }
 }
 
+function _normalizeVoteChoice(rawChoice) {
+  const normalized = (rawChoice || "").toString().trim().toLowerCase();
+  if (normalized !== "accept" && normalized !== "reject") return "";
+  return normalized;
+}
+
+function _normalizeParticipantIds(rawParticipants) {
+  const list = Array.isArray(rawParticipants) ? rawParticipants : [];
+  return [...new Set(
+      list
+          .map((id) => id?.toString().trim())
+          .filter((id) => Boolean(id)),
+  )];
+}
+
+async function _loadVoteSubcollectionVotes(pleaRef) {
+  const votesSnap = await pleaRef.collection("votes").get();
+  const votes = {};
+
+  for (const voteDoc of votesSnap.docs) {
+    const data = voteDoc.data() || {};
+    const uid = (data.uid || voteDoc.id).toString().trim();
+    const choice = _normalizeVoteChoice(data.choice);
+    if (!uid || !choice) continue;
+    votes[uid] = choice;
+  }
+
+  return votes;
+}
+
+async function _loadMergedVotesForPlea(pleaRef, pleaData) {
+  const legacyVotes = _normalizeVotes(pleaData?.votes);
+  const voteDocs = await _loadVoteSubcollectionVotes(pleaRef);
+  // Vote docs are authoritative and win on UID collision.
+  return {
+    ...legacyVotes,
+    ...voteDocs,
+  };
+}
+
+async function _computePleaVoteSummary(pleaRef, pleaData) {
+  const requesterId = (pleaData?.userId || "").toString().trim();
+  const participants = _normalizeParticipantIds(pleaData?.participants);
+  const voters = participants.filter((id) => id !== requesterId);
+  const voterSet = new Set(voters);
+  const votes = await _loadMergedVotesForPlea(pleaRef, pleaData);
+
+  let acceptVotes = 0;
+  let rejectVotes = 0;
+  let votesCast = 0;
+
+  for (const [uid, vote] of Object.entries(votes)) {
+    if (!voterSet.has(uid)) continue;
+    votesCast += 1;
+    if (vote === "accept") acceptVotes += 1;
+    if (vote === "reject") rejectVotes += 1;
+  }
+
+  return {
+    requesterId,
+    participants,
+    voters,
+    votes,
+    votesCast,
+    acceptVotes,
+    rejectVotes,
+  };
+}
+
+function _buildPleaVoteUpdates(pleaData, summary) {
+  const currentVotes = _normalizeVotes(pleaData?.votes);
+  const currentVoteCounts = pleaData?.voteCounts && typeof pleaData.voteCounts === "object" ?
+    pleaData.voteCounts : {};
+
+  const currentAccept = Number(currentVoteCounts.accept) || 0;
+  const currentReject = Number(currentVoteCounts.reject) || 0;
+  const countsChanged =
+    currentAccept !== summary.acceptVotes ||
+    currentReject !== summary.rejectVotes;
+  const votesChanged =
+    ENABLE_LEGACY_PLEA_VOTE_MAP_SYNC &&
+    !_votesAreEqual(currentVotes, summary.votes);
+
+  const status = (pleaData?.status || "active").toString().trim().toLowerCase();
+  const quorumReached = summary.voters.length > 0 && summary.votesCast >= summary.voters.length;
+  const shouldResolveNow = status === "active" && quorumReached;
+  const resolvedStatus = summary.acceptVotes > summary.rejectVotes ? "approved" : "rejected";
+
+  const updates = {};
+  if (countsChanged) {
+    updates.voteCounts = {
+      accept: summary.acceptVotes,
+      reject: summary.rejectVotes,
+    };
+  }
+  if (votesChanged) {
+    updates.votes = summary.votes;
+  }
+  if (shouldResolveNow) {
+    updates.status = resolvedStatus;
+    updates.resolvedAt = FieldValue.serverTimestamp();
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return null;
+  }
+
+  return updates;
+}
+
 function _normalizeVotes(rawVotes) {
   if (!rawVotes || typeof rawVotes !== "object") return {};
   const normalized = {};
   for (const [uidRaw, voteRaw] of Object.entries(rawVotes)) {
     const uid = uidRaw.toString().trim();
-    const vote = voteRaw?.toString().trim().toLowerCase();
+    const vote = _normalizeVoteChoice(voteRaw);
     if (!uid) continue;
-    if (vote !== "accept" && vote !== "reject") continue;
+    if (!vote) continue;
     normalized[uid] = vote;
   }
   return normalized;
@@ -1894,4 +3070,13 @@ function _votesAreEqual(a, b) {
     if (a[key] !== b[key]) return false;
   }
   return true;
+}
+
+function _dateOnlyUtc(ms) {
+  const safeMs = Number.isFinite(ms) ? Number(ms) : Date.now();
+  const date = new Date(safeMs);
+  const yyyy = date.getUTCFullYear().toString().padStart(4, "0");
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }

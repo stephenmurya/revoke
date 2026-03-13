@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/services/app_discovery_service.dart';
 import 'dart:typed_data';
 
@@ -18,7 +19,7 @@ class SingleAppIcon extends StatelessWidget {
         // Handle errors gracefully - show fallback icon instead of error
         if (snapshot.hasError) {
           return Icon(
-            Icons.android,
+            PhosphorIcons.androidLogo(),
             size: size,
             color: context.colors.textSecondary,
           );
@@ -42,7 +43,7 @@ class SingleAppIcon extends StatelessWidget {
             height: size,
             errorBuilder: (context, error, stackTrace) {
               return Icon(
-                Icons.android,
+                PhosphorIcons.androidLogo(),
                 size: size,
                 color: context.colors.textSecondary,
               );
@@ -50,7 +51,19 @@ class SingleAppIcon extends StatelessWidget {
           );
         }
 
-        return Icon(Icons.android, size: size, color: context.colors.textSecondary);
+        if (snapshot.hasData && snapshot.data!.isGhost) {
+          return Icon(
+            PhosphorIcons.ghost(),
+            size: size,
+            color: context.colors.textSecondary.withValues(alpha: 0.6),
+          );
+        }
+
+        return Icon(
+          PhosphorIcons.androidLogo(),
+          size: size,
+          color: context.colors.textSecondary,
+        );
       },
     );
   }

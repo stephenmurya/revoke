@@ -1,21 +1,34 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-import '../../../core/models/schedule_model.dart';
+import '../../../core/models/member_rap_sheet_snapshot.dart';
 import '../../../core/models/user_model.dart';
-import '../../../core/services/auth_service.dart';
-import '../../../core/services/regime_service.dart';
+import '../../../core/services/squad_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/theme_extensions.dart';
 
-class MemberDetailSheet extends StatelessWidget {
+class MemberDetailSheet extends StatefulWidget {
   final UserModel member;
 
   const MemberDetailSheet({super.key, required this.member});
 
   @override
+  State<MemberDetailSheet> createState() => _MemberDetailSheetState();
+}
+
+class _MemberDetailSheetState extends State<MemberDetailSheet> {
+  late final Future<MemberRapSheetSnapshot?> _snapshotFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _snapshotFuture = SquadService.getMemberRapSheetSnapshot(widget.member.uid);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final member = widget.member;
     final handle = _handle(member);
     final ringColor = _ringColor(context, member);
     final scoreDisplay = member.focusScore.clamp(0, 1000);
@@ -54,7 +67,7 @@ class MemberDetailSheet extends StatelessWidget {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
+                    icon: Icon(PhosphorIcons.x()),
                   ),
                 ],
               ),
@@ -65,6 +78,7 @@ class MemberDetailSheet extends StatelessWidget {
                 children: [
                   _header(
                     context,
+                    member: member,
                     handle: handle,
                     ringColor: ringColor,
                     scoreDisplay: scoreDisplay,
@@ -73,31 +87,31 @@ class MemberDetailSheet extends StatelessWidget {
                   _Section(
                     title: 'ACTIVE PROTOCOLS',
                     subtitle: 'Enabled regimes for this member.',
-                    child: FutureBuilder<List<ScheduleModel>>(
-                      future: RegimeService.getRegimesForUser(member.uid),
+                    child: FutureBuilder<MemberRapSheetSnapshot?>(
+                      future: _snapshotFuture,
                       builder: (context, snap) {
-                        final regimes = snap.data ?? const <ScheduleModel>[];
                         if (snap.connectionState == ConnectionState.waiting) {
                           return const Padding(
                             padding: EdgeInsets.all(12),
                             child: LinearProgressIndicator(),
                           );
                         }
-                        if (regimes.isEmpty) {
+
+                        final data = snap.data;
+                        if (data == null || data.activeProtocols.isEmpty) {
                           return _emptyLine(context, 'No active protocols.');
                         }
-                        final active =
-                            regimes.where((r) => r.isActive).toList();
-                        final list = active.isEmpty ? regimes : active;
+
+                        final protocols = data.activeProtocols;
                         return Column(
                           children: [
-                            for (final r in list.take(6))
-                              _bulletLine(
+                            for (final protocol in protocols.take(6))
+                              _bulletLine(context, protocol),
+                            if (protocols.length > 6)
+                              _mutedLine(
                                 context,
-                                r.name.trim().isEmpty ? 'REGIME' : r.name,
+                                '+ ${protocols.length - 6} more',
                               ),
-                            if (list.length > 6)
-                              _mutedLine(context, '+ ${list.length - 6} more'),
                           ],
                         );
                       },
@@ -107,26 +121,23 @@ class MemberDetailSheet extends StatelessWidget {
                   _Section(
                     title: 'BLACKLIST',
                     subtitle: 'Consolidated blocked apps from protocols.',
-                    child: FutureBuilder<List<ScheduleModel>>(
-                      future: RegimeService.getRegimesForUser(member.uid),
+                    child: FutureBuilder<MemberRapSheetSnapshot?>(
+                      future: _snapshotFuture,
                       builder: (context, snap) {
-                        final regimes = snap.data ?? const <ScheduleModel>[];
-                        final apps = <String>{};
-                        for (final r in regimes) {
-                          apps.addAll(r.targetApps.map((e) => e.trim()).where((e) => e.isNotEmpty));
-                        }
                         if (snap.connectionState == ConnectionState.waiting) {
                           return _mutedLine(context, 'Assembling blacklist...');
                         }
-                        if (apps.isEmpty) {
+
+                        final data = snap.data;
+                        if (data == null || data.blacklistCount == 0) {
                           return _emptyLine(context, 'Blacklist empty.');
                         }
-                        final count = apps.length;
-                        final preview = apps.take(2).join(', ');
-                        return _mutedLine(
-                          context,
-                          count <= 2 ? preview : '$preview + ${count - 2} others',
-                        );
+
+                        final preview = data.blacklistApps.take(2).join(', ');
+                        final summary = data.blacklistCount <= 2
+                            ? preview
+                            : '$preview + ${data.blacklistCount - 2} others';
+                        return _mutedLine(context, summary);
                       },
                     ),
                   ),
@@ -134,27 +145,33 @@ class MemberDetailSheet extends StatelessWidget {
                   _Section(
                     title: 'CRIMINAL RECORD',
                     subtitle: 'Plea stats within your current squad.',
-                    child: FutureBuilder<_PleaStats?>(
-                      future: _loadPleaStatsForCurrentSquad(),
+                    child: FutureBuilder<MemberRapSheetSnapshot?>(
+                      future: _snapshotFuture,
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return _mutedLine(context, 'Querying record...');
                         }
-                        final stats = snap.data;
-                        if (stats == null) {
+
+                        final data = snap.data;
+                        if (data == null) {
                           return _emptyLine(context, 'No record available.');
                         }
+
                         return Row(
                           children: [
                             Expanded(
-                              child: _statCard(context, 'TOTAL', '${stats.total}'),
+                              child: _statCard(
+                                context,
+                                'TOTAL',
+                                '${data.pleaTotal}',
+                              ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: _statCard(
                                 context,
                                 'APPROVED',
-                                '${stats.approved}',
+                                '${data.pleaApproved}',
                                 accent: context.colors.success,
                               ),
                             ),
@@ -163,7 +180,7 @@ class MemberDetailSheet extends StatelessWidget {
                               child: _statCard(
                                 context,
                                 'REJECTED',
-                                '${stats.rejected}',
+                                '${data.pleaRejected}',
                                 accent: context.colors.danger,
                               ),
                             ),
@@ -183,6 +200,7 @@ class MemberDetailSheet extends StatelessWidget {
 
   Widget _header(
     BuildContext context, {
+    required UserModel member,
     required String handle,
     required Color ringColor,
     required int scoreDisplay,
@@ -192,11 +210,11 @@ class MemberDetailSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
       decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.35),
+        color: Theme.of(
+          context,
+        ).scaffoldBackgroundColor.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: context.scheme.outlineVariant,
-        ),
+        border: Border.all(color: context.scheme.outlineVariant),
       ),
       child: Column(
         children: [
@@ -221,7 +239,9 @@ class MemberDetailSheet extends StatelessWidget {
             child: ClipOval(
               child: hasPhoto
                   ? Image(
-                      image: CachedNetworkImageProvider(member.photoUrl!.trim()),
+                      image: CachedNetworkImageProvider(
+                        member.photoUrl!.trim(),
+                      ),
                       fit: BoxFit.cover,
                     )
                   : Container(
@@ -272,35 +292,6 @@ class MemberDetailSheet extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Future<_PleaStats?> _loadPleaStatsForCurrentSquad() async {
-    final current = AuthService.currentUser;
-    if (current == null) return null;
-    final currentUserData = await AuthService.getUserData();
-    final squadId = (currentUserData?['squadId'] as String?)?.trim() ?? '';
-    if (squadId.isEmpty) return null;
-
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('pleas')
-          .where('squadId', isEqualTo: squadId)
-          .where('userId', isEqualTo: member.uid)
-          .get();
-
-      int total = 0;
-      int approved = 0;
-      int rejected = 0;
-      for (final doc in snap.docs) {
-        total += 1;
-        final status = (doc.data()['status'] ?? '').toString().toLowerCase();
-        if (status == 'approved') approved += 1;
-        if (status == 'rejected') rejected += 1;
-      }
-      return _PleaStats(total: total, approved: approved, rejected: rejected);
-    } catch (_) {
-      return null;
-    }
   }
 
   static Widget _statCard(
@@ -377,9 +368,7 @@ class MemberDetailSheet extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.scheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: context.scheme.outlineVariant,
-        ),
+        border: Border.all(color: context.scheme.outlineVariant),
       ),
       child: Text(
         text,
@@ -410,7 +399,6 @@ class MemberDetailSheet extends StatelessWidget {
     if (email.isNotEmpty) return email.split('@').first;
     return 'member';
   }
-
 }
 
 class _Section extends StatelessWidget {
@@ -431,9 +419,7 @@ class _Section extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.scheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: context.scheme.outlineVariant,
-        ),
+        border: Border.all(color: context.scheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -458,16 +444,4 @@ class _Section extends StatelessWidget {
       ),
     );
   }
-}
-
-class _PleaStats {
-  final int total;
-  final int approved;
-  final int rejected;
-
-  const _PleaStats({
-    required this.total,
-    required this.approved,
-    required this.rejected,
-  });
 }

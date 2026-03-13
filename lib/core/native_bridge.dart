@@ -4,6 +4,8 @@ class NativeBridge {
   static const MethodChannel _channel = MethodChannel('com.revoke.app/overlay');
   static Function()? onShowOverlay;
   static Function(String appName, String packageName)? onRequestPlea;
+  static Function(String appName, String packageName, int blockedAtMs)?
+  onBlockedAttempt;
 
   static void setupOverlayListener() {
     _channel.setMethodCallHandler((call) async {
@@ -13,6 +15,15 @@ class NativeBridge {
         final appName = call.arguments?['appName'] as String? ?? "Unknown App";
         final packageName = call.arguments?['packageName'] as String? ?? "";
         onRequestPlea?.call(appName, packageName);
+      } else if (call.method == 'blockedAttempt') {
+        final appName = call.arguments?['appName'] as String? ?? "Unknown App";
+        final packageName = call.arguments?['packageName'] as String? ?? "";
+        final rawBlockedAt = call.arguments?['blockedAtMs'];
+        final blockedAtMs = rawBlockedAt is int
+            ? rawBlockedAt
+            : int.tryParse(rawBlockedAt?.toString() ?? "") ??
+                  DateTime.now().millisecondsSinceEpoch;
+        onBlockedAttempt?.call(appName, packageName, blockedAtMs);
       }
     });
   }
@@ -40,6 +51,11 @@ class NativeBridge {
     await _channel.invokeMethod('requestBatteryOptimizations');
   }
 
+  /// Opens the system settings for exact alarm access on Android 12+.
+  static Future<void> requestExactAlarms() async {
+    await _channel.invokeMethod('requestExactAlarms');
+  }
+
   /// Fetches a list of installed apps.
   static Future<List<Map<String, dynamic>>> getInstalledApps() async {
     final List<dynamic> result = await _channel.invokeMethod(
@@ -62,9 +78,22 @@ class NativeBridge {
     await _channel.invokeMethod('startService');
   }
 
-  /// Syncs schedules with the native Android service.
-  static Future<void> syncSchedules(String jsonSchedules) async {
-    await _channel.invokeMethod('syncSchedules', {'schedules': jsonSchedules});
+  /// Syncs schedule state with Android so native can decide whether to run.
+  static Future<void> syncSchedules(
+    String jsonSchedules, {
+    int nextWakeupMs = 0,
+  }) async {
+    await _channel.invokeMethod('syncSchedules', {
+      'schedules': jsonSchedules,
+      'nextWakeupMs': nextWakeupMs,
+    });
+  }
+
+  /// Schedules the next exact Android wakeup for regime enforcement.
+  static Future<void> scheduleNextWakeup(int timestampMs) async {
+    await _channel.invokeMethod('scheduleNextWakeup', {
+      'timestampMs': timestampMs,
+    });
   }
 
   /// Fetches usage stats for the last 7 days.
@@ -73,6 +102,16 @@ class NativeBridge {
       'getRealityCheck',
     );
     return Map<String, dynamic>.from(result);
+  }
+
+  /// Returns 24 hourly usage intensity values (avg minutes/hour over 7 days).
+  static Future<List<int>> getHourlyUsagePattern() async {
+    final List<dynamic> result = await _channel.invokeMethod(
+      'getHourlyUsagePattern',
+    );
+    return result
+        .map((value) => (value as num?)?.toInt() ?? 0)
+        .toList(growable: false);
   }
 
   /// Temporarily unlocks an app for a specific duration.

@@ -51,10 +51,11 @@ class _MainShellState extends State<MainShell> {
               child: (photoUrl == null || photoUrl.isEmpty)
                   ? Text(
                       initial.toUpperCase(),
-                      style: (context.text.labelMedium ??
-                              Theme.of(context).textTheme.labelMedium ??
-                              const TextStyle())
-                          .copyWith(color: context.scheme.primary),
+                      style:
+                          (context.text.labelMedium ??
+                                  Theme.of(context).textTheme.labelMedium ??
+                                  const TextStyle())
+                              .copyWith(color: context.scheme.primary),
                     )
                   : null,
             ),
@@ -70,12 +71,9 @@ class _MainShellState extends State<MainShell> {
     // Avoid using `.uri.toString()` here, because query params can change while
     // still being on the same tab, and non-go_router pushes won't update it.
     final String location = GoRouterState.of(context).matchedLocation;
-    final bool showHudTopBar =
-        location == '/home' || location == '/squad' || location == '/challenges';
+    final bool showHudTopBar = location == '/home' || location == '/squad';
     int selectedIndex = 0;
-    if (location == '/challenges') {
-      selectedIndex = 2;
-    } else if (location == '/squad') {
+    if (location == '/squad') {
       selectedIndex = 1;
     }
 
@@ -94,10 +92,13 @@ class _MainShellState extends State<MainShell> {
                   const SizedBox(width: 10),
                   Text(
                     'REVOKE',
-                    style: (context.text.titleMedium ?? const TextStyle()).copyWith(
-                      color: context.scheme.onSurface.withValues(alpha: 0.78),
-                      letterSpacing: -0.5,
-                    ),
+                    style: (context.text.titleMedium ?? const TextStyle())
+                        .copyWith(
+                          color: context.scheme.onSurface.withValues(
+                            alpha: 0.78,
+                          ),
+                          letterSpacing: -0.5,
+                        ),
                   ),
                   const Spacer(),
                   IconButton(
@@ -105,12 +106,6 @@ class _MainShellState extends State<MainShell> {
                     icon: PhosphorIcon(PhosphorIcons.notification()),
                     color: context.scheme.onSurface.withValues(alpha: 0.72),
                     tooltip: 'Notifications',
-                  ),
-                  IconButton(
-                    onPressed: () => context.push('/analytics'),
-                    icon: PhosphorIcon(PhosphorIcons.chartBar()),
-                    color: context.scheme.onSurface.withValues(alpha: 0.72),
-                    tooltip: 'Analytics',
                   ),
                   _buildProfileAvatar(context),
                 ],
@@ -128,9 +123,6 @@ class _MainShellState extends State<MainShell> {
             case 1:
               context.go('/squad');
               break;
-            case 2:
-              context.go('/challenges');
-              break;
           }
         },
         items: [
@@ -147,13 +139,6 @@ class _MainShellState extends State<MainShell> {
               PhosphorIcons.users(PhosphorIconsStyle.fill),
             ),
             label: 'Squad',
-          ),
-          BottomNavigationBarItem(
-            icon: PhosphorIcon(PhosphorIcons.flag()),
-            activeIcon: PhosphorIcon(
-              PhosphorIcons.flag(PhosphorIconsStyle.fill),
-            ),
-            label: 'Challenges',
           ),
         ],
       ),

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/models/user_model.dart';
@@ -14,11 +15,7 @@ class PilloryHero extends StatelessWidget {
   final UserModel victim;
   final String squadId;
 
-  const PilloryHero({
-    super.key,
-    required this.victim,
-    required this.squadId,
-  });
+  const PilloryHero({super.key, required this.victim, required this.squadId});
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +49,10 @@ class PilloryHero extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: context.colors.background.withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(999),
@@ -62,10 +62,11 @@ class PilloryHero extends StatelessWidget {
                 ),
                 child: Text(
                   'THE PILLORY',
-                  style: (context.text.labelSmall ?? AppTheme.labelSmall).copyWith(
-                    color: context.colors.textSecondary,
-                    letterSpacing: 0.6,
-                  ),
+                  style: (context.text.labelSmall ?? AppTheme.labelSmall)
+                      .copyWith(
+                        color: context.colors.textSecondary,
+                        letterSpacing: 0.6,
+                      ),
                 ),
               ),
               const Spacer(),
@@ -84,18 +85,20 @@ class PilloryHero extends StatelessWidget {
                   children: [
                     Text(
                       'CURRENTLY SHAMED',
-                      style: (context.text.labelMedium ?? AppTheme.smBold).copyWith(
-                        color: context.colors.danger.withValues(alpha: 0.9),
-                        letterSpacing: 1.0,
-                      ),
+                      style: (context.text.labelMedium ?? AppTheme.smBold)
+                          .copyWith(
+                            color: context.colors.danger.withValues(alpha: 0.9),
+                            letterSpacing: 1.0,
+                          ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       '@$displayHandle',
-                      style: (context.text.headlineMedium ?? AppTheme.h2).copyWith(
-                        color: context.colors.textPrimary,
-                        height: 1.05,
-                      ),
+                      style: (context.text.headlineMedium ?? AppTheme.h2)
+                          .copyWith(
+                            color: context.colors.textPrimary,
+                            height: 1.05,
+                          ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -104,10 +107,11 @@ class PilloryHero extends StatelessWidget {
                       isCritical
                           ? 'This soldier has fallen below operational readiness.'
                           : 'Morale is low. Supervision recommended.',
-                      style: (context.text.bodySmall ?? AppTheme.bodySmall).copyWith(
-                        color: context.colors.textSecondary,
-                        height: 1.25,
-                      ),
+                      style: (context.text.bodySmall ?? AppTheme.bodySmall)
+                          .copyWith(
+                            color: context.colors.textSecondary,
+                            height: 1.25,
+                          ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -116,7 +120,7 @@ class PilloryHero extends StatelessWidget {
               ),
             ],
           ),
-          
+
           // --- FIXED SECTION START ---
           const SizedBox(height: 16), // Add vertical spacing before buttons
           Row(
@@ -124,7 +128,7 @@ class PilloryHero extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => _castStone(context),
-                  icon: const Icon(Icons.gavel_rounded, size: 16),
+                  icon: Icon(PhosphorIcons.gavel(), size: 16),
                   label: const Text(
                     'Stone',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
@@ -145,7 +149,7 @@ class PilloryHero extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => _prayFor(context),
-                  icon: const Icon(Icons.spa_rounded, size: 16),
+                  icon: Icon(PhosphorIcons.flowerLotus(), size: 16),
                   label: const Text(
                     'Pray',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
@@ -166,7 +170,7 @@ class PilloryHero extends StatelessWidget {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () => _postBail(context, displayHandle),
-                  icon: const Icon(Icons.lock_open_rounded, size: 16),
+                  icon: Icon(PhosphorIcons.lockOpen(), size: 16),
                   label: const Text(
                     'Bail',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
@@ -262,9 +266,8 @@ class PilloryHero extends StatelessWidget {
           title: const Text('Post Bail?'),
           content: Text(
             'Sacrifice 50 Points to save @$displayHandle?',
-            style: (dialogContext.text.bodyMedium ?? AppTheme.bodyMedium).copyWith(
-              color: dialogContext.colors.textSecondary,
-            ),
+            style: (dialogContext.text.bodyMedium ?? AppTheme.bodyMedium)
+                .copyWith(color: dialogContext.colors.textSecondary),
           ),
           actions: [
             TextButton(
@@ -386,10 +389,26 @@ class _AvatarWithTreatment extends StatelessWidget {
     final treated = isCritical
         ? ColorFiltered(
             colorFilter: const ColorFilter.matrix(<double>[
-              0.2126, 0.7152, 0.0722, 0, 0,
-              0.2126, 0.7152, 0.0722, 0, 0,
-              0.2126, 0.7152, 0.0722, 0, 0,
-              0, 0, 0, 1, 0,
+              0.2126,
+              0.7152,
+              0.0722,
+              0,
+              0,
+              0.2126,
+              0.7152,
+              0.0722,
+              0,
+              0,
+              0.2126,
+              0.7152,
+              0.0722,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
             ]),
             child: avatarCore,
           )
@@ -404,7 +423,9 @@ class _AvatarWithTreatment extends StatelessWidget {
               child: CustomPaint(
                 painter: _JailBarsPainter(
                   barColor: context.scheme.onSurface.withValues(alpha: 0.09),
-                  edgeColor: Theme.of(context).shadowColor.withValues(alpha: 0.28),
+                  edgeColor: Theme.of(
+                    context,
+                  ).shadowColor.withValues(alpha: 0.28),
                 ),
               ),
             ),
@@ -443,10 +464,7 @@ class _JailBarsPainter extends CustomPainter {
       size.shortestSide * 0.75,
       Paint()
         ..shader = RadialGradient(
-          colors: [
-            Colors.transparent,
-            edgeColor,
-          ],
+          colors: [Colors.transparent, edgeColor],
         ).createShader(Offset.zero & size),
     );
 

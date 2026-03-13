@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -28,7 +29,7 @@ class SquadScreen extends StatelessWidget {
         onPressed: () => _openBegForTimePicker(context),
         backgroundColor: context.scheme.primary,
         foregroundColor: context.scheme.onPrimary,
-        icon: const Icon(Icons.gavel_rounded),
+        icon: Icon(PhosphorIcons.gavel()),
         label: const Text('BEG FOR TIME'),
       ),
       body: SafeArea(
@@ -58,9 +59,12 @@ class SquadScreen extends StatelessWidget {
                 StreamBuilder<List<UserModel>>(
                   stream: SquadService.getSquadMembersStream(squadId),
                   builder: (context, membersSnap) {
-                    if (membersSnap.connectionState == ConnectionState.waiting) {
+                    if (membersSnap.connectionState ==
+                        ConnectionState.waiting) {
                       return Center(
-                        child: CircularProgressIndicator(color: context.scheme.primary),
+                        child: CircularProgressIndicator(
+                          color: context.scheme.primary,
+                        ),
                       );
                     }
                     if (membersSnap.hasError) {
@@ -70,9 +74,11 @@ class SquadScreen extends StatelessWidget {
                       );
                     }
 
-                    final members = (membersSnap.data ?? const <UserModel>[])
-                        .toList()
-                      ..sort((a, b) => a.focusScore.compareTo(b.focusScore));
+                    final members =
+                        (membersSnap.data ?? const <UserModel>[]).toList()
+                          ..sort(
+                            (a, b) => a.focusScore.compareTo(b.focusScore),
+                          );
 
                     if (members.isEmpty) {
                       return const _EmptyBarracks(
@@ -108,7 +114,8 @@ class SquadScreen extends StatelessWidget {
                             SliverToBoxAdapter(
                               child: _SectionLabel(
                                 title: 'THE ROSTER',
-                                subtitle: 'Status rings report operational posture.',
+                                subtitle:
+                                    'Status rings report operational posture.',
                               ),
                             ),
                             SliverToBoxAdapter(
@@ -126,24 +133,35 @@ class SquadScreen extends StatelessWidget {
                             SliverToBoxAdapter(
                               child: SquadLogFeed(
                                 logs: logs,
+                                viewerUid: currentUid,
                                 onSalute: (log) async {
-                                  // Stubbed: rules disallow client writes to squad logs.
-                                  // This will become a callable-backed reaction endpoint.
-                                  HapticFeedback.lightImpact();
-                                  if (context.mounted) {
+                                  try {
+                                    await SquadService.saluteSquadLog(
+                                      squadId: squadId,
+                                      logId: log.id,
+                                    );
+                                    HapticFeedback.lightImpact();
+                                  } catch (_) {
+                                    if (!context.mounted) return;
                                     ScaffoldMessenger.of(context)
                                       ..hideCurrentSnackBar()
                                       ..showSnackBar(
                                         const SnackBar(
-                                          content: Text('Salute recorded (stub).'),
-                                          duration: Duration(milliseconds: 900),
+                                          content: Text(
+                                            'Unable to salute right now.',
+                                          ),
+                                          duration: Duration(
+                                            milliseconds: 1100,
+                                          ),
                                         ),
                                       );
                                   }
                                 },
                               ),
                             ),
-                            const SliverToBoxAdapter(child: SizedBox(height: 110)),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(height: 110),
+                            ),
                           ],
                         );
                       },
@@ -161,16 +179,20 @@ class SquadScreen extends StatelessWidget {
                     final activePleas = pleaSnapshot.data!.where((p) {
                       final hasNotVoted = !p.votes.containsKey(currentUid);
                       final isNotRequester = p.userId != currentUid;
-                      return p.status == 'active' && hasNotVoted && isNotRequester;
+                      return p.status == 'active' &&
+                          hasNotVoted &&
+                          isNotRequester;
                     }).toList();
 
                     if (activePleas.isEmpty) return const SizedBox.shrink();
 
                     return Container(
-                      color: Theme.of(context)
-                          .scaffoldBackgroundColor
-                          .withValues(alpha: 0.82),
-                      child: Center(child: PleaJudgmentCard(plea: activePleas.first)),
+                      color: Theme.of(
+                        context,
+                      ).scaffoldBackgroundColor.withValues(alpha: 0.82),
+                      child: Center(
+                        child: PleaJudgmentCard(plea: activePleas.first),
+                      ),
                     );
                   },
                 ),
@@ -221,7 +243,9 @@ class SquadScreen extends StatelessWidget {
                         width: 42,
                         height: 5,
                         decoration: BoxDecoration(
-                          color: sheetContext.scheme.onSurface.withValues(alpha: 0.15),
+                          color: sheetContext.scheme.onSurface.withValues(
+                            alpha: 0.15,
+                          ),
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
@@ -252,7 +276,7 @@ class SquadScreen extends StatelessWidget {
                         ),
                         decoration: AppTheme.defaultInputDecoration(
                           hintText: 'Search apps...',
-                          prefixIcon: const Icon(Icons.search_rounded),
+                          prefixIcon: Icon(PhosphorIcons.magnifyingGlass()),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -315,8 +339,7 @@ class SquadScreen extends StatelessWidget {
                                       color: sheetContext.colors.textSecondary,
                                     ),
                                   ),
-                                  trailing:
-                                      const Icon(Icons.chevron_right_rounded),
+                                  trailing: Icon(PhosphorIcons.caretRight()),
                                   onTap: () {
                                     Navigator.of(sheetContext).pop();
                                     context.push(
@@ -360,9 +383,7 @@ class _BarracksHeader extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.scheme.surface,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: context.scheme.outlineVariant,
-          ),
+          border: Border.all(color: context.scheme.outlineVariant),
         ),
         child: Row(
           children: [
@@ -404,11 +425,14 @@ class _BarracksHeader extends StatelessWidget {
                     );
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .scaffoldBackgroundColor
-                        .withValues(alpha: 0.55),
+                    color: Theme.of(
+                      context,
+                    ).scaffoldBackgroundColor.withValues(alpha: 0.55),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: context.scheme.primary.withValues(alpha: 0.22),
@@ -426,7 +450,7 @@ class _BarracksHeader extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Icon(
-                        Icons.copy_rounded,
+                        PhosphorIcons.copy(),
                         size: 16,
                         color: context.scheme.primary.withValues(alpha: 0.85),
                       ),
@@ -435,11 +459,13 @@ class _BarracksHeader extends StatelessWidget {
                         borderRadius: BorderRadius.circular(999),
                         onTap: () {
                           SharePlus.instance.share(
-                            ShareParams(text: 'Join my Revoke Squad: $squadCode'),
+                            ShareParams(
+                              text: 'Join my Revoke Squad: $squadCode',
+                            ),
                           );
                         },
                         child: Icon(
-                          Icons.ios_share_rounded,
+                          PhosphorIcons.shareNetwork(),
                           size: 16,
                           color: context.scheme.primary.withValues(alpha: 0.85),
                         ),
@@ -478,7 +504,9 @@ class _SectionLabel extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: AppTheme.bodySmall.copyWith(color: context.colors.textSecondary),
+            style: AppTheme.bodySmall.copyWith(
+              color: context.colors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -519,7 +547,7 @@ class _LiveTribunalBanner extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.gavel_rounded,
+                    PhosphorIcons.gavel(),
                     color: context.colors.danger.withValues(alpha: 0.90),
                     size: 18,
                   ),
@@ -533,7 +561,7 @@ class _LiveTribunalBanner extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const Icon(Icons.chevron_right_rounded, size: 18),
+                  Icon(PhosphorIcons.caretRight(), size: 18),
                 ],
               ),
             ),
@@ -559,11 +587,9 @@ class _AppIcon extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: context.scheme.outlineVariant,
-          ),
+          border: Border.all(color: context.scheme.outlineVariant),
         ),
-        child: Icon(Icons.apps_rounded, color: context.scheme.primary),
+        child: Icon(PhosphorIcons.squaresFour(), color: context.scheme.primary),
       );
     }
 
@@ -599,12 +625,10 @@ class _EmptyBarracks extends StatelessWidget {
               decoration: BoxDecoration(
                 color: context.scheme.surface,
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: context.scheme.outlineVariant,
-                ),
+                border: Border.all(color: context.scheme.outlineVariant),
               ),
               child: Icon(
-                Icons.groups_rounded,
+                PhosphorIcons.usersThree(),
                 size: 42,
                 color: context.scheme.primary,
               ),

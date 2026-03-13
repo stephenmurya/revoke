@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/native_bridge.dart';
@@ -65,7 +66,7 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
       final nickname = (userData?['nickname'] as String?)?.trim();
 
       if (squadId == null || squadId.isEmpty) {
-        throw Exception('NO SQUAD FOUND');
+        throw const PleaNoSquadException();
       }
 
       final newPleaId = await SquadService.createPlea(
@@ -82,6 +83,17 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
       // Use go_router so this opens as the canonical full-screen route, and
       // so the MainShell HUD header does not remain visible.
       context.go('/tribunal/$newPleaId');
+    } on PleaNoSquadException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          action: SnackBarAction(
+            label: 'Open Squad',
+            onPressed: () => context.go('/squad'),
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -128,7 +140,7 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
                       child: iconBytes != null
                           ? Image.memory(iconBytes, fit: BoxFit.cover)
                           : Icon(
-                              Icons.apps_rounded,
+                              PhosphorIcons.squaresFour(),
                               size: 56,
                               color: context.scheme.primary,
                             ),

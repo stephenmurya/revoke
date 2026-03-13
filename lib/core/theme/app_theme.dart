@@ -10,6 +10,8 @@ class AppTheme {
     'Roboto',
     'Arial',
   ];
+  static const Color prototypeBannerColor = Color(0xFFD100A6);
+  static const Color prototypeBannerOnColor = Color(0xFFFFFFFF);
 
   static TextStyle _type({
     required double size,
@@ -68,7 +70,9 @@ class AppTheme {
     final accent = _resolveEffectiveAccent();
     final isDark = brightness == Brightness.dark;
     final surface = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
-    final onSurface = isDark ? const Color(0xFFFFFFFF) : const Color(0xFF000000);
+    final onSurface = isDark
+        ? const Color(0xFFFFFFFF)
+        : const Color(0xFF000000);
     final muted = onSurface.withValues(alpha: 0.65);
 
     return InputDecoration(
@@ -84,9 +88,7 @@ class AppTheme {
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(
-          color: onSurface.withValues(alpha: 0.10),
-        ),
+        borderSide: BorderSide(color: onSurface.withValues(alpha: 0.10)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -117,10 +119,18 @@ class AppTheme {
     final bool isDark = brightness == Brightness.dark;
 
     // Fixed neutral surfaces. Avoid Material seed tinting.
-    final Color background = isDark ? const Color(0xFF000000) : const Color(0xFFF2F2F7);
-    final Color surface = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
-    final Color onSurface = isDark ? const Color(0xFFFFFFFF) : const Color(0xFF000000);
-    final Color textSecondary = onSurface.withValues(alpha: isDark ? 0.70 : 0.75);
+    final Color background = isDark
+        ? const Color(0xFF000000)
+        : const Color(0xFFF2F2F7);
+    final Color surface = isDark
+        ? const Color(0xFF1C1C1E)
+        : const Color(0xFFFFFFFF);
+    final Color onSurface = isDark
+        ? const Color(0xFFFFFFFF)
+        : const Color(0xFF000000);
+    final Color textSecondary = onSurface.withValues(
+      alpha: isDark ? 0.70 : 0.75,
+    );
     final Color danger = const Color(0xFFFF3B30);
     final Color success = const Color(0xFF34C759);
     final Color warning = const Color(0xFFFFCC00);
@@ -164,10 +174,7 @@ class AppTheme {
       labelLarge: baseBold,
       labelMedium: smMedium,
       labelSmall: xsBold,
-    ).apply(
-      bodyColor: onSurface,
-      displayColor: onSurface,
-    );
+    ).apply(bodyColor: onSurface, displayColor: onSurface);
 
     final ButtonStyle primary = ElevatedButton.styleFrom(
       backgroundColor: accent,
@@ -215,16 +222,17 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: onSurface.withValues(alpha: 0.10),
-          ),
+          borderSide: BorderSide(color: onSurface.withValues(alpha: 0.10)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -259,11 +267,11 @@ class AppTheme {
     );
   }
 
-  @Deprecated('Use AppTheme.create(brightness: Brightness.dark, accent: ...) instead.')
-  static ThemeData get darkTheme => create(
-    brightness: Brightness.dark,
-    accent: const Color(0xFFFF4500),
-  );
+  @Deprecated(
+    'Use AppTheme.create(brightness: Brightness.dark, accent: ...) instead.',
+  )
+  static ThemeData get darkTheme =>
+      create(brightness: Brightness.dark, accent: const Color(0xFFFF4500));
 
   // Typography Tokens
   // Rule: do not create ad hoc TextStyles in feature code. Use these tokens.
@@ -430,7 +438,9 @@ class AppTheme {
   static final TextStyle bodySmall = smRegular;
 
   // squadCodeInput: large alphanumeric code display/input treatment.
-  static final TextStyle squadCodeInput = size3xlBold.copyWith(letterSpacing: 2);
+  static final TextStyle squadCodeInput = size3xlBold.copyWith(
+    letterSpacing: 2,
+  );
 
   // labelSmall: compact labels (chips, tiny headers, status labels).
   static final TextStyle labelSmall = xsBold.copyWith(letterSpacing: 0.6);
@@ -451,7 +461,10 @@ class AppTheme {
   static ButtonStyle get primaryButtonStyle {
     final accent = _resolveEffectiveAccent();
     final brightness = _resolveEffectiveBrightness();
-    final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: brightness);
+    final scheme = ColorScheme.fromSeed(
+      seedColor: accent,
+      brightness: brightness,
+    );
     return ElevatedButton.styleFrom(
       backgroundColor: accent,
       foregroundColor: scheme.onPrimary,
@@ -476,10 +489,7 @@ class AppTheme {
       textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: onSurface.withValues(alpha: 0.10),
-          width: 1,
-        ),
+        side: BorderSide(color: onSurface.withValues(alpha: 0.10), width: 1),
       ),
       padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
       elevation: 0,
@@ -515,10 +525,7 @@ class AppTheme {
     final accent = _resolveEffectiveAccent();
     return BoxDecoration(
       color: fillColor ?? accent.withValues(alpha: 0.15),
-      border: Border.all(
-        color: borderColor ?? accent,
-        width: 1.5,
-      ),
+      border: Border.all(color: borderColor ?? accent, width: 1.5),
       borderRadius: BorderRadius.circular(10),
     );
   }
@@ -533,10 +540,11 @@ class AppTheme {
         ? const Color(0xFF1C1C1E)
         : const Color(0xFFFFFFFF),
     border: Border.all(
-      color: (_resolveEffectiveBrightness() == Brightness.dark
-              ? const Color(0xFFFFFFFF)
-              : const Color(0xFF000000))
-          .withValues(alpha: 0.10),
+      color:
+          (_resolveEffectiveBrightness() == Brightness.dark
+                  ? const Color(0xFFFFFFFF)
+                  : const Color(0xFF000000))
+              .withValues(alpha: 0.10),
       width: 1,
     ),
     borderRadius: BorderRadius.circular(16),
@@ -574,18 +582,20 @@ class AppTheme {
         : const Color(0xFFF2F2F7),
     borderRadius: BorderRadius.circular(12),
     border: Border.all(
-      color: (_resolveEffectiveBrightness() == Brightness.dark
-              ? const Color(0xFFFFFFFF)
-              : const Color(0xFF000000))
-          .withValues(alpha: 0.90),
+      color:
+          (_resolveEffectiveBrightness() == Brightness.dark
+                  ? const Color(0xFFFFFFFF)
+                  : const Color(0xFF000000))
+              .withValues(alpha: 0.90),
       width: 2,
     ),
     boxShadow: [
       BoxShadow(
-        color: (_resolveEffectiveBrightness() == Brightness.dark
-                ? const Color(0xFFFFFFFF)
-                : const Color(0xFF000000))
-            .withValues(alpha: 0.12),
+        color:
+            (_resolveEffectiveBrightness() == Brightness.dark
+                    ? const Color(0xFFFFFFFF)
+                    : const Color(0xFF000000))
+                .withValues(alpha: 0.12),
         blurRadius: 10,
         spreadRadius: 1,
       ),
@@ -614,7 +624,10 @@ class AppTheme {
     return ElevatedButton.styleFrom(
       backgroundColor: bgColor,
       foregroundColor: fgColor,
-      textStyle: baseMedium.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w500),
+      textStyle: baseMedium.copyWith(
+        letterSpacing: 0.8,
+        fontWeight: FontWeight.w500,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: borderColor, width: 2.5),

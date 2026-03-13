@@ -3,13 +3,8 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../core/utils/theme_extensions.dart';
 import 'appearance_screen.dart';
+import 'notifications_screen.dart';
 import 'pages/account_settings_page.dart';
-import 'pages/advanced_settings_page.dart';
-import 'pages/app_management_settings_page.dart';
-import 'pages/behavioural_settings_page.dart';
-import 'pages/notification_settings_page.dart';
-import 'pages/privacy_settings_page.dart';
-import 'pages/squad_social_settings_page.dart';
 import 'widgets/settings_option_tile.dart';
 
 class ControlsHubScreen extends StatefulWidget {
@@ -70,8 +65,10 @@ class _ControlsHubScreenState extends State<ControlsHubScreen> {
                     color: context.colors.textSecondary,
                   ),
                 ),
-                prefixIconConstraints:
-                    const BoxConstraints(minWidth: 0, minHeight: 0),
+                prefixIconConstraints: const BoxConstraints(
+                  minWidth: 0,
+                  minHeight: 0,
+                ),
               ),
             ),
             const SizedBox(height: 18),
@@ -83,9 +80,9 @@ class _ControlsHubScreenState extends State<ControlsHubScreen> {
                 onTap: () {
                   final destination = section.destination;
                   if (destination == null) return;
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => destination),
-                  );
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => destination));
                 },
               ),
               const SizedBox(height: 6),
@@ -98,11 +95,13 @@ class _ControlsHubScreenState extends State<ControlsHubScreen> {
 
   static List<_ControlsSection> _filteredSections(String query) {
     if (query.isEmpty) return _controlsSections;
-    return _controlsSections.where((s) {
-      final title = s.title.toLowerCase();
-      final subtitle = s.subtitle.toLowerCase();
-      return title.contains(query) || subtitle.contains(query);
-    }).toList(growable: false);
+    return _controlsSections
+        .where((s) {
+          final title = s.title.toLowerCase();
+          final subtitle = s.subtitle.toLowerCase();
+          return title.contains(query) || subtitle.contains(query);
+        })
+        .toList(growable: false);
   }
 }
 
@@ -129,44 +128,14 @@ final List<_ControlsSection> _controlsSections = [
   ),
   _ControlsSection(
     title: 'Notifications',
-    subtitle: 'Alert preferences for shame, verdicts, and digests.',
+    subtitle: 'Alert preferences for shame, pleas, and verdicts.',
     icon: PhosphorIcons.bell(),
-    destination: NotificationSettingsPage(),
-  ),
-  _ControlsSection(
-    title: 'Privacy & Data',
-    subtitle: 'Visibility and export controls for personal usage data.',
-    icon: PhosphorIcons.lockSimple(),
-    destination: PrivacySettingsPage(),
-  ),
-  _ControlsSection(
-    title: 'Squad & Social',
-    subtitle: 'Membership and moderation controls for squad operations.',
-    icon: PhosphorIcons.users(),
-    destination: SquadSocialSettingsPage(),
-  ),
-  _ControlsSection(
-    title: 'App Management & Regimes',
-    subtitle: 'Default regime behavior and block policy preferences.',
-    icon: PhosphorIcons.slidersHorizontal(),
-    destination: AppManagementSettingsPage(),
+    destination: NotificationsScreen(),
   ),
   _ControlsSection(
     title: 'Appearance & Experience',
     subtitle: 'Theme, feedback, and presentation preferences.',
     icon: PhosphorIcons.palette(),
     destination: AppearanceScreen(),
-  ),
-  _ControlsSection(
-    title: 'Advanced / Power User',
-    subtitle: 'System-level tuning and recovery tooling.',
-    icon: PhosphorIcons.terminalWindow(),
-    destination: AdvancedSettingsPage(),
-  ),
-  _ControlsSection(
-    title: 'Behavioural / Gamification',
-    subtitle: 'Streaks, benchmarks, and challenge participation settings.',
-    icon: PhosphorIcons.trophy(),
-    destination: BehaviouralSettingsPage(),
   ),
 ];

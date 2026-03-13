@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/services/auth_service.dart';
@@ -72,7 +73,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: context.colors.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
+          icon: Icon(
+            PhosphorIcons.arrowLeft(),
+            color: context.colors.textPrimary,
+          ),
           onPressed: () => context.pop(),
         ),
         title: Text("Account & Profile", style: context.text.titleLarge),
@@ -112,9 +116,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: userData['photoUrl'] == null
                         ? Text(
                             (userData['fullName'] ?? "?")[0].toUpperCase(),
-                            style: (context.text.displayLarge ?? AppTheme.size5xlBold).copyWith(
-                              color: context.colors.accent,
-                            ),
+                            style:
+                                (context.text.displayLarge ??
+                                        AppTheme.size5xlBold)
+                                    .copyWith(color: context.colors.accent),
                           )
                         : null,
                   ),
@@ -135,10 +140,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         child: Text(
                           'GOD MODE',
-                          style: (context.text.labelMedium ?? AppTheme.smBold).copyWith(
-                            color: context.scheme.onError,
-                            letterSpacing: 0.8,
-                          ),
+                          style: (context.text.labelMedium ?? AppTheme.smBold)
+                              .copyWith(
+                                color: context.scheme.onError,
+                                letterSpacing: 0.8,
+                              ),
                         ),
                       ),
                   ],
@@ -162,7 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () => context.push('/god-mode'),
                       style: AppTheme.primaryButtonStyle,
-                      icon: const Icon(Icons.visibility_rounded),
+                      icon: Icon(PhosphorIcons.eye()),
                       label: const Text('Admin Dashboard'),
                     ),
                   ),
@@ -245,9 +251,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text(
                 label,
-                style: (context.text.labelSmall ?? AppTheme.labelSmall).copyWith(
-                  letterSpacing: 1.5,
-                ),
+                style: (context.text.labelSmall ?? AppTheme.labelSmall)
+                    .copyWith(letterSpacing: 1.5),
               ),
               const SizedBox(height: 8),
               Row(
@@ -255,7 +260,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Expanded(
                     child: Text(
                       value,
-                      style: context.text.titleMedium?.copyWith(
+                      style:
+                          context.text.titleMedium?.copyWith(
                             color: context.colors.textPrimary,
                           ) ??
                           AppTheme.lgMedium.copyWith(
@@ -265,7 +271,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(width: 8),
                   Icon(
-                    Icons.edit_rounded,
+                    PhosphorIcons.pencilSimple(),
                     color: context.colors.accent,
                   ),
                 ],
@@ -370,7 +376,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.warning_amber_rounded,
+                  PhosphorIcons.warning(),
                   color: context.colors.danger,
                   size: 64,
                 ),
@@ -384,10 +390,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Text(
                   "This action is irreversible. Your focus scores, squad history, and presence will be purged from the archives.",
                   textAlign: TextAlign.center,
-                  style: (context.text.bodyMedium ?? AppTheme.bodyMedium).copyWith(
-                    color: context.colors.textSecondary,
-                    height: 1.5,
-                  ),
+                  style: (context.text.bodyMedium ?? AppTheme.bodyMedium)
+                      .copyWith(
+                        color: context.colors.textSecondary,
+                        height: 1.5,
+                      ),
                 ),
                 const SizedBox(height: 24),
                 Row(

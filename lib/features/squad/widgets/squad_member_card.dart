@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/models/user_model.dart';
 import '../../../core/theme/app_theme.dart';
@@ -115,7 +116,7 @@ class SquadMemberCard extends StatelessWidget {
         backgroundColor: context.scheme.surface,
         backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
         child: photoUrl == null
-            ? Icon(Icons.person, color: context.colors.textSecondary)
+            ? Icon(PhosphorIcons.user(), color: context.colors.textSecondary)
             : null,
       ),
     );

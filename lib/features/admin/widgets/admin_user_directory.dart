@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/models/user_model.dart';
 import '../../squad/widgets/squad_member_card.dart';
@@ -58,7 +59,7 @@ class _AdminUserDirectoryState extends State<AdminUserDirectory> {
               },
               decoration: InputDecoration(
                 hintText: widget.searchHintText,
-                prefixIcon: const Icon(Icons.search_rounded),
+                prefixIcon: Icon(PhosphorIcons.magnifyingGlass()),
                 filled: true,
                 fillColor: colorScheme.surface,
                 border: OutlineInputBorder(
@@ -153,7 +154,7 @@ class _AdminUserDirectoryState extends State<AdminUserDirectory> {
                     ),
                     const SizedBox(width: 8),
                     Icon(
-                      Icons.chevron_right_rounded,
+                      PhosphorIcons.caretRight(),
                       color: colorScheme.primary,
                     ),
                   ],

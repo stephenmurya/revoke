@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../core/utils/theme_extensions.dart';
 
@@ -15,17 +16,18 @@ class LockScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                Icons.lock_rounded,
+                PhosphorIcons.lockSimple(),
                 size: 80,
                 color: context.scheme.primary,
               ),
               const SizedBox(height: 24),
               Text(
                 'COOKED',
-                style: (context.text.displayMedium ?? const TextStyle()).copyWith(
-                  color: context.scheme.primary,
-                  letterSpacing: 4.0,
-                ),
+                style: (context.text.displayMedium ?? const TextStyle())
+                    .copyWith(
+                      color: context.scheme.primary,
+                      letterSpacing: 4.0,
+                    ),
               ),
               const SizedBox(height: 16),
               Text(

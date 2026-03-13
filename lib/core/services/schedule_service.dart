@@ -5,14 +5,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/schedule_model.dart';
 import '../native_bridge.dart';
+import '../utils/regime_wakeup_calculator.dart';
 import 'auth_service.dart';
 import 'regime_service.dart';
 
 class ScheduleService {
   static const String _legacyKey = 'regime_schedules';
   static const String _keyPrefix = 'regime_schedules_';
-  static const String _pendingUpsertsPrefix = 'regime_schedules_pending_upserts_';
-  static const String _pendingDeletesPrefix = 'regime_schedules_pending_deletes_';
+  static const String _pendingUpsertsPrefix =
+      'regime_schedules_pending_upserts_';
+  static const String _pendingDeletesPrefix =
+      'regime_schedules_pending_deletes_';
 
   static Future<void> _syncWithNativeInBackground() async {
     try {
@@ -292,9 +295,12 @@ class ScheduleService {
   static Future<void> syncWithNative() async {
     final schedules = await _readLocalSchedules();
     final activeSchedules = schedules.where((s) => s.isActive).toList();
+    final nextWakeupMs =
+        RegimeWakeupCalculator.computeNextWakeupTimestampMs(activeSchedules) ??
+        0;
     final jsonSchedules = jsonEncode(
       activeSchedules.map((s) => s.toJson()).toList(),
     );
-    await NativeBridge.syncSchedules(jsonSchedules);
+    await NativeBridge.syncSchedules(jsonSchedules, nextWakeupMs: nextWakeupMs);
   }
 }

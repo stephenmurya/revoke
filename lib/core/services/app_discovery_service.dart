@@ -3,19 +3,40 @@ import '../utils/app_categorizer.dart';
 import 'persistence_service.dart';
 
 class AppInfo {
+  static const String ghostAppName = 'Uninstalled App';
+
   final String name;
   final String packageName;
   final List<int>? icon;
   final AppCategory category;
+  final bool isSystemApp;
+  final bool isGhost;
   bool isRestricted;
 
   AppInfo({
     required this.name,
     required this.packageName,
     required this.category,
+    this.isSystemApp = false,
+    this.isGhost = false,
     this.icon,
     this.isRestricted = false,
   });
+
+  factory AppInfo.ghost({
+    required String packageName,
+    required bool isRestricted,
+  }) {
+    return AppInfo(
+      name: ghostAppName,
+      packageName: packageName,
+      category: AppCategory.others,
+      icon: null,
+      isSystemApp: false,
+      isGhost: true,
+      isRestricted: isRestricted,
+    );
+  }
 }
 
 class AppDiscoveryService {
@@ -58,63 +79,84 @@ class AppDiscoveryService {
       final nativeApps = await NativeBridge.getInstalledApps();
       final restrictedApps = await PersistenceService.getRestrictedApps();
 
-      final list = nativeApps.map((app) {
-        final packageName = app['packageName'] as String;
-        final nativeCategory = app['category'] as int? ?? -1;
+      final list = <AppInfo>[];
+      for (final app in nativeApps) {
+        final packageName = (app['packageName'] as String?)?.trim() ?? '';
+        if (packageName.isEmpty) continue;
 
+        final nativeCategory = app['category'] as int? ?? -1;
         final info = AppInfo(
-          name: app['name'] as String,
+          name: (app['name'] as String?)?.trim().isNotEmpty == true
+              ? (app['name'] as String).trim()
+              : packageName,
           packageName: packageName,
           category: AppCategorizer.categorize(packageName, nativeCategory),
           icon: app['icon'] != null ? List<int>.from(app['icon']) : null,
+          isSystemApp: app['isSystemApp'] == true,
+          isGhost: false,
           isRestricted: restrictedApps[packageName] ?? false,
         );
         _appCache[info.packageName] = info;
-        return info;
-      }).toList();
+        list.add(info);
+      }
 
       return list;
-    } catch (e) {
-      print('Error getting apps: $e');
+    } catch (_) {
       return _cachedApps ?? [];
     }
   }
 
   static Future<AppInfo> getAppDetails(String packageName) async {
-    // Check cache first
-    if (_appCache.containsKey(packageName)) {
-      return _appCache[packageName]!;
+    final normalizedPackage = packageName.trim();
+    if (normalizedPackage.isEmpty) {
+      return AppInfo.ghost(packageName: packageName, isRestricted: false);
     }
 
+    // Check cache first
+    if (_appCache.containsKey(normalizedPackage)) {
+      return _appCache[normalizedPackage]!;
+    }
+
+    final restrictedApps = await PersistenceService.getRestrictedApps();
+    final isRestricted = restrictedApps[normalizedPackage] ?? false;
+
     try {
-      final result = await NativeBridge.getAppDetails(packageName);
-      final restrictedApps =
-          await PersistenceService.getRestrictedApps(); // Fetch restricted apps here
+      final result = await NativeBridge.getAppDetails(normalizedPackage);
+      final rawName = (result['name'] as String?)?.trim();
+      final looksGhost = rawName == null ||
+          rawName.isEmpty ||
+          rawName == AppInfo.ghostAppName;
+
+      if (looksGhost) {
+        final ghost = AppInfo.ghost(
+          packageName: normalizedPackage,
+          isRestricted: isRestricted,
+        );
+        _appCache[normalizedPackage] = ghost;
+        return ghost;
+      }
 
       final info = AppInfo(
-        name: result['name'] as String,
-        packageName: packageName,
+        name: rawName,
+        packageName: normalizedPackage,
         category: AppCategory
             .others, // Single app fetch doesn't need category from native, default to others
         icon: result['icon'] != null ? List<int>.from(result['icon']) : null,
-        isRestricted:
-            restrictedApps[packageName] ?? false, // Apply restriction status
+        isSystemApp: result['isSystemApp'] == true,
+        isGhost: false,
+        isRestricted: isRestricted, // Apply restriction status
       );
 
       // Cache the result
-      _appCache[packageName] = info;
+      _appCache[normalizedPackage] = info;
       return info;
-    } catch (e) {
-      print('Error getting app details for $packageName: $e');
-      // Return a fallback AppInfo
-      final fallback = AppInfo(
-        name: packageName,
-        packageName: packageName,
-        category: AppCategory.others,
-        icon: null,
-        isRestricted: false, // Default to not restricted for fallback
+    } catch (_) {
+      // Preserve restrictions and package identity even if app is uninstalled.
+      final fallback = AppInfo.ghost(
+        packageName: normalizedPackage,
+        isRestricted: isRestricted,
       );
-      _appCache[packageName] = fallback;
+      _appCache[normalizedPackage] = fallback;
       return fallback;
     }
   }

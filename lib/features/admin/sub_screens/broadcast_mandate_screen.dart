@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/theme_extensions.dart';
@@ -51,15 +52,15 @@ class _BroadcastMandateScreenState extends State<BroadcastMandateScreen> {
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       final message = e.message ?? e.code;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $message')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed: $message')));
       setState(() => _sending = false);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed: $e')));
       setState(() => _sending = false);
     }
   }
@@ -113,7 +114,7 @@ class _BroadcastMandateScreenState extends State<BroadcastMandateScreen> {
             const Spacer(),
             ElevatedButton.icon(
               onPressed: _sending ? null : _send,
-              icon: const Icon(Icons.campaign_rounded, size: 18),
+              icon: Icon(PhosphorIcons.megaphone(), size: 18),
               label: Text(_sending ? 'Broadcasting...' : 'Broadcast'),
             ),
             const SizedBox(height: 10),

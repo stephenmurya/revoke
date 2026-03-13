@@ -2,12 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import 'sub_screens/admin_ledger_screen.dart';
 import 'sub_screens/adjust_score_screen.dart';
 import 'sub_screens/broadcast_mandate_screen.dart';
 import 'sub_screens/grant_amnesty_screen.dart';
+import 'ui_tests/ui_test_directory_screen.dart';
 
 class GodModeDashboard extends StatefulWidget {
   const GodModeDashboard({super.key});
@@ -99,6 +101,7 @@ class _GodModeDashboardState extends State<GodModeDashboard> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => child));
+    if (!mounted) return;
     await _refreshStats();
   }
 
@@ -177,34 +180,39 @@ class _GodModeDashboardState extends State<GodModeDashboard> {
 
     final actions = <_DashboardAction>[
       _DashboardAction(
-        icon: Icons.notifications_active_rounded,
+        icon: PhosphorIcons.bellRinging(),
         label: 'Broadcast',
         onTap: () => _openScreen(const BroadcastMandateScreen()),
       ),
       _DashboardAction(
-        icon: Icons.tune_rounded,
+        icon: PhosphorIcons.slidersHorizontal(),
         label: 'Focus Score',
         onTap: () => _openScreen(const AdjustScoreScreen()),
       ),
       _DashboardAction(
-        icon: Icons.lock_open_rounded,
+        icon: PhosphorIcons.lockOpen(),
         label: 'Grant Amnesty',
         onTap: () => _openScreen(const GrantAmnestyScreen()),
       ),
       _DashboardAction(
-        icon: Icons.list_alt_rounded,
+        icon: PhosphorIcons.listBullets(),
         label: 'Shame Ledger',
         onTap: () => _openScreen(const AdminLedgerScreen()),
       ),
       _DashboardAction(
-        icon: Icons.gavel_rounded,
+        icon: PhosphorIcons.gavel(),
         label: 'Active Trials',
         onTap: () => _openScreen(const _ActiveTribunalsScreen()),
       ),
       _DashboardAction(
-        icon: Icons.science_rounded,
+        icon: PhosphorIcons.flask(),
         label: _runningSimulation ? 'Running...' : 'Simulation',
         onTap: _runSimulation,
+      ),
+      _DashboardAction(
+        icon: PhosphorIcons.paintBrush(),
+        label: 'UI Tests',
+        onTap: () => _openScreen(const UITestDirectoryScreen()),
       ),
     ];
     final truePopulation = (_userCount - _mockUserCount).clamp(0, _userCount);
@@ -217,7 +225,7 @@ class _GodModeDashboardState extends State<GodModeDashboard> {
         actions: [
           IconButton(
             onPressed: _refreshStats,
-            icon: const Icon(Icons.refresh_rounded),
+            icon: Icon(PhosphorIcons.arrowClockwise()),
           ),
         ],
       ),
@@ -243,19 +251,22 @@ class _GodModeDashboardState extends State<GodModeDashboard> {
             const SizedBox(height: 22),
             Text('Command Rail', style: textTheme.titleMedium),
             const SizedBox(height: 10),
-            GridView.builder(
-              itemCount: actions.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                mainAxisExtent: 126,
+            Expanded(
+              child: GridView.builder(
+                itemCount: actions.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  mainAxisExtent: 126,
+                ),
+                itemBuilder: (context, index) {
+                  return _ActionCapsule(
+                    action: actions[index],
+                    fullWidth: true,
+                  );
+                },
               ),
-              itemBuilder: (context, index) {
-                return _ActionCapsule(action: actions[index], fullWidth: true);
-              },
             ),
           ],
         ),
@@ -351,7 +362,7 @@ class _ActiveTribunalsScreen extends StatelessWidget {
                     '$accept Approve / $reject Reject',
                   ),
                   isThreeLine: true,
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing: Icon(PhosphorIcons.caretRight()),
                 ),
               );
             },

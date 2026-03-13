@@ -7,7 +7,8 @@
     "node": "22"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:rules": "node --test test/firestore.rules.test.js",
+    "test": "firebase emulators:exec --only firestore \"npm run test:rules\""
   },
   "keywords": [],
   "author": "",
@@ -15,5 +16,9 @@
   "dependencies": {
     "firebase-admin": "^13.6.1",
     "firebase-functions": "^7.0.5"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.2.1"
   }
 }

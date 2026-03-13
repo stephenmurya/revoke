@@ -5,7 +5,19 @@ import '../models/plea_message_model.dart';
 import '../models/user_model.dart';
 import '../models/plea_model.dart';
 import '../models/squad_log_model.dart';
+import '../models/member_rap_sheet_snapshot.dart';
 import 'scoring_service.dart';
+
+class PleaNoSquadException implements Exception {
+  final String message;
+
+  const PleaNoSquadException([
+    this.message = 'Join or create a squad before sending tribunal requests.',
+  ]);
+
+  @override
+  String toString() => message;
+}
 
 class SquadService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -36,6 +48,7 @@ class SquadService {
     return _firestore.runTransaction((transaction) async {
       // 1. Create the Squad document
       transaction.set(squadRef, {
+        'joinCode': squadCode,
         'squadCode': squadCode,
         'creatorId': uid,
         'memberIds': [uid],
@@ -50,66 +63,36 @@ class SquadService {
     });
   }
 
-  /// Joins an existing squad using a 6-digit (REV-XXX) code.
-  /// Updates both the /squads document and the user's /users document atomically.
-  static Future<void> joinSquad(String uid, String squadCode) async {
+  /// Joins an existing squad via a secure callable using a 6-digit (REV-XXX) code.
+  static Future<String> joinSquad(String squadCode) async {
     final normalizedCode = squadCode.toUpperCase().trim();
-    // 1. Find the squad by code
-    final querySnapshot = await _firestore
-        .collection('squads')
-        .where('squadCode', isEqualTo: normalizedCode)
-        .limit(1)
-        .get();
-
-    if (querySnapshot.docs.isEmpty) {
-      throw Exception('SQUAD NOT FOUND: Check the code and try again.');
+    if (normalizedCode.isEmpty) {
+      throw Exception('INVALID SQUAD CODE');
     }
 
-    final squadDoc = querySnapshot.docs.first;
-    final squadRef = squadDoc.reference;
-    final userRef = _firestore.collection('users').doc(uid);
-
-    return _firestore.runTransaction((transaction) async {
-      final userSnapshot = await transaction.get(userRef);
-      final freshSquadSnapshot = await transaction.get(squadRef);
-      final memberIds = List<String>.from(
-        freshSquadSnapshot.get('memberIds') as List,
+    final callable = _functions.httpsCallable('joinSquadByCode');
+    try {
+      final response = await callable.call({'squadCode': normalizedCode});
+      final data = Map<String, dynamic>.from(response.data as Map? ?? const {});
+      final squadId = (data['squadId'] as String?)?.trim();
+      if (squadId == null || squadId.isEmpty) {
+        throw Exception('INVALID_SQUAD_ID');
+      }
+      return squadId;
+    } on FirebaseFunctionsException catch (error) {
+      final message = (error.message ?? '').trim();
+      if (error.code == 'not-found') {
+        throw Exception(message.isEmpty ? 'Invalid squad code' : message);
+      }
+      if (error.code == 'unauthenticated') {
+        throw Exception(
+          message.isEmpty ? 'Sign in before joining a squad.' : message,
+        );
+      }
+      throw Exception(
+        message.isEmpty ? 'Failed to join squad. Please try again.' : message,
       );
-
-      final oldSquadId = userSnapshot.data()?['squadId'] as String?;
-      if (oldSquadId != null &&
-          oldSquadId.isNotEmpty &&
-          oldSquadId != squadRef.id) {
-        final oldSquadRef = _firestore.collection('squads').doc(oldSquadId);
-        final oldSquadSnapshot = await transaction.get(oldSquadRef);
-
-        if (oldSquadSnapshot.exists) {
-          final oldMemberIds = List<String>.from(
-            oldSquadSnapshot.get('memberIds') as List,
-          );
-          oldMemberIds.remove(uid);
-          final shouldDeleteOldSquad = oldMemberIds.isEmpty;
-          if (shouldDeleteOldSquad) {
-            transaction.delete(oldSquadRef);
-          } else {
-            transaction.update(oldSquadRef, {'memberIds': oldMemberIds});
-          }
-        }
-      }
-
-      if (!memberIds.contains(uid)) {
-        memberIds.add(uid);
-      }
-
-      // 2. Update the Squad document
-      transaction.update(squadRef, {'memberIds': memberIds});
-
-      // 3. Update the User document
-      transaction.update(userRef, {
-        'squadId': squadRef.id,
-        'squadCode': normalizedCode,
-      });
-    });
+    }
   }
 
   /// Returns a stream of users who are members of the same squad.
@@ -136,13 +119,26 @@ class SquadService {
     required String reason,
   }) async {
     final callable = _functions.httpsCallable('createPlea');
-    final response = await callable.call({
-      'uid': uid,
-      'appName': appName,
-      'packageName': packageName,
-      'durationMinutes': durationMinutes,
-      'reason': reason,
-    });
+    HttpsCallableResult<dynamic> response;
+    try {
+      response = await callable.call({
+        'uid': uid,
+        'appName': appName,
+        'packageName': packageName,
+        'durationMinutes': durationMinutes,
+        'reason': reason,
+      });
+    } on FirebaseFunctionsException catch (error) {
+      final reasonCode = _extractReasonCode(error.details);
+      final message = (error.message ?? '').trim().toLowerCase();
+      final noSquad =
+          (error.code == 'failed-precondition' && reasonCode == 'NO_SQUAD') ||
+          message.contains('not in a squad');
+      if (noSquad) {
+        throw const PleaNoSquadException();
+      }
+      rethrow;
+    }
 
     final data = Map<String, dynamic>.from(response.data as Map? ?? const {});
     final pleaId = (data['pleaId'] as String?)?.trim();
@@ -152,6 +148,14 @@ class SquadService {
 
     await ScoringService.applyBeggarsTax(uid);
     return pleaId;
+  }
+
+  static String? _extractReasonCode(dynamic details) {
+    if (details is! Map) return null;
+    final normalized = Map<String, dynamic>.from(details);
+    final raw = normalized['reasonCode']?.toString().trim();
+    if (raw == null || raw.isEmpty) return null;
+    return raw.toUpperCase();
   }
 
   /// Submits a vote choice for a plea.
@@ -181,10 +185,7 @@ class SquadService {
     }
 
     final callable = _functions.httpsCallable('castVote');
-    await callable.call({
-      'pleaId': pleaId,
-      'choice': normalizedVote,
-    });
+    await callable.call({'pleaId': pleaId, 'choice': normalizedVote});
   }
 
   /// Returns a stream of approved pleas for a specific user.
@@ -205,15 +206,8 @@ class SquadService {
   static Stream<List<PleaModel>> getActivePleasStream(String squadId) {
     final normalizedSquadId = squadId.trim();
     if (normalizedSquadId.isEmpty) {
-      print(
-        'PLEA_DEBUG: getActivePleasStream called with empty squadId. Returning empty stream.',
-      );
       return Stream.value(const <PleaModel>[]);
     }
-
-    print(
-      'PLEA_DEBUG: Listening for active pleas in squadId=$normalizedSquadId',
-    );
 
     return _firestore
         .collection('pleas')
@@ -221,20 +215,6 @@ class SquadService {
         .where('status', isEqualTo: 'active')
         .snapshots()
         .map((snapshot) {
-          for (final change in snapshot.docChanges) {
-            final data = change.doc.data();
-            final changedSquadId = data?['squadId'];
-            final changedUserId = data?['userId'];
-            final changedStatus = data?['status'];
-            print(
-              'PLEA_DEBUG: ${change.type.name.toUpperCase()} plea=${change.doc.id} squadId=$changedSquadId userId=$changedUserId status=$changedStatus',
-            );
-          }
-
-          print(
-            'PLEA_DEBUG: Active plea snapshot for squadId=$normalizedSquadId count=${snapshot.docs.length}',
-          );
-
           return snapshot.docs
               .map((doc) => PleaModel.fromJson(doc.data(), doc.id))
               .toList();
@@ -293,6 +273,21 @@ class SquadService {
     await callable.call({'pleaId': normalizedPleaId});
   }
 
+  static Future<MemberRapSheetSnapshot?> getMemberRapSheetSnapshot(
+    String targetUid,
+  ) async {
+    final normalizedTargetUid = targetUid.trim();
+    if (normalizedTargetUid.isEmpty) return null;
+
+    final callable = _functions.httpsCallable('getMemberRapSheetSnapshot');
+    final response = await callable.call({'targetUid': normalizedTargetUid});
+    final data = Map<String, dynamic>.from(response.data as Map? ?? const {});
+    final snapshotRaw = data['snapshot'];
+    if (snapshotRaw is! Map) return null;
+    final snapshotMap = Map<String, dynamic>.from(snapshotRaw);
+    return MemberRapSheetSnapshot.fromMap(snapshotMap);
+  }
+
   static Stream<List<PleaMessageModel>> getPleaMessagesStream(String pleaId) {
     return _firestore
         .collection('pleas')
@@ -325,6 +320,23 @@ class SquadService {
               .map((doc) => SquadLogModel.fromFirestore(doc))
               .toList(),
         );
+  }
+
+  static Future<void> saluteSquadLog({
+    required String squadId,
+    required String logId,
+  }) async {
+    final normalizedSquadId = squadId.trim();
+    final normalizedLogId = logId.trim();
+    if (normalizedSquadId.isEmpty || normalizedLogId.isEmpty) {
+      throw Exception('INVALID_ARGUMENTS');
+    }
+
+    final callable = _functions.httpsCallable('saluteSquadLog');
+    await callable.call({
+      'squadId': normalizedSquadId,
+      'logId': normalizedLogId,
+    });
   }
 
   static Future<void> castStone(String userId, String squadId) async {
@@ -369,6 +381,7 @@ class SquadService {
   /// Removes a user from their squad.
   static Future<void> leaveSquad(String uid, String squadId) async {
     final squadRef = _firestore.collection('squads').doc(squadId);
+    final userRef = _firestore.collection('users').doc(uid);
 
     return _firestore.runTransaction((transaction) async {
       final freshSquadSnapshot = await transaction.get(squadRef);
@@ -385,6 +398,8 @@ class SquadService {
       } else {
         transaction.update(squadRef, {'memberIds': memberIds});
       }
+
+      transaction.update(userRef, {'squadId': null, 'squadCode': null});
     });
   }
 }

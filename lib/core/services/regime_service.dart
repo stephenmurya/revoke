@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/schedule_model.dart';
 import '../native_bridge.dart';
+import '../utils/regime_wakeup_calculator.dart';
 import 'auth_service.dart';
 
 class RegimeService {
@@ -34,15 +35,15 @@ class RegimeService {
     return _firestore.collection('users').doc(uid).collection('regimes');
   }
 
-  // Cross-user access: used by Squad HUD. Returns only enabled regimes.
-  // Note: This must be allowed by Firestore security rules (same-squad read).
+  // Legacy helper for direct cross-user reads. Keep best-effort behavior only.
+  // Rap Sheet now uses server-generated snapshots via callable.
   static Future<List<ScheduleModel>> getRegimesForUser(String userId) async {
     final normalized = userId.trim();
     if (normalized.isEmpty) return const <ScheduleModel>[];
     try {
-      final snapshot = await _regimesRef(normalized)
-          .where('isEnabled', isEqualTo: true)
-          .get();
+      final snapshot = await _regimesRef(
+        normalized,
+      ).where('isEnabled', isEqualTo: true).get();
       return snapshot.docs.map(_fromFirestore).toList();
     } catch (_) {
       return const <ScheduleModel>[];
@@ -79,22 +80,27 @@ class RegimeService {
   }
 
   static Map<String, dynamic> _toFirestore(ScheduleModel schedule) {
+    final timeBlocks = schedule.blocks;
+    final firstBlock = timeBlocks.isEmpty ? null : timeBlocks.first;
     return {
       // Required regime fields for cloud schema.
       'name': schedule.name,
       'apps': schedule.targetApps,
       'daysOfWeek': schedule.days,
-      'startTime': _timeToString(schedule.startTime),
-      'endTime': _timeToString(schedule.endTime),
+      'blocks': timeBlocks.map((block) => block.toJson()).toList(),
+      'startTime': _timeToString(firstBlock?.startTime),
+      'endTime': _timeToString(firstBlock?.endTime),
       'isEnabled': schedule.isActive,
+      'emoji': schedule.emoji,
       // Legacy/compat fields used by native sync model.
       'type': schedule.type.index,
       'targetApps': schedule.targetApps,
       'days': schedule.days,
-      'startHour': schedule.startTime?.hour,
-      'startMinute': schedule.startTime?.minute,
-      'endHour': schedule.endTime?.hour,
-      'endMinute': schedule.endTime?.minute,
+      'startHour': firstBlock?.startTime.hour,
+      'startMinute': firstBlock?.startTime.minute,
+      'endHour': firstBlock?.endTime.hour,
+      'endMinute': firstBlock?.endTime.minute,
+      'limitMinutes': schedule.durationLimit?.inMinutes,
       'durationSeconds': schedule.durationLimit?.inSeconds,
       'isActive': schedule.isActive,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -112,35 +118,64 @@ class RegimeService {
       data['days'] as List? ?? data['daysOfWeek'] as List? ?? const <int>[],
     );
 
-    final startTime = _parseTime(
-      data['startTime'],
-      data['startHour'],
-      data['startMinute'],
-    );
-    final endTime = _parseTime(
-      data['endTime'],
-      data['endHour'],
-      data['endMinute'],
-    );
+    final parsedBlocks = <ScheduleBlock>[];
+    final rawBlocks = data['blocks'];
+    if (rawBlocks is List) {
+      for (final raw in rawBlocks) {
+        if (raw is! Map) continue;
+        try {
+          parsedBlocks.add(
+            ScheduleBlock.fromJson(Map<String, dynamic>.from(raw)),
+          );
+        } catch (_) {
+          // Skip malformed entries and keep parsing remaining blocks.
+        }
+      }
+    }
+    if (parsedBlocks.isEmpty) {
+      final startTime = _parseTime(
+        data['startTime'],
+        data['startHour'],
+        data['startMinute'],
+      );
+      final endTime = _parseTime(
+        data['endTime'],
+        data['endHour'],
+        data['endMinute'],
+      );
+      if (startTime != null && endTime != null) {
+        parsedBlocks.add(ScheduleBlock(startTime: startTime, endTime: endTime));
+      }
+    }
+
     final durationSeconds = (data['durationSeconds'] as num?)?.toInt();
+    final limitMinutes = (data['limitMinutes'] as num?)?.toInt();
     final rawType = (data['type'] as num?)?.toInt() ?? 0;
     final safeType = rawType.clamp(0, ScheduleType.values.length - 1);
+    final type = ScheduleType.values[safeType];
+    final duration = durationSeconds == null
+        ? (limitMinutes == null ? null : Duration(minutes: limitMinutes))
+        : Duration(seconds: durationSeconds);
+    final rawEmoji = (data['emoji'] as String?)?.trim();
 
     return ScheduleModel(
       id: doc.id,
       name: (data['name'] as String?)?.trim().isNotEmpty == true
           ? (data['name'] as String).trim()
           : 'REGIME',
-      type: ScheduleType.values[safeType],
-      targetApps: targetApps,
-      days: days,
-      startTime: startTime,
-      endTime: endTime,
-      durationLimit: durationSeconds == null
-          ? null
-          : Duration(seconds: durationSeconds),
+      type: type,
+      targetApps: targetApps
+          .map((pkg) => pkg.trim())
+          .where((pkg) => pkg.isNotEmpty)
+          .toList(growable: false),
+      days: days.map((d) => d.clamp(1, 7)).toSet().toList()..sort(),
+      blocks: parsedBlocks,
+      durationLimit: duration,
       isActive:
           (data['isActive'] as bool?) ?? (data['isEnabled'] as bool?) ?? true,
+      emoji: rawEmoji == null || rawEmoji.isEmpty
+          ? ScheduleModel.defaultEmoji
+          : rawEmoji,
     );
   }
 
@@ -269,9 +304,11 @@ class RegimeService {
   static Future<void> syncEnabledRegimesWithNative() async {
     final regimes = await getRegimes();
     final activeRegimes = regimes.where((r) => r.isActive).toList();
+    final nextWakeupMs =
+        RegimeWakeupCalculator.computeNextWakeupTimestampMs(activeRegimes) ?? 0;
     final jsonSchedules = jsonEncode(
       activeRegimes.map((r) => r.toJson()).toList(),
     );
-    await NativeBridge.syncSchedules(jsonSchedules);
+    await NativeBridge.syncSchedules(jsonSchedules, nextWakeupMs: nextWakeupMs);
   }
 }

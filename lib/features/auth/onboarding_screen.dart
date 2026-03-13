@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
@@ -45,6 +46,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   // Permissions Data
   bool _hasUsageStats = false;
   bool _hasOverlay = false;
+  bool _hasExactAlarm = false;
 
   @override
   void initState() {
@@ -105,6 +107,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       setState(() {
         _hasUsageStats = perms['usage_stats'] ?? false;
         _hasOverlay = perms['overlay'] ?? false;
+        _hasExactAlarm = perms['exact_alarm'] ?? false;
       });
     }
   }
@@ -341,9 +344,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           if (_isLoading)
             Container(
-              color: Theme.of(context)
-                  .scaffoldBackgroundColor
-                  .withValues(alpha: 0.8),
+              color: Theme.of(
+                context,
+              ).scaffoldBackgroundColor.withValues(alpha: 0.8),
               child: Center(
                 child: CircularProgressIndicator(color: context.scheme.primary),
               ),
@@ -364,7 +367,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           const RevokeLogo(size: 100),
           const SizedBox(height: 24),
           Text(
-            "WE NEED ACCESS TO YOUR SOUL\n(AND YOUR SCREEN TIME DATA 🙃)",
+            "We need usage access and overlay permission before enforcement can run.",
             textAlign: TextAlign.center,
             style: AppTheme.bodyMedium.copyWith(
               color: context.colors.textSecondary,
@@ -435,32 +438,43 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Widget _buildStepPermissions() {
-    final allGranted = _hasUsageStats && _hasOverlay;
+    final allGranted = _hasUsageStats && _hasOverlay && _hasExactAlarm;
+
+    void openPermissionSetup() {
+      context.go('/permissions');
+    }
 
     return _buildBaseStep(
       header: "GRANT\nGOD MODE.",
       subtext:
-          "Revoke needs to see what you're doing to roast you properly. Grant these to continue.",
+          "Revoke needs Usage Access, Overlay, and Exact Alarms. The full disclosure and grant flow happens on the next screen.",
       child: Column(
         children: [
           const Spacer(),
           _buildPermissionTile(
             "Usage Access",
-            "Required to see app usage.",
+            "Lets Revoke detect the app currently on screen.",
             _hasUsageStats,
-            () => NativeBridge.requestUsageStats(),
+            openPermissionSetup,
           ),
           const SizedBox(height: 16),
           _buildPermissionTile(
             "Draw Over Apps",
-            "Required to block you.",
+            "Lets Revoke place the lock-screen over restricted apps.",
             _hasOverlay,
-            () => NativeBridge.requestOverlay(),
+            openPermissionSetup,
+          ),
+          const SizedBox(height: 16),
+          _buildPermissionTile(
+            "Exact Alarms",
+            "Lets Revoke wake exactly when a focus regime begins.",
+            _hasExactAlarm,
+            openPermissionSetup,
           ),
           const Spacer(),
           _buildPrimaryButton(
-            label: "Continue",
-            onPressed: allGranted ? _nextPage : null,
+            label: allGranted ? "Continue" : "Open permission setup",
+            onPressed: allGranted ? _nextPage : openPermissionSetup,
           ),
         ],
       ),
@@ -477,9 +491,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             "${_estimatedHours.toStringAsFixed(1)} HOURS",
             textAlign: TextAlign.center, // Centered
-            style: AppTheme.size5xlBold.copyWith(
-              color: context.scheme.primary,
-            ),
+            style: AppTheme.size5xlBold.copyWith(color: context.scheme.primary),
           ),
           const SizedBox(height: 32),
           SliderTheme(
@@ -530,13 +542,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           const SizedBox(height: 16),
           Text(
             isCooked
-                ? "YOU'RE COOKED.\nThat's ${delta.toStringAsFixed(1)} hours more than you thought."
-                : "Surprisingly disciplined.\nFor now.",
+                ? "You're over by ${delta.toStringAsFixed(1)} hours.\nLet's tighten the plan."
+                : "You're within your estimate.\nNow keep it consistent.",
             textAlign: TextAlign.center,
             style: AppTheme.bodyLarge.copyWith(
-              color: isCooked
-                  ? context.colors.danger
-                  : context.colors.success,
+              color: isCooked ? context.colors.danger : context.colors.success,
             ),
           ),
           const Spacer(),
@@ -553,7 +563,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: Row(
                 children: [
                   Icon(
-                    Icons.apps_rounded,
+                    PhosphorIcons.squaresFour(),
                     color: context.scheme.primary,
                     size: 20,
                   ),
@@ -593,9 +603,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             "${_goalHours.toStringAsFixed(1)} HOURS",
             textAlign: TextAlign.center,
-            style: AppTheme.size5xlBold.copyWith(
-              color: context.scheme.primary,
-            ),
+            style: AppTheme.size5xlBold.copyWith(color: context.scheme.primary),
           ),
           const SizedBox(height: 16),
           Text(
@@ -686,7 +694,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         Text(
                           "TAP ANYWHERE TO COPY",
                           style: AppTheme.xsMedium.copyWith(
-                            color: context.colors.textSecondary.withValues(alpha: 0.8),
+                            color: context.colors.textSecondary.withValues(
+                              alpha: 0.8,
+                            ),
                           ),
                         ),
                       ],
@@ -700,11 +710,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               onPressed: _squadCode == null
                   ? null
                   : () {
-                      Share.share(
-                        "Join my Revoke Squad and watch my screen time: $_squadCode",
+                      SharePlus.instance.share(
+                        ShareParams(
+                          text:
+                              "Join my Revoke Squad and watch my screen time: $_squadCode",
+                        ),
                       );
                     },
-              icon: Icons.share_rounded,
+              icon: PhosphorIcons.shareNetwork(),
               label: "Share Invite Code",
             ),
             const SizedBox(height: 16),
@@ -735,10 +748,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 try {
                   final uid = AuthService.currentUser?.uid;
                   if (uid != null) {
-                    await SquadService.joinSquad(uid, code);
+                    final joinedSquadId = await SquadService.joinSquad(code);
                     final userData = await AuthService.getUserData();
+                    final persistedSquadId = (userData?['squadId'] as String?)
+                        ?.trim();
                     setState(() {
-                      _squadId = userData?['squadId'];
+                      _squadId =
+                          persistedSquadId != null &&
+                              persistedSquadId.isNotEmpty
+                          ? persistedSquadId
+                          : joinedSquadId;
                       _squadCode = userData?['squadCode'];
                     });
                     if (mounted) context.go('/home');
@@ -778,32 +797,48 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     String? subtext,
     required Widget child,
   }) {
-    return Padding(
-      padding: const EdgeInsets.all(32.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            header,
-            textAlign: TextAlign.center,
-            style: AppTheme.size4xlBold.copyWith(
-              color: context.scheme.onSurface,
-              height: 1.1,
-            ),
-          ),
-          if (subtext != null) ...[
-            const SizedBox(height: 16),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (childWidget, animation) {
+        final offsetAnimation = Tween<Offset>(
+          begin: const Offset(0.03, 0),
+          end: Offset.zero,
+        ).animate(animation);
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(position: offsetAnimation, child: childWidget),
+        );
+      },
+      child: Padding(
+        key: ValueKey<String>(header),
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
             Text(
-              subtext,
+              header,
               textAlign: TextAlign.center,
-              style: AppTheme.bodyMedium.copyWith(
-                color: context.colors.textSecondary,
+              style: AppTheme.size4xlBold.copyWith(
+                color: context.scheme.onSurface,
+                height: 1.1,
               ),
             ),
+            if (subtext != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                subtext,
+                textAlign: TextAlign.center,
+                style: AppTheme.bodyMedium.copyWith(
+                  color: context.colors.textSecondary,
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+            Expanded(child: child),
           ],
-          const SizedBox(height: 24),
-          Expanded(child: child),
-        ],
+        ),
       ),
     );
   }
@@ -829,7 +864,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         title: Text(title, style: AppTheme.h3),
         subtitle: Text(desc, style: AppTheme.bodySmall),
         trailing: isGranted
-            ? Icon(Icons.check_circle, color: context.colors.success)
+            ? Icon(PhosphorIcons.checkCircle(), color: context.colors.success)
             : ElevatedButton(
                 onPressed: onTap,
                 style: AppTheme.secondaryButtonStyle.copyWith(
@@ -840,7 +875,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     Theme.of(context).scaffoldBackgroundColor,
                   ),
                 ),
-                child: const Text("GRANT"),
+                child: const Text("OPEN"),
               ),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/models/plea_model.dart';
 import '../../../core/services/squad_service.dart';
@@ -56,7 +57,11 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.gavel_rounded, color: context.scheme.primary, size: 28),
+              Icon(
+                PhosphorIcons.gavel(),
+                color: context.scheme.primary,
+                size: 28,
+              ),
               const SizedBox(width: 12),
               Text(
                 'Judgment day',
@@ -104,9 +109,7 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
               decoration: BoxDecoration(
                 color: context.scheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: context.scheme.outlineVariant,
-                ),
+                border: Border.all(color: context.scheme.outlineVariant),
               ),
               child: Text(
                 '"${widget.plea.reason.trim()}"',
