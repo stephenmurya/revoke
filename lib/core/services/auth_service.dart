@@ -6,6 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../app_router.dart';
+import '../native_bridge.dart';
 import 'squad_service.dart';
 
 class AuthService {
@@ -156,7 +157,14 @@ class AuthService {
     if (user == null) return null;
 
     final doc = await _firestore.collection('users').doc(user.uid).get();
-    return doc.data();
+    final data = doc.data();
+    final squadId = (data?['squadId'] as String?)?.trim();
+    try {
+      await NativeBridge.syncUserOverlayContext(
+        hasSquad: squadId != null && squadId.isNotEmpty,
+      );
+    } catch (_) {}
+    return data;
   }
 
   static Future<void> signOut() async {

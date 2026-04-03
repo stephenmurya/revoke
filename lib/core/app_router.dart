@@ -5,7 +5,6 @@ import '../features/navigation/main_shell.dart';
 import '../features/regimes/regimes_screen.dart';
 import '../features/squad/squad_screen.dart';
 import '../features/squad/tribunal_screen.dart';
-import '../features/overlay/lock_screen.dart';
 import '../features/permissions/permission_screen.dart';
 import '../features/home/focus_score_detail_screen.dart';
 import '../features/plea/plea_compose_screen.dart';
@@ -109,6 +108,7 @@ class AppRouter {
     _pendingPermissionsCheck ??= NativeBridge.checkPermissions()
         .then((perms) {
           final hasAll =
+              (perms['accessibility'] ?? false) &&
               (perms['usage_stats'] ?? false) &&
               (perms['overlay'] ?? false) &&
               (perms['exact_alarm'] ?? false);
@@ -290,10 +290,6 @@ class AppRouter {
         path: '/settings/notifications',
         builder: (context, state) =>
             const settings_notifications.NotificationsScreen(),
-      ),
-      GoRoute(
-        path: '/lock_screen',
-        builder: (context, state) => const LockScreen(),
       ),
       GoRoute(
         path: '/plea-compose',

@@ -1,6 +1,7 @@
 package com.crescence.revoke
 
 import android.accessibilityservice.AccessibilityService
+import android.os.Build
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
@@ -9,6 +10,9 @@ import android.view.accessibility.AccessibilityEvent
 
 class RevokeAccessibilityService : AccessibilityService() {
     companion object {
+        private const val HOME_OVERLAY_DELAY_MS = 140L
+        private const val RECENTS_OVERLAY_DELAY_MS = 220L
+
         @Volatile
         private var running: Boolean = false
 
@@ -18,6 +22,7 @@ class RevokeAccessibilityService : AccessibilityService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var lastEvaluatedPackage: String = ""
     private var lastEvaluationAtMs: Long = 0L
+    private var pendingOverlayToken: Long = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -33,6 +38,13 @@ class RevokeAccessibilityService : AccessibilityService() {
         val observedPackage = event.packageName?.toString()?.trim().orEmpty()
         if (observedPackage.isEmpty()) return
         if (EnforcementEngine.shouldIgnorePackage(applicationContext, observedPackage)) return
+        if (BlockerOverlayController.isShowing()) {
+            Log.d(
+                "RevokeAccessibility",
+                "Ignoring accessibility event while blocker overlay is already showing. package=$observedPackage",
+            )
+            return
+        }
 
         val now = System.currentTimeMillis()
         if (observedPackage == lastEvaluatedPackage && now - lastEvaluationAtMs < 250L) {
@@ -44,27 +56,32 @@ class RevokeAccessibilityService : AccessibilityService() {
 
         try {
             EnforcementEngine.recordForegroundPackage(observedPackage)
-            val blockedAppName =
-                EnforcementEngine.findBlockedAppLabel(
+            val blockPresentation =
+                EnforcementEngine.findBlockPresentation(
                     context = applicationContext,
                     packageName = observedPackage,
                     shouldLog = false,
                 )
 
-            if (blockedAppName != null) {
-                val wentHome = performGlobalAction(GLOBAL_ACTION_HOME)
+            if (blockPresentation != null) {
+                if (EnforcementEngine.isAccessibilityEscapePending(observedPackage)) {
+                    Log.d(
+                        "RevokeAccessibility",
+                        "Ignoring duplicate blocked event during accessibility escape window. package=$observedPackage",
+                    )
+                    return
+                }
+                triggerEscapeAndOverlay(
+                    presentation = blockPresentation,
+                )
+                return
+            }
+
+            if (EnforcementEngine.isAccessibilityEscapePending()) {
                 Log.d(
                     "RevokeAccessibility",
-                    "Blocked $observedPackage from accessibility. homeAction=$wentHome",
+                    "Ignoring non-blocked event during accessibility escape window. package=$observedPackage",
                 )
-                mainHandler.post {
-                    BlockerOverlayController.show(
-                        context = applicationContext,
-                        blockedAppName = blockedAppName,
-                        packageNameStr = observedPackage,
-                        source = "accessibility_home_killswitch",
-                    )
-                }
                 return
             }
 
@@ -94,5 +111,70 @@ class RevokeAccessibilityService : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         running = false
         return super.onUnbind(intent)
+    }
+
+    private fun triggerEscapeAndOverlay(presentation: BlockPresentation) {
+        val packageName = presentation.packageName
+        val token = System.currentTimeMillis()
+        pendingOverlayToken = token
+
+        val actionUsed =
+            when {
+                tryPerformGlobalActionIfAvailable(GLOBAL_ACTION_HOME) -> "home"
+                tryPerformGlobalActionIfAvailable(GLOBAL_ACTION_RECENTS) -> "recents"
+                else -> "none"
+            }
+
+        val delayMs =
+            when (actionUsed) {
+                "home" -> HOME_OVERLAY_DELAY_MS
+                "recents" -> RECENTS_OVERLAY_DELAY_MS
+                else -> 0L
+            }
+
+        EnforcementEngine.beginAccessibilityEscape(
+            packageName = packageName,
+            holdMs = delayMs + 1_500L,
+        )
+
+        Log.d(
+            "RevokeAccessibility",
+            "Blocked $packageName from accessibility. action=$actionUsed delayMs=$delayMs",
+        )
+
+        mainHandler.postDelayed({
+            if (pendingOverlayToken != token) {
+                return@postDelayed
+            }
+            BlockerOverlayController.show(
+                context = applicationContext,
+                presentation = presentation,
+                source = "accessibility_${actionUsed}_killswitch",
+            )
+        }, delayMs)
+    }
+
+    private fun tryPerformGlobalActionIfAvailable(action: Int): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val isAvailable =
+                    getSystemActions().any { systemAction ->
+                        systemAction.id == action
+                    }
+                if (!isAvailable) {
+                    return false
+                }
+            }
+            performGlobalAction(action)
+        } catch (error: Exception) {
+            AppMonitorCoordinator.recordNonFatal(
+                context = applicationContext,
+                source = "RevokeAccessibilityService",
+                message = "Failed to perform accessibility global action.",
+                error = error,
+                extraKeys = mapOf("action" to action.toString()),
+            )
+            false
+        }
     }
 }

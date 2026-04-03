@@ -1,25 +1,61 @@
 package com.crescence.revoke
 
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.LinearInterpolator
+import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 
 object BlockerOverlayController {
     private const val PREFS_NAME = "RevokeConfig"
+    private const val COLOR_BG = "#06070A"
+    private const val COLOR_SURFACE = "#10131A"
+    private const val COLOR_SURFACE_ALT = "#141923"
+    private const val COLOR_STROKE = "#273142"
+    private const val COLOR_STROKE_SOFT = "#1A2230"
+    private const val COLOR_TEXT_PRIMARY = "#F5F7FA"
+    private const val COLOR_TEXT_SECONDARY = "#96A2B4"
+    private const val COLOR_TEXT_MUTED = "#6E7888"
+    private const val COLOR_TEXT_STAT_VALUE = "#C7D0DE"
+    private const val COLOR_ORANGE = "#FF4500"
+    private const val COLOR_ORANGE_SOFT = "#FF915A"
+    private const val COLOR_BADGE_BG = "#1A1F28"
+
+    private data class OverlayViews(
+        val root: View,
+        val card: View,
+        val pulseView: View,
+        val heroUnit: View,
+        val badgeView: View,
+    )
+
     private val handler = Handler(Looper.getMainLooper())
 
     @Volatile
-    private var overlayView: android.view.View? = null
+    private var overlayView: View? = null
 
     @Volatile
-    private var currentBlockedApp: String? = null
+    private var currentBlockedPackage: String? = null
+
+    @Volatile
+    private var dismissLocked: Boolean = false
 
     @Volatile
     private var lastBlockedEventPackage: String = ""
@@ -27,20 +63,29 @@ object BlockerOverlayController {
     @Volatile
     private var lastBlockedEventAtMs: Long = 0L
 
+    @Volatile
+    private var pulseAnimator: AnimatorSet? = null
+
     fun isShowing(): Boolean = overlayView != null
 
-    fun show(context: Context, blockedAppName: String, packageNameStr: String, source: String) {
+    fun show(context: Context, presentation: BlockPresentation, source: String) {
         val appContext = context.applicationContext
-        if (blockedAppName.isBlank() || packageNameStr.isBlank()) return
-        if (overlayView != null && currentBlockedApp == blockedAppName) return
+        if (presentation.appName.isBlank() || presentation.packageName.isBlank()) return
+        if (overlayView != null && currentBlockedPackage == presentation.packageName) return
 
-        val blockedAttemptsToday = emitBlockedAttempt(appContext, blockedAppName, packageNameStr)
+        val blockedAttemptsToday =
+            emitBlockedAttempt(appContext, presentation.appName, presentation.packageName)
+        val renderPresentation =
+            EnforcementEngine.enrichBlockPresentation(presentation, blockedAttemptsToday)
 
         handler.post {
             try {
                 val windowManager =
                     appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
                         ?: return@post
+
+                pulseAnimator?.cancel()
+                pulseAnimator = null
 
                 if (overlayView != null) {
                     try {
@@ -50,181 +95,10 @@ object BlockerOverlayController {
                     overlayView = null
                 }
 
-                currentBlockedApp = blockedAppName
+                currentBlockedPackage = renderPresentation.packageName
+                dismissLocked = true
 
-                val root =
-                    android.widget.LinearLayout(appContext).apply {
-                        orientation = android.widget.LinearLayout.VERTICAL
-                        setBackgroundColor(android.graphics.Color.BLACK)
-                        setPadding(60, 40, 60, 40)
-                        weightSum = 10f
-                    }
-
-                val topHud =
-                    android.widget.LinearLayout(appContext).apply {
-                        orientation = android.widget.LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                    }
-                val hudText =
-                    TextView(appContext).apply {
-                        text = "REVOKE"
-                        setTextColor(android.graphics.Color.WHITE)
-                        textSize = 14f
-                        typeface =
-                            android.graphics.Typeface.create(
-                                "sans-serif-medium",
-                                android.graphics.Typeface.NORMAL,
-                            )
-                        letterSpacing = 0.2f
-                    }
-                topHud.addView(hudText)
-
-                val topParams =
-                    android.widget.LinearLayout.LayoutParams(
-                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                        0,
-                        1.5f,
-                    ).apply {
-                        gravity = Gravity.TOP
-                    }
-                root.addView(topHud, topParams)
-
-                val centerLayout =
-                    android.widget.LinearLayout(appContext).apply {
-                        orientation = android.widget.LinearLayout.VERTICAL
-                        gravity = Gravity.CENTER
-                    }
-                val lockIcon =
-                    ImageView(appContext).apply {
-                        setImageResource(
-                            appContext.resources.getIdentifier(
-                                "ic_lock_premium",
-                                "drawable",
-                                appContext.packageName,
-                            ),
-                        )
-                        setColorFilter(android.graphics.Color.parseColor("#FF4500"))
-                        layoutParams = android.widget.LinearLayout.LayoutParams(350, 350)
-                    }
-                val headline =
-                    TextView(appContext).apply {
-                        text = "COOKED."
-                        setTextColor(android.graphics.Color.parseColor("#FF4500"))
-                        textSize = 48f
-                        gravity = Gravity.CENTER
-                        typeface = android.graphics.Typeface.DEFAULT_BOLD
-                        setPadding(0, 40, 0, 10)
-                    }
-                val subtext =
-                    TextView(appContext).apply {
-                        text = "You are trying to open $blockedAppName.\nThe Squad is judging you."
-                        setTextColor(android.graphics.Color.WHITE)
-                        textSize = 18f
-                        gravity = Gravity.CENTER
-                        setPadding(40, 0, 40, 40)
-                        typeface =
-                            android.graphics.Typeface.create(
-                                "sans-serif-light",
-                                android.graphics.Typeface.NORMAL,
-                            )
-                    }
-                val stats =
-                    TextView(appContext).apply {
-                        text = "ATTEMPTS TODAY: $blockedAttemptsToday"
-                        setTextColor(android.graphics.Color.GRAY)
-                        textSize = 11f
-                        gravity = Gravity.CENTER
-                        typeface = android.graphics.Typeface.MONOSPACE
-                    }
-                centerLayout.addView(lockIcon)
-                centerLayout.addView(headline)
-                centerLayout.addView(subtext)
-                centerLayout.addView(stats)
-
-                val centerParams =
-                    android.widget.LinearLayout.LayoutParams(
-                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                        0,
-                        5.5f,
-                    )
-                root.addView(centerLayout, centerParams)
-
-                val bottomActions =
-                    android.widget.LinearLayout(appContext).apply {
-                        orientation = android.widget.LinearLayout.VERTICAL
-                        gravity = Gravity.BOTTOM
-                    }
-
-                val fateButton =
-                    android.widget.Button(appContext).apply {
-                        text = "ACCEPT FATE"
-                        setTextColor(android.graphics.Color.WHITE)
-                        setBackgroundColor(android.graphics.Color.parseColor("#FF4500"))
-                        typeface = android.graphics.Typeface.DEFAULT_BOLD
-                        transformationMethod = null
-                    }
-                fateButton.setOnClickListener {
-                    val startMain =
-                        Intent(Intent.ACTION_MAIN).apply {
-                            addCategory(Intent.CATEGORY_HOME)
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        }
-                    appContext.startActivity(startMain)
-                    hide(appContext, "accept_fate")
-                }
-
-                val begButton =
-                    android.widget.Button(appContext).apply {
-                        text = "BEG FOR TIME"
-                        setTextColor(android.graphics.Color.WHITE)
-                        setBackgroundColor(android.graphics.Color.parseColor("#121212"))
-                        typeface =
-                            android.graphics.Typeface.create(
-                                "sans-serif-medium",
-                                android.graphics.Typeface.NORMAL,
-                            )
-                        transformationMethod = null
-                    }
-                begButton.setOnClickListener {
-                    val intent =
-                        Intent(appContext, MainActivity::class.java).apply {
-                            action = "com.revoke.app.REQUEST_PLEA"
-                            putExtra("appName", blockedAppName)
-                            putExtra("packageName", packageNameStr)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                        }
-                    appContext.startActivity(intent)
-                    begButton.text = "OPENING PLEA..."
-                    begButton.isEnabled = false
-                    begButton.alpha = 0.5f
-
-                    android.widget.Toast.makeText(
-                        appContext,
-                        "Open Revoke to send your plea.",
-                        android.widget.Toast.LENGTH_SHORT,
-                    ).show()
-                }
-
-                val btnParams =
-                    android.widget.LinearLayout.LayoutParams(
-                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                        160,
-                    ).apply {
-                        setMargins(0, 20, 0, 20)
-                    }
-
-                bottomActions.addView(fateButton, btnParams)
-                bottomActions.addView(begButton, btnParams)
-
-                val bottomParams =
-                    android.widget.LinearLayout.LayoutParams(
-                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                        0,
-                        3f,
-                    )
-                root.addView(bottomActions, bottomParams)
+                val overlayViews = buildOverlayViews(appContext, renderPresentation)
 
                 val params =
                     WindowManager.LayoutParams(
@@ -237,12 +111,19 @@ object BlockerOverlayController {
                         },
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                             WindowManager.LayoutParams.FLAG_FULLSCREEN,
                         PixelFormat.TRANSLUCENT,
                     )
+                params.gravity = Gravity.TOP or Gravity.START
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    params.layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                }
 
-                windowManager.addView(root, params)
-                overlayView = root
+                windowManager.addView(overlayViews.root, params)
+                overlayView = overlayViews.root
+                startEntryMotion(overlayViews)
                 android.util.Log.d("RevokeOverlay", "Showing blocker overlay from $source")
             } catch (error: Exception) {
                 AppMonitorCoordinator.recordNonFatal(
@@ -250,7 +131,7 @@ object BlockerOverlayController {
                     source = "BlockerOverlayController",
                     message = "Failed to render blocker overlay.",
                     error = error,
-                    extraKeys = mapOf("trigger" to source, "packageName" to packageNameStr),
+                    extraKeys = mapOf("trigger" to source, "packageName" to presentation.packageName),
                 )
                 android.util.Log.e("RevokeOverlay", "Failed to render blocker overlay.", error)
             }
@@ -260,16 +141,26 @@ object BlockerOverlayController {
     fun hide(context: Context, source: String) {
         val appContext = context.applicationContext
         if (overlayView == null) return
+        if (!shouldAllowDismiss(source)) {
+            android.util.Log.d(
+                "RevokeOverlay",
+                "Ignoring auto-hide from $source while blocker is latched",
+            )
+            return
+        }
         handler.post {
             try {
                 val windowManager =
                     appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
                         ?: return@post
+                pulseAnimator?.cancel()
+                pulseAnimator = null
                 if (overlayView?.parent != null) {
                     windowManager.removeView(overlayView)
                 }
                 overlayView = null
-                currentBlockedApp = null
+                currentBlockedPackage = null
+                dismissLocked = false
                 android.util.Log.d("RevokeOverlay", "Hiding blocker overlay from $source")
             } catch (error: Exception) {
                 AppMonitorCoordinator.recordNonFatal(
@@ -284,20 +175,20 @@ object BlockerOverlayController {
         }
     }
 
-    private fun emitBlockedAttempt(context: Context, appName: String, packageNameStr: String): Int {
+    private fun emitBlockedAttempt(context: Context, appName: String, packageName: String): Int {
         val now = System.currentTimeMillis()
         val isDuplicate =
-            packageNameStr == lastBlockedEventPackage &&
+            packageName == lastBlockedEventPackage &&
                 now - lastBlockedEventAtMs < 4_000L
 
         if (!isDuplicate) {
-            lastBlockedEventPackage = packageNameStr
+            lastBlockedEventPackage = packageName
             lastBlockedEventAtMs = now
 
             val intent =
                 Intent("com.revoke.app.BLOCKED_ATTEMPT").apply {
                     putExtra("appName", appName)
-                    putExtra("packageName", packageNameStr)
+                    putExtra("packageName", packageName)
                     putExtra("blockedAtMs", now)
                 }
             context.sendBroadcast(intent)
@@ -336,9 +227,615 @@ object BlockerOverlayController {
         return nextCount
     }
 
+    private fun buildOverlayViews(
+        context: Context,
+        presentation: BlockPresentation,
+    ): OverlayViews {
+        val root =
+            FrameLayout(context).apply {
+                setBackgroundColor(Color.parseColor(COLOR_BG))
+                clipChildren = false
+                clipToPadding = false
+                fitsSystemWindows = false
+                @Suppress("DEPRECATION")
+                systemUiVisibility =
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            }
+
+        val topGlow =
+            View(context).apply {
+                background =
+                    GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        gradientType = GradientDrawable.RADIAL_GRADIENT
+                        setColor(Color.TRANSPARENT)
+                        colors =
+                            intArrayOf(
+                                Color.parseColor("#3DFF6B2C"),
+                                Color.parseColor("#12FF6B2C"),
+                                Color.TRANSPARENT,
+                            )
+                        gradientRadius = dp(context, 170).toFloat()
+                    }
+                alpha = 0.75f
+            }
+        root.addView(
+            topGlow,
+            FrameLayout.LayoutParams(dp(context, 420), dp(context, 420), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+                topMargin = dp(context, 92)
+            },
+        )
+
+        val content =
+            LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(dp(context, 24), dp(context, 42), dp(context, 24), dp(context, 24))
+                alpha = 0f
+                scaleX = 0.97f
+                scaleY = 0.97f
+            }
+        root.addView(
+            content,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.TOP,
+            ).apply {
+                topMargin = 0
+            },
+        )
+
+        content.addView(space(context, 14, false))
+
+        content.addView(
+            buildHeader(context),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
+        content.addView(space(context, 34, false))
+
+        val heroUnit = buildHeroUnit(context, presentation)
+        content.addView(heroUnit)
+
+        content.addView(
+            buildText(context, presentation.headlineAccent, 11f, COLOR_ORANGE_SOFT, true).apply {
+                letterSpacing = 0.25f
+                gravity = Gravity.CENTER
+                setPadding(0, dp(context, 6), 0, dp(context, 8))
+            },
+        )
+        content.addView(
+            buildText(context, presentation.headlineMain, 28f, COLOR_TEXT_PRIMARY, true).apply {
+                gravity = Gravity.CENTER
+                maxLines = 2
+            },
+        )
+        content.addView(
+            buildText(context, presentation.explanatoryLine, 15f, COLOR_TEXT_PRIMARY, false).apply {
+                gravity = Gravity.CENTER
+                alpha = 0.88f
+                maxLines = 2
+                setPadding(0, dp(context, 16), 0, 0)
+            },
+        )
+
+        content.addView(
+            View(context),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                0.28f,
+            ),
+        )
+
+        content.addView(
+            buildStatsSection(context, presentation.stats).apply {
+                setPadding(0, dp(context, 8), 0, 0)
+            },
+        )
+
+        content.addView(
+            View(context),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                0.12f,
+            ),
+        )
+
+        val actions = buildActionZone(context, presentation)
+        content.addView(
+            actions,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(context, 12)
+            },
+        )
+
+        val pulseView = heroUnit.findViewWithTag<View>("pulse")
+        val badgeView = heroUnit.findViewWithTag<View>("badge")
+
+        return OverlayViews(
+            root = root,
+            card = content,
+            pulseView = pulseView ?: heroUnit,
+            heroUnit = heroUnit,
+            badgeView = badgeView ?: heroUnit,
+        )
+    }
+
+    private fun buildHeader(context: Context): View =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
+            addView(
+                ImageView(context).apply {
+                    setImageResource(R.drawable.ic_launcher_foreground)
+                    layoutParams = LinearLayout.LayoutParams(dp(context, 52), dp(context, 52))
+                },
+            )
+            addView(
+                TextView(context).apply {
+                    text = "Revoke"
+                    textSize = 18f
+                    setTextColor(Color.parseColor(COLOR_TEXT_PRIMARY))
+                    typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                    letterSpacing = 0.0f
+                    gravity = Gravity.CENTER
+                    isSingleLine = true
+                    maxLines = 1
+                    minWidth = dp(context, 112)
+                    includeFontPadding = false
+                    setPadding(dp(context, 10), dp(context, 10), dp(context, 10), 0)
+                },
+            )
+        }
+
+    private fun buildHeroUnit(
+        context: Context,
+        presentation: BlockPresentation,
+    ): View =
+        FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(context, 244), dp(context, 244))
+            clipChildren = false
+            clipToPadding = false
+
+            addView(
+                View(context).apply {
+                    tag = "pulse"
+                    background =
+                        GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            gradientType = GradientDrawable.RADIAL_GRADIENT
+                            setColor(Color.TRANSPARENT)
+                            colors =
+                                intArrayOf(
+                                    Color.parseColor("#49FF6B2C"),
+                                    Color.parseColor("#18FF6B2C"),
+                                    Color.TRANSPARENT,
+                                )
+                            gradientRadius = dp(context, 110).toFloat()
+                        }
+                    alpha = 0.62f
+                },
+                FrameLayout.LayoutParams(dp(context, 212), dp(context, 212), Gravity.CENTER),
+            )
+
+            addView(
+                View(context).apply {
+                    background =
+                        GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(Color.parseColor("#0C1016"))
+                            setStroke(dp(context, 1), Color.parseColor("#2B3B50"))
+                        }
+                },
+                FrameLayout.LayoutParams(dp(context, 182), dp(context, 182), Gravity.CENTER),
+            )
+
+            addView(
+                FrameLayout(context).apply {
+                    clipChildren = false
+                    clipToPadding = false
+
+                    val appTile =
+                        FrameLayout(context).apply {
+                            background =
+                                roundedRect(
+                                    context = context,
+                                    fill = Color.parseColor(COLOR_SURFACE_ALT),
+                                    stroke = Color.parseColor("#33424F62"),
+                                    radiusDp = 32,
+                                )
+                            elevation = dp(context, 6).toFloat()
+                        }
+                    val appIconView = ImageView(context).apply {
+                        presentation.appIcon?.let(::setImageDrawable)
+                            ?: setImageResource(R.mipmap.ic_launcher)
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                    }
+                    appTile.addView(
+                        appIconView,
+                        FrameLayout.LayoutParams(dp(context, 74), dp(context, 74), Gravity.CENTER),
+                    )
+                    addView(
+                        appTile,
+                        FrameLayout.LayoutParams(dp(context, 104), dp(context, 104), Gravity.CENTER),
+                    )
+
+                    val badge =
+                        FrameLayout(context).apply {
+                            tag = "badge"
+                            background =
+                                GradientDrawable().apply {
+                                    shape = GradientDrawable.OVAL
+                                    setColor(Color.parseColor(COLOR_BADGE_BG))
+                                    setStroke(dp(context, 2), Color.parseColor(COLOR_ORANGE))
+                                }
+                            elevation = dp(context, 14).toFloat()
+                        }
+                    badge.addView(
+                        ImageView(context).apply {
+                            setImageResource(R.drawable.ic_lock_premium)
+                            setColorFilter(Color.parseColor(COLOR_ORANGE_SOFT))
+                        },
+                        FrameLayout.LayoutParams(dp(context, 20), dp(context, 20), Gravity.CENTER),
+                    )
+                    addView(
+                        badge,
+                        FrameLayout.LayoutParams(dp(context, 42), dp(context, 42), Gravity.END or Gravity.BOTTOM).apply {
+                            rightMargin = dp(context, 8)
+                            bottomMargin = dp(context, 10)
+                        },
+                    )
+                },
+                FrameLayout.LayoutParams(dp(context, 124), dp(context, 124), Gravity.CENTER),
+            )
+        }
+
+    private fun buildStatsSection(context: Context, stats: List<BlockStatChip>): View {
+        val section =
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+
+        if (stats.isEmpty()) {
+            return section
+        }
+
+        stats.take(3).forEachIndexed { index, chip ->
+            if (index > 0) {
+                section.addView(space(context, 8, true))
+            }
+            section.addView(
+                buildStatChip(context, chip),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        }
+
+        return section
+    }
+
+    private fun buildStatChip(context: Context, chip: BlockStatChip): View =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background =
+                roundedRect(
+                    context = context,
+                    fill = Color.parseColor("#090C11"),
+                    stroke = Color.parseColor(COLOR_STROKE_SOFT),
+                    radiusDp = 18,
+                )
+            alpha = 0.9f
+            setPadding(dp(context, 10), dp(context, 9), dp(context, 10), dp(context, 9))
+            addView(
+                buildText(context, chip.label, 10f, "#596371", false).apply {
+                    letterSpacing = 0.1f
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                },
+            )
+            addView(
+                buildText(context, chip.value, 12f, COLOR_TEXT_STAT_VALUE, true).apply {
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    setPadding(0, dp(context, 3), 0, 0)
+                },
+            )
+        }
+
+    private fun buildActionZone(
+        context: Context,
+        presentation: BlockPresentation,
+    ): View =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+
+            addView(
+                buildPrimaryButton(context, "ACCEPT FATE") {
+                    acceptFate(context, presentation.packageName)
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(context, 56),
+                ),
+            )
+
+            if (presentation.hasSquad) {
+                addView(
+                    buildSecondaryButton(context, "BEG FOR TIME") {
+                        openPleaFlow(context, presentation)
+                    },
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(context, 56),
+                    ).apply {
+                        topMargin = dp(context, 12)
+                    },
+                )
+            } else {
+                addView(
+                    buildStatusTreatment(context, "NO SQUAD TO PLEAD TO"),
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ).apply {
+                        topMargin = dp(context, 12)
+                    },
+                )
+                addView(
+                    buildSecondaryButton(context, "OPEN SQUAD SETUP") {
+                        openSquadSetup(context, presentation.packageName)
+                    },
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(context, 56),
+                    ).apply {
+                        topMargin = dp(context, 12)
+                    },
+                )
+            }
+        }
+
+    private fun buildStatusTreatment(context: Context, text: String): View =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background =
+                roundedRect(
+                    context = context,
+                    fill = Color.parseColor("#0D1117"),
+                    stroke = Color.parseColor(COLOR_STROKE_SOFT),
+                    radiusDp = 18,
+                )
+            setPadding(dp(context, 18), dp(context, 16), dp(context, 18), dp(context, 16))
+            addView(
+                buildText(context, text, 13f, COLOR_ORANGE_SOFT, true).apply {
+                    gravity = Gravity.CENTER
+                    letterSpacing = 0.12f
+                },
+            )
+        }
+
+    private fun buildPrimaryButton(
+        context: Context,
+        text: String,
+        onClick: () -> Unit,
+    ): Button =
+        Button(context).apply {
+            this.text = text
+            transformationMethod = null
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            background =
+                roundedRect(
+                    context = context,
+                    fill = Color.parseColor(COLOR_ORANGE),
+                    stroke = Color.parseColor("#55FFB082"),
+                    radiusDp = 18,
+                )
+            setOnClickListener { onClick() }
+            stateListAnimator = null
+        }
+
+    private fun buildSecondaryButton(
+        context: Context,
+        text: String,
+        onClick: () -> Unit,
+    ): Button =
+        Button(context).apply {
+            this.text = text
+            transformationMethod = null
+            setTextColor(Color.parseColor(COLOR_TEXT_PRIMARY))
+            textSize = 14f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            background =
+                roundedRect(
+                    context = context,
+                    fill = Color.parseColor("#171B24"),
+                    stroke = Color.parseColor(COLOR_STROKE),
+                    radiusDp = 18,
+                )
+            setOnClickListener { onClick() }
+            stateListAnimator = null
+        }
+
+    private fun acceptFate(context: Context, packageName: String) {
+        EnforcementEngine.clearForegroundPackage(packageName)
+        val startMain =
+            Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+        context.startActivity(startMain)
+        hide(context, "accept_fate")
+    }
+
+    private fun openPleaFlow(context: Context, presentation: BlockPresentation) {
+        EnforcementEngine.clearForegroundPackage(presentation.packageName)
+        val intent =
+            Intent(context, MainActivity::class.java).apply {
+                action = "com.revoke.app.REQUEST_PLEA"
+                putExtra("appName", presentation.appName)
+                putExtra("packageName", presentation.packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+        hide(context, "beg_for_time")
+        context.startActivity(intent)
+    }
+
+    private fun openSquadSetup(context: Context, packageName: String) {
+        EnforcementEngine.clearForegroundPackage(packageName)
+        val intent =
+            Intent(context, MainActivity::class.java).apply {
+                action = "com.revoke.app.OPEN_SQUAD_SETUP"
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+        hide(context, "manual_open_squad_setup")
+        context.startActivity(intent)
+    }
+
+    private fun buildText(
+        context: Context,
+        text: String,
+        sizeSp: Float,
+        colorHex: String,
+        bold: Boolean,
+    ): TextView =
+        TextView(context).apply {
+            this.text = text
+            textSize = sizeSp
+            setTextColor(Color.parseColor(colorHex))
+            typeface =
+                if (bold) {
+                    Typeface.create("sans-serif-black", Typeface.NORMAL)
+                } else {
+                    Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                }
+        }
+
+    private fun roundedRect(
+        context: Context,
+        fill: Int,
+        stroke: Int,
+        radiusDp: Int,
+    ): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(context, radiusDp).toFloat()
+            setColor(fill)
+            setStroke(dp(context, 1), stroke)
+        }
+
+    private fun space(context: Context, sizeDp: Int, horizontal: Boolean): View =
+        View(context).apply {
+            layoutParams =
+                if (horizontal) {
+                    LinearLayout.LayoutParams(dp(context, sizeDp), 1)
+                } else {
+                    LinearLayout.LayoutParams(1, dp(context, sizeDp))
+                }
+        }
+
+    private fun dp(context: Context, value: Int): Int =
+        (value * context.resources.displayMetrics.density).toInt()
+
     private fun dayKey(now: Long): String {
         val formatter = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
         formatter.timeZone = java.util.TimeZone.getDefault()
         return formatter.format(java.util.Date(now))
+    }
+
+    private fun startEntryMotion(views: OverlayViews) {
+        views.root.alpha = 0f
+        views.heroUnit.alpha = 0f
+        views.heroUnit.scaleX = 0.94f
+        views.heroUnit.scaleY = 0.94f
+        views.badgeView.alpha = 0f
+        views.badgeView.scaleX = 0.82f
+        views.badgeView.scaleY = 0.82f
+
+        views.root.animate()
+            .alpha(1f)
+            .setDuration(120L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+
+        views.card.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(190L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+
+        views.heroUnit.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setStartDelay(40L)
+            .setDuration(220L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+
+        views.badgeView.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setStartDelay(110L)
+            .setDuration(170L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+
+        val pulseAlpha =
+            ObjectAnimator.ofFloat(views.pulseView, View.ALPHA, 0.45f, 0.82f, 0.45f).apply {
+                duration = 2200L
+                repeatCount = ObjectAnimator.INFINITE
+                repeatMode = ObjectAnimator.RESTART
+                interpolator = LinearInterpolator()
+            }
+        val pulseScaleX =
+            ObjectAnimator.ofFloat(views.pulseView, View.SCALE_X, 0.96f, 1.05f, 0.96f).apply {
+                duration = 2200L
+                repeatCount = ObjectAnimator.INFINITE
+                repeatMode = ObjectAnimator.RESTART
+                interpolator = LinearInterpolator()
+            }
+        val pulseScaleY =
+            ObjectAnimator.ofFloat(views.pulseView, View.SCALE_Y, 0.96f, 1.05f, 0.96f).apply {
+                duration = 2200L
+                repeatCount = ObjectAnimator.INFINITE
+                repeatMode = ObjectAnimator.RESTART
+                interpolator = LinearInterpolator()
+            }
+        pulseAnimator =
+            AnimatorSet().apply {
+                playTogether(pulseAlpha, pulseScaleX, pulseScaleY)
+                start()
+            }
+    }
+
+    private fun shouldAllowDismiss(source: String): Boolean {
+        if (!dismissLocked) return true
+        return source == "accept_fate" ||
+            source == "beg_for_time" ||
+            source.startsWith("manual_")
     }
 }

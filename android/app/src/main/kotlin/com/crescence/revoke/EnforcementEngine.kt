@@ -1,20 +1,48 @@
 package com.crescence.revoke
 
 import android.content.Context
+import android.graphics.drawable.Drawable
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.DateFormat
 import java.util.Calendar
+import java.util.Date
+import kotlin.random.Random
 
 object EnforcementEngine {
     private const val PREFS_NAME = "RevokeConfig"
     private const val KEY_SCHEDULES = "schedules"
     private const val KEY_TEMP_UNLOCKS = "temp_unlocks"
     private const val KEY_AMNESTY_EXPIRY = "amnesty_expiry"
+    private const val KEY_OVERLAY_HAS_SQUAD = "overlay_has_squad"
     private const val TAG = "RevokeEngine"
+    private const val MILLIS_PER_MINUTE = 60_000L
+    private const val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L
 
-    private data class TimeWindow(val startTotalMin: Int, val endTotalMin: Int)
+    private data class TimeWindow(
+        val startTotalMin: Int,
+        val endTotalMin: Int,
+    )
+
+    private data class WindowOccurrence(
+        val startMs: Long,
+        val endMs: Long,
+    )
+
+    private data class BlockMatch(
+        val appName: String,
+        val packageName: String,
+        val blockState: BlockState,
+        val regimeName: String,
+        val blockedSinceMs: Long?,
+        val nextUnlockMs: Long?,
+        val limitMinutes: Int?,
+        val usedMs: Long?,
+        val activationTimestamp: Long?,
+    )
 
     private val cacheLock = Any()
+    private val copySelectionLock = Any()
 
     @Volatile
     private var cachedSchedulesRaw: String = ""
@@ -27,6 +55,14 @@ object EnforcementEngine {
 
     @Volatile
     private var lastObservedPackage: String = ""
+
+    @Volatile
+    private var accessibilityEscapePackage: String = ""
+
+    @Volatile
+    private var accessibilityEscapeUntilMs: Long = 0L
+
+    private val lastCopyIndexByKey = mutableMapOf<String, Int>()
 
     fun ensureLoaded(context: Context) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -55,6 +91,15 @@ object EnforcementEngine {
         }
     }
 
+    fun syncUserOverlayContext(context: Context, hasSquad: Boolean) {
+        context
+            .applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_OVERLAY_HAS_SQUAD, hasSquad)
+            .apply()
+    }
+
     fun getScheduleCount(context: Context): Int {
         ensureLoaded(context)
         return cachedSchedules.size
@@ -74,6 +119,27 @@ object EnforcementEngine {
         }
     }
 
+    fun beginAccessibilityEscape(packageName: String, holdMs: Long) {
+        val normalized = packageName.trim()
+        if (normalized.isEmpty()) return
+        recordForegroundPackage(normalized)
+        accessibilityEscapePackage = normalized
+        accessibilityEscapeUntilMs =
+            System.currentTimeMillis() + holdMs.coerceAtLeast(250L)
+    }
+
+    fun isAccessibilityEscapePending(packageName: String? = null): Boolean {
+        val now = System.currentTimeMillis()
+        if (accessibilityEscapeUntilMs <= now) {
+            accessibilityEscapePackage = ""
+            accessibilityEscapeUntilMs = 0L
+            return false
+        }
+
+        val normalized = packageName?.trim().orEmpty()
+        return normalized.isEmpty() || normalized == accessibilityEscapePackage
+    }
+
     fun evaluateLastObservedPackage(
         context: Context,
         source: String,
@@ -81,6 +147,9 @@ object EnforcementEngine {
     ): Boolean {
         val packageName = lastObservedPackage.trim()
         if (packageName.isEmpty()) {
+            if (shouldDeferUiToAccessibility(packageName = null, source = source)) {
+                return false
+            }
             BlockerOverlayController.hide(context, "$source:no_observed_package")
             return false
         }
@@ -96,6 +165,9 @@ object EnforcementEngine {
         val appContext = context.applicationContext
         val normalizedPackage = packageName.trim()
         if (normalizedPackage.isEmpty()) {
+            if (shouldDeferUiToAccessibility(packageName = null, source = source)) {
+                return false
+            }
             BlockerOverlayController.hide(appContext, "$source:empty_package")
             return false
         }
@@ -103,16 +175,29 @@ object EnforcementEngine {
         recordForegroundPackage(normalizedPackage)
 
         if (shouldIgnorePackage(appContext, normalizedPackage)) {
+            if (shouldDeferUiToAccessibility(normalizedPackage, source)) {
+                return false
+            }
             BlockerOverlayController.hide(appContext, "$source:ignored_package")
             return false
         }
 
         return try {
-            val blockedAppName = findBlockedAppLabel(appContext, normalizedPackage, shouldLog)
-            if (blockedAppName != null) {
-                BlockerOverlayController.show(appContext, blockedAppName, normalizedPackage, source)
+            val match = findBlockMatch(appContext, normalizedPackage, shouldLog)
+            if (match != null) {
+                if (shouldDeferUiToAccessibility(normalizedPackage, source)) {
+                    return true
+                }
+                BlockerOverlayController.show(
+                    appContext,
+                    toBlockPresentation(appContext, match),
+                    source,
+                )
                 true
             } else {
+                if (shouldDeferUiToAccessibility(normalizedPackage, source)) {
+                    return false
+                }
                 BlockerOverlayController.hide(appContext, "$source:not_blocked")
                 false
             }
@@ -132,11 +217,34 @@ object EnforcementEngine {
         context: Context,
         packageName: String,
         shouldLog: Boolean = false,
-    ): String? {
+    ): String? =
+        findBlockMatch(
+            context = context.applicationContext,
+            packageName = packageName.trim(),
+            shouldLog = shouldLog,
+        )?.appName
+
+    fun findBlockPresentation(
+        context: Context,
+        packageName: String,
+        shouldLog: Boolean = false,
+    ): BlockPresentation? {
+        val appContext = context.applicationContext
         val normalizedPackage = packageName.trim()
         if (normalizedPackage.isEmpty()) return null
-        if (shouldIgnorePackage(context, normalizedPackage)) return null
-        return shouldBlockPackage(context, normalizedPackage, shouldLog)
+        val match = findBlockMatch(appContext, normalizedPackage, shouldLog) ?: return null
+        return toBlockPresentation(appContext, match)
+    }
+
+    fun enrichBlockPresentation(
+        presentation: BlockPresentation,
+        attemptsToday: Int,
+    ): BlockPresentation {
+        val stats =
+            (listOf(BlockStatChip(label = "Attempts today", value = attemptsToday.toString())) +
+                presentation.contextualStats)
+                .take(3)
+        return presentation.copy(attemptsToday = attemptsToday, stats = stats)
     }
 
     fun hasActiveUsageLimitRegimeNow(
@@ -145,10 +253,7 @@ object EnforcementEngine {
     ): Boolean {
         ensureLoaded(context)
         val calendar = Calendar.getInstance().apply { timeInMillis = nowMs }
-        val modelDay =
-            calendar.get(Calendar.DAY_OF_WEEK).let { day ->
-                if (day == Calendar.SUNDAY) 7 else day - 1
-            }
+        val modelDay = modelDayFromCalendar(calendar)
         val currentTotalMin = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
 
         for (schedule in cachedSchedules) {
@@ -167,11 +272,22 @@ object EnforcementEngine {
         return false
     }
 
-    private fun shouldBlockPackage(
+    fun shouldIgnorePackage(context: Context, packageName: String): Boolean {
+        val normalized = packageName.trim()
+        if (normalized.isEmpty()) return true
+        if (normalized == context.packageName) return true
+        val lowercase = normalized.lowercase()
+        if (lowercase == "com.android.systemui") return true
+        if (lowercase.contains("launcher")) return true
+        if (lowercase.contains("trebuchet")) return true
+        return false
+    }
+
+    private fun findBlockMatch(
         context: Context,
         packageName: String,
         shouldLog: Boolean,
-    ): String? {
+    ): BlockMatch? {
         return try {
             val nowMs = System.currentTimeMillis()
             if (isAmnestyActive(context, nowMs)) {
@@ -189,10 +305,7 @@ object EnforcementEngine {
             }
 
             val calendar = Calendar.getInstance().apply { timeInMillis = nowMs }
-            val modelDay =
-                calendar.get(Calendar.DAY_OF_WEEK).let { day ->
-                    if (day == Calendar.SUNDAY) 7 else day - 1
-                }
+            val modelDay = modelDayFromCalendar(calendar)
             val currentTotalMin =
                 calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
 
@@ -201,15 +314,14 @@ object EnforcementEngine {
                 if (!scheduleMatchesDay(schedule, modelDay)) continue
                 if (!scheduleTargetsPackage(schedule, packageName)) continue
 
-                val shouldBlock =
+                val match =
                     when (schedule.optInt("type", 0)) {
-                        0 -> evaluateTimeBlockRegime(schedule, currentTotalMin)
-                        1 -> evaluateUsageLimitRegime(context, schedule, currentTotalMin, nowMs)
-                        else -> false
+                        0 -> evaluateTimeBlockMatch(context, schedule, packageName, currentTotalMin, nowMs)
+                        1 -> evaluateUsageLimitMatch(context, schedule, packageName, currentTotalMin, nowMs)
+                        else -> null
                     }
-
-                if (shouldBlock) {
-                    return resolvePackageLabel(context, packageName)
+                if (match != null) {
+                    return match
                 }
             }
 
@@ -226,40 +338,62 @@ object EnforcementEngine {
         }
     }
 
-    private fun evaluateTimeBlockRegime(schedule: JSONObject, currentTotalMin: Int): Boolean {
-        val windows = extractTimeWindows(schedule)
-        if (windows.isEmpty()) return false
-        return windows.any { isMinuteWithinWindow(it, currentTotalMin) }
-    }
-
-    private fun evaluateUsageLimitRegime(
+    private fun evaluateTimeBlockMatch(
         context: Context,
         schedule: JSONObject,
+        packageName: String,
         currentTotalMin: Int,
         nowMs: Long,
-    ): Boolean {
+    ): BlockMatch? {
         val windows = extractTimeWindows(schedule)
+        if (windows.isEmpty()) return null
+        val activeWindow =
+            windows
+                .firstOrNull { isMinuteWithinWindow(it, currentTotalMin) }
+                ?.let { window -> currentDayOccurrence(nowMs, window) }
+                ?: return null
+
+        return BlockMatch(
+            appName = resolvePackageLabel(context, packageName),
+            packageName = packageName,
+            blockState = BlockState.TIME_BLOCK,
+            regimeName = resolveRegimeName(schedule),
+            blockedSinceMs = activeWindow.startMs,
+            nextUnlockMs = activeWindow.endMs,
+            limitMinutes = null,
+            usedMs = null,
+            activationTimestamp = null,
+        )
+    }
+
+    private fun evaluateUsageLimitMatch(
+        context: Context,
+        schedule: JSONObject,
+        packageName: String,
+        currentTotalMin: Int,
+        nowMs: Long,
+    ): BlockMatch? {
+        val windows = extractTimeWindows(schedule)
+        val limitMinutes = resolveLimitMinutes(schedule)
+
         if (windows.isNotEmpty() && !windows.any { isMinuteWithinWindow(it, currentTotalMin) }) {
-            return true
+            return BlockMatch(
+                appName = resolvePackageLabel(context, packageName),
+                packageName = packageName,
+                blockState = BlockState.WINDOW_CLOSED,
+                regimeName = resolveRegimeName(schedule),
+                blockedSinceMs = resolvePreviousWindowEnd(schedule, windows, nowMs) ?: nowMs,
+                nextUnlockMs = resolveNextWindowStart(schedule, windows, nowMs),
+                limitMinutes = limitMinutes.takeIf { it > 0 },
+                usedMs = null,
+                activationTimestamp = null,
+            )
         }
 
-        val limitMinutes =
-            when {
-                schedule.has("limitMinutes") && !schedule.isNull("limitMinutes") ->
-                    schedule.optInt("limitMinutes", -1)
-                schedule.has("durationMinutes") && !schedule.isNull("durationMinutes") ->
-                    schedule.optInt("durationMinutes", -1)
-                schedule.has("durationSeconds") && !schedule.isNull("durationSeconds") -> {
-                    val seconds = schedule.optLong("durationSeconds", -1L)
-                    if (seconds <= 0L) -1 else (seconds / 60L).toInt()
-                }
-                else -> -1
-            }
-
-        if (limitMinutes <= 0) return false
+        if (limitMinutes <= 0) return null
 
         val targetPackages = extractTargetPackages(schedule)
-        if (targetPackages.isEmpty()) return false
+        if (targetPackages.isEmpty()) return null
 
         val activationTimestamp = resolveActivationTimestamp(schedule, nowMs)
         val usageByPackage =
@@ -270,8 +404,333 @@ object EnforcementEngine {
                 nowMs = nowMs,
             )
         val usedMs = targetPackages.sumOf { usageByPackage[it] ?: 0L }
-        return usedMs >= limitMinutes.toLong() * 60_000L
+        val limitMs = limitMinutes.toLong() * MILLIS_PER_MINUTE
+        if (usedMs < limitMs) return null
+
+        return BlockMatch(
+            appName = resolvePackageLabel(context, packageName),
+            packageName = packageName,
+            blockState = BlockState.USAGE_LIMIT_REACHED,
+            regimeName = resolveRegimeName(schedule),
+            blockedSinceMs = null,
+            nextUnlockMs = resolveUsageLimitNextUnlock(schedule, windows, nowMs),
+            limitMinutes = limitMinutes,
+            usedMs = usedMs,
+            activationTimestamp = activationTimestamp,
+        )
     }
+
+    private fun toBlockPresentation(
+        context: Context,
+        match: BlockMatch,
+    ): BlockPresentation {
+        val hasSquad =
+            context
+                .applicationContext
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_OVERLAY_HAS_SQUAD, false)
+
+        return BlockPresentation(
+            appName = match.appName,
+            packageName = match.packageName,
+            appIcon = resolvePackageIcon(context, match.packageName),
+            blockState = match.blockState,
+            regimeName = match.regimeName,
+            headlineAccent = buildHeadlineAccent(match.blockState),
+            headlineMain = buildHeadlineMain(match),
+            explanatoryLine = buildExplanatoryLine(match),
+            secondaryLine = buildSecondaryLine(match, hasSquad),
+            contextualStats = buildContextualStats(match),
+            hasSquad = hasSquad,
+        )
+    }
+
+    private fun buildHeadlineAccent(blockState: BlockState): String =
+        when (blockState) {
+            BlockState.TIME_BLOCK ->
+                pickCopy(
+                    "accent_time_block",
+                    listOf("COOKED", "BLOCKED", "DENIED"),
+                )
+            BlockState.USAGE_LIMIT_REACHED ->
+                pickCopy(
+                    "accent_usage_limit_reached",
+                    listOf("TIME'S UP", "LIMIT HIT", "DENIED"),
+                )
+            BlockState.WINDOW_CLOSED ->
+                pickCopy(
+                    "accent_window_closed",
+                    listOf("BLOCKED", "DENIED", "CLOSED"),
+                )
+        }
+
+    private fun buildHeadlineMain(match: BlockMatch): String =
+        when (match.blockState) {
+            BlockState.TIME_BLOCK ->
+                pickCopy(
+                    "headline_time_block",
+                    listOf(
+                        "${match.appName} is locked",
+                        "${match.appName} can wait",
+                        "${match.appName} is off-limits",
+                    ),
+                )
+            BlockState.USAGE_LIMIT_REACHED ->
+                pickCopy(
+                    "headline_usage_limit_reached",
+                    listOf(
+                        "${match.appName} limit reached",
+                        "${match.appName} session ended",
+                        "${match.appName} can wait",
+                    ),
+                )
+            BlockState.WINDOW_CLOSED ->
+                pickCopy(
+                    "headline_window_closed",
+                    listOf(
+                        "${match.appName} can wait",
+                        "${match.appName} is off-limits",
+                        "${match.appName} stays closed",
+                    ),
+                )
+        }
+
+    private fun buildExplanatoryLine(match: BlockMatch): String {
+        val unlockLabel = match.nextUnlockMs?.let(::formatShortTime)
+        val limitLabel = match.limitMinutes?.let(::formatCompactMinutes)
+        return when (match.blockState) {
+            BlockState.TIME_BLOCK ->
+                if (unlockLabel != null) {
+                    pickCopy(
+                        "explain_time_block",
+                        listOf(
+                            "Blocked by your ${match.regimeName} regime until $unlockLabel.",
+                            "${match.regimeName} has this app locked until $unlockLabel.",
+                            "This app stays blocked under ${match.regimeName} until $unlockLabel.",
+                        ),
+                    )
+                } else {
+                    "Blocked by your ${match.regimeName} regime right now."
+                }
+            BlockState.USAGE_LIMIT_REACHED -> {
+                val safeLimit = limitLabel ?: "daily"
+                pickCopy(
+                    "explain_usage_limit_reached",
+                    listOf(
+                        "You used your $safeLimit allowance today.",
+                        "Your $safeLimit budget for this app is gone.",
+                        "You've used the full $safeLimit limit for this app.",
+                    ),
+                )
+            }
+            BlockState.WINDOW_CLOSED ->
+                if (unlockLabel != null) {
+                    pickCopy(
+                        "explain_window_closed",
+                        listOf(
+                            "Your ${match.regimeName} window opens at $unlockLabel.",
+                            "${match.regimeName} does not allow this app again until $unlockLabel.",
+                            "This app is outside the current ${match.regimeName} window until $unlockLabel.",
+                        ),
+                    )
+                } else {
+                    "This app is outside the current ${match.regimeName} window."
+                }
+        }
+    }
+
+    private fun buildSecondaryLine(match: BlockMatch, hasSquad: Boolean): String {
+        if (!hasSquad) {
+            return pickCopy(
+                "secondary_no_squad_${match.blockState.name.lowercase()}",
+                listOf(
+                    "No squad is linked yet. Finish setup to unlock plea requests.",
+                    "You need a squad before you can plead for extra time.",
+                    "Set up your squad to unlock plea requests from this screen.",
+                ),
+            )
+        }
+
+        return when (match.blockState) {
+            BlockState.TIME_BLOCK ->
+                pickCopy(
+                    "secondary_time_block",
+                    listOf(
+                        "Need access? Request a plea from your squad.",
+                        "If it matters, plead your case to the squad.",
+                        "Need more time? Ask your squad before reopening this app.",
+                    ),
+                )
+            BlockState.USAGE_LIMIT_REACHED ->
+                pickCopy(
+                    "secondary_usage_limit_reached",
+                    listOf(
+                        "Need more time? Request a plea from your squad.",
+                        "If this is worth it, plead your case.",
+                        "Need access? Ask your squad before opening it again.",
+                    ),
+                )
+            BlockState.WINDOW_CLOSED ->
+                pickCopy(
+                    "secondary_window_closed",
+                    listOf(
+                        "Need access? Request a plea from your squad.",
+                        "If it cannot wait, plead your case.",
+                        "Next window is locked in. Ask your squad if you need an exception.",
+                    ),
+                )
+        }
+    }
+
+    private fun buildContextualStats(match: BlockMatch): List<BlockStatChip> =
+        when (match.blockState) {
+            BlockState.TIME_BLOCK,
+            BlockState.WINDOW_CLOSED -> {
+                val blockedSince =
+                    match.blockedSinceMs?.let(::formatShortTime)
+                        ?: "Now"
+                val nextUnlock =
+                    match.nextUnlockMs?.let(::formatShortTime)
+                        ?: "TBD"
+                listOf(
+                    BlockStatChip(label = "Blocked since", value = blockedSince),
+                    BlockStatChip(label = "Next unlock", value = nextUnlock),
+                )
+            }
+            BlockState.USAGE_LIMIT_REACHED -> {
+                val usedMinutes =
+                    ((match.usedMs ?: 0L) + MILLIS_PER_MINUTE - 1L) / MILLIS_PER_MINUTE
+                val allowanceValue =
+                    if (match.limitMinutes != null && match.limitMinutes > 0) {
+                        "${formatCompactMinutes(usedMinutes.toInt())} / ${formatCompactMinutes(match.limitMinutes)}"
+                    } else {
+                        formatCompactMinutes(usedMinutes.toInt())
+                    }
+                val secondChip =
+                    match.nextUnlockMs?.let {
+                        BlockStatChip(label = "Next unlock", value = formatShortTime(it))
+                    }
+                        ?: BlockStatChip(
+                            label = "Session started",
+                            value = match.activationTimestamp?.let(::formatShortTime) ?: "Now",
+                        )
+                listOf(
+                    BlockStatChip(label = "Allowance used", value = allowanceValue),
+                    secondChip,
+                )
+            }
+        }
+
+    private fun resolveLimitMinutes(schedule: JSONObject): Int =
+        when {
+            schedule.has("limitMinutes") && !schedule.isNull("limitMinutes") ->
+                schedule.optInt("limitMinutes", -1)
+            schedule.has("durationMinutes") && !schedule.isNull("durationMinutes") ->
+                schedule.optInt("durationMinutes", -1)
+            schedule.has("durationSeconds") && !schedule.isNull("durationSeconds") -> {
+                val seconds = schedule.optLong("durationSeconds", -1L)
+                if (seconds <= 0L) -1 else (seconds / 60L).toInt()
+            }
+            else -> -1
+        }
+
+    private fun resolveUsageLimitNextUnlock(
+        schedule: JSONObject,
+        windows: List<TimeWindow>,
+        nowMs: Long,
+    ): Long? =
+        if (windows.isNotEmpty()) {
+            resolveNextWindowStart(schedule, windows, nowMs)
+        } else {
+            resolveNextUsageLimitDayStart(schedule, nowMs)
+        }
+
+    private fun resolveNextUsageLimitDayStart(schedule: JSONObject, nowMs: Long): Long? {
+        val todayStart = startOfDay(nowMs)
+        for (offset in 1..8) {
+            val candidateStart = todayStart + offset * MILLIS_PER_DAY
+            if (scheduleMatchesDay(schedule, modelDayFromMillis(candidateStart))) {
+                return candidateStart
+            }
+        }
+        return null
+    }
+
+    private fun resolvePreviousWindowEnd(
+        schedule: JSONObject,
+        windows: List<TimeWindow>,
+        nowMs: Long,
+    ): Long? {
+        val todayStart = startOfDay(nowMs)
+        var latest: Long? = null
+        for (offset in -7..0) {
+            val dayStart = todayStart + offset * MILLIS_PER_DAY
+            if (!scheduleMatchesDay(schedule, modelDayFromMillis(dayStart))) continue
+            for (window in windows) {
+                val occurrence = occurrenceForDay(dayStart, window)
+                if (occurrence.endMs <= nowMs && (latest == null || occurrence.endMs > latest)) {
+                    latest = occurrence.endMs
+                }
+            }
+        }
+        return latest
+    }
+
+    private fun resolveNextWindowStart(
+        schedule: JSONObject,
+        windows: List<TimeWindow>,
+        nowMs: Long,
+    ): Long? {
+        val todayStart = startOfDay(nowMs)
+        var earliest: Long? = null
+        for (offset in 0..8) {
+            val dayStart = todayStart + offset * MILLIS_PER_DAY
+            if (!scheduleMatchesDay(schedule, modelDayFromMillis(dayStart))) continue
+            for (window in windows) {
+                val startMs = dayStart + window.startTotalMin * MILLIS_PER_MINUTE
+                if (startMs <= nowMs) continue
+                if (earliest == null || startMs < earliest) {
+                    earliest = startMs
+                }
+            }
+        }
+        return earliest
+    }
+
+    private fun currentDayOccurrence(nowMs: Long, window: TimeWindow): WindowOccurrence {
+        val dayStart = startOfDay(nowMs)
+        return occurrenceForDay(dayStart, window)
+    }
+
+    private fun occurrenceForDay(dayStart: Long, window: TimeWindow): WindowOccurrence {
+        val startMs = dayStart + window.startTotalMin * MILLIS_PER_MINUTE
+        val endMs =
+            if (window.startTotalMin < window.endTotalMin) {
+                dayStart + window.endTotalMin * MILLIS_PER_MINUTE
+            } else {
+                dayStart + MILLIS_PER_DAY + window.endTotalMin * MILLIS_PER_MINUTE
+            }
+        return WindowOccurrence(startMs = startMs, endMs = endMs)
+    }
+
+    private fun startOfDay(timeMs: Long): Long {
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = timeMs
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return calendar.timeInMillis
+    }
+
+    private fun modelDayFromMillis(timeMs: Long): Int =
+        modelDayFromCalendar(Calendar.getInstance().apply { timeInMillis = timeMs })
+
+    private fun modelDayFromCalendar(calendar: Calendar): Int =
+        calendar.get(Calendar.DAY_OF_WEEK).let { day ->
+            if (day == Calendar.SUNDAY) 7 else day - 1
+        }
 
     private fun isAmnestyActive(context: Context, nowMs: Long): Boolean {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -333,17 +792,6 @@ object EnforcementEngine {
             cachedSchedules = parsedSchedules
             blockedAppsIndex = parsedIndex
         }
-    }
-
-    fun shouldIgnorePackage(context: Context, packageName: String): Boolean {
-        val normalized = packageName.trim()
-        if (normalized.isEmpty()) return true
-        if (normalized == context.packageName) return true
-        val lowercase = normalized.lowercase()
-        if (lowercase == "com.android.systemui") return true
-        if (lowercase.contains("launcher")) return true
-        if (lowercase.contains("trebuchet")) return true
-        return false
     }
 
     private fun scheduleMatchesDay(schedule: JSONObject, modelDay: Int): Boolean {
@@ -423,6 +871,11 @@ object EnforcementEngine {
         }
     }
 
+    private fun shouldDeferUiToAccessibility(packageName: String?, source: String): Boolean {
+        if (source.startsWith("accessibility")) return false
+        return isAccessibilityEscapePending(packageName)
+    }
+
     private fun toTimeWindow(
         startHour: Int,
         startMinute: Int,
@@ -448,13 +901,12 @@ object EnforcementEngine {
         return hour * 60 + minute
     }
 
-    private fun isMinuteWithinWindow(window: TimeWindow, currentTotalMin: Int): Boolean {
-        return if (window.startTotalMin < window.endTotalMin) {
+    private fun isMinuteWithinWindow(window: TimeWindow, currentTotalMin: Int): Boolean =
+        if (window.startTotalMin < window.endTotalMin) {
             currentTotalMin >= window.startTotalMin && currentTotalMin < window.endTotalMin
         } else {
             currentTotalMin >= window.startTotalMin || currentTotalMin < window.endTotalMin
         }
-    }
 
     private fun resolveActivationTimestamp(schedule: JSONObject, nowMs: Long): Long {
         val rawTimestamp =
@@ -470,13 +922,57 @@ object EnforcementEngine {
         }
     }
 
-    private fun resolvePackageLabel(context: Context, packageName: String): String {
-        return try {
+    private fun resolvePackageLabel(context: Context, packageName: String): String =
+        try {
             val pm = context.packageManager
             val ai = pm.getApplicationInfo(packageName, 0)
             pm.getApplicationLabel(ai).toString()
         } catch (_: Exception) {
             packageName
+        }
+
+    private fun resolvePackageIcon(context: Context, packageName: String): Drawable? =
+        try {
+            context.packageManager.getApplicationIcon(packageName)
+        } catch (_: Exception) {
+            null
+        }
+
+    private fun resolveRegimeName(schedule: JSONObject): String {
+        val raw = schedule.optString("name", "").trim()
+        return if (raw.isEmpty()) "Focus Lock" else raw
+    }
+
+    private fun formatShortTime(timeMs: Long): String {
+        val formatter = DateFormat.getTimeInstance(DateFormat.SHORT)
+        return formatter.format(Date(timeMs))
+    }
+
+    private fun formatCompactMinutes(totalMinutes: Int): String {
+        if (totalMinutes <= 0) return "0m"
+        val hours = totalMinutes / 60
+        val minutes = totalMinutes % 60
+        return when {
+            hours > 0 && minutes > 0 -> "${hours}h ${minutes}m"
+            hours > 0 -> "${hours}h"
+            else -> "${minutes}m"
+        }
+    }
+
+    private fun pickCopy(key: String, options: List<String>): String {
+        if (options.isEmpty()) return ""
+        if (options.size == 1) return options.first()
+
+        synchronized(copySelectionLock) {
+            val lastIndex = lastCopyIndexByKey[key]
+            var nextIndex = Random.nextInt(options.size)
+            if (lastIndex != null && options.size > 1) {
+                while (nextIndex == lastIndex) {
+                    nextIndex = Random.nextInt(options.size)
+                }
+            }
+            lastCopyIndexByKey[key] = nextIndex
+            return options[nextIndex]
         }
     }
 }

@@ -2,15 +2,15 @@ import 'package:flutter/services.dart';
 
 class NativeBridge {
   static const MethodChannel _channel = MethodChannel('com.revoke.app/overlay');
-  static Function()? onShowOverlay;
+  static Function()? onOpenSquadSetup;
   static Function(String appName, String packageName)? onRequestPlea;
   static Function(String appName, String packageName, int blockedAtMs)?
   onBlockedAttempt;
 
   static void setupOverlayListener() {
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'showOverlay') {
-        onShowOverlay?.call();
+      if (call.method == 'openSquadSetup') {
+        onOpenSquadSetup?.call();
       } else if (call.method == 'requestPlea') {
         final appName = call.arguments?['appName'] as String? ?? "Unknown App";
         final packageName = call.arguments?['packageName'] as String? ?? "";
@@ -94,6 +94,12 @@ class NativeBridge {
       'checkAndReviveService',
     );
     return Map<String, dynamic>.from(result);
+  }
+
+  static Future<void> syncUserOverlayContext({required bool hasSquad}) async {
+    await _channel.invokeMethod('syncUserOverlayContext', {
+      'hasSquad': hasSquad,
+    });
   }
 
   /// Returns whether the Accessibility fast path is currently enabled.

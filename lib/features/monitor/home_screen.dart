@@ -29,7 +29,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<ScheduleModel> _schedules = [];
   bool _isLoading = true;
   bool _isMissingPermissions = false;
+  bool _isAccessibilityMissing = false;
   bool _isUsageStatsMissing = false;
+  bool _isOverlayMissing = false;
+  bool _isExactAlarmMissing = false;
   StreamSubscription? _permissionSubscription;
   StreamSubscription? _temporaryApprovalSubscription;
   Set<String> _temporaryApprovedPackages = const <String>{};
@@ -112,16 +115,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _applyPermissionState(Map<String, bool> perms) {
     final usageStatsMissing = !(perms['usage_stats'] ?? false);
+    final accessibilityMissing = !(perms['accessibility'] ?? false);
+    final overlayMissing = !(perms['overlay'] ?? false);
+    final exactAlarmMissing = !(perms['exact_alarm'] ?? false);
     final nextMissing =
+        accessibilityMissing ||
         usageStatsMissing ||
-        !(perms['overlay'] ?? false) ||
-        !(perms['exact_alarm'] ?? false);
+        overlayMissing ||
+        exactAlarmMissing;
     if (!mounted) return;
     if (nextMissing != _isMissingPermissions ||
-        usageStatsMissing != _isUsageStatsMissing) {
+        accessibilityMissing != _isAccessibilityMissing ||
+        usageStatsMissing != _isUsageStatsMissing ||
+        overlayMissing != _isOverlayMissing ||
+        exactAlarmMissing != _isExactAlarmMissing) {
       setState(() {
         _isMissingPermissions = nextMissing;
+        _isAccessibilityMissing = accessibilityMissing;
         _isUsageStatsMissing = usageStatsMissing;
+        _isOverlayMissing = overlayMissing;
+        _isExactAlarmMissing = exactAlarmMissing;
       });
     }
   }
@@ -273,6 +286,155 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return packages;
   }
 
+  String _permissionAlertTitle() {
+    if (_isAccessibilityMissing) {
+      return 'Accessibility is turned off';
+    }
+    if (_isUsageStatsMissing) {
+      return 'Usage Access is missing';
+    }
+    if (_isOverlayMissing) {
+      return 'Overlay permission is missing';
+    }
+    if (_isExactAlarmMissing) {
+      return 'Exact Alarms are missing';
+    }
+    return 'Permissions need attention';
+  }
+
+  String _permissionAlertBody() {
+    if (_isAccessibilityMissing) {
+      return 'Revoke loses its instant fast path without Accessibility. Turn it back on to keep blocking sharp and immediate.';
+    }
+    if (_isUsageStatsMissing) {
+      return 'Revoke cannot reliably detect blocked apps or calculate usage limits until Usage Access is restored.';
+    }
+    if (_isOverlayMissing) {
+      return 'Revoke can detect distractions, but it cannot cover them with the blocker until overlay access is back.';
+    }
+    if (_isExactAlarmMissing) {
+      return 'Scheduled regimes may start late unless Exact Alarms is enabled again.';
+    }
+    return 'Revoke is missing a required Android permission. Open the permissions flow to restore enforcement.';
+  }
+
+  Widget _buildPermissionAlertCard() {
+    final alertColor = _isUsageStatsMissing || _isAccessibilityMissing
+        ? context.colors.danger
+        : context.colors.warning;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: () async {
+            await context.push('/permissions');
+            if (!mounted) return;
+            _checkPermissions();
+          },
+          child: Ink(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: context.scheme.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: alertColor.withValues(alpha: 0.45),
+                width: 1.4,
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  alertColor.withValues(alpha: 0.16),
+                  context.scheme.surface,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: alertColor.withValues(alpha: 0.10),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: alertColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    PhosphorIcons.warningCircle(),
+                    color: alertColor,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: alertColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'ACTION REQUIRED',
+                          style: AppTheme.xsBold.copyWith(color: alertColor),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _permissionAlertTitle(),
+                        style: AppTheme.lgBold.copyWith(
+                          color: context.scheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _permissionAlertBody(),
+                        style: AppTheme.baseRegular.copyWith(
+                          color: context.colors.textSecondary,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Text(
+                            'Fix permissions',
+                            style: AppTheme.smBold.copyWith(color: alertColor),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            PhosphorIcons.caretRight(),
+                            size: 16,
+                            color: alertColor,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -287,31 +449,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: CustomScrollView(
                   slivers: [
                     if (_isMissingPermissions)
-                      SliverToBoxAdapter(
-                        child: GestureDetector(
-                          onTap: () async {
-                            await context.push('/permissions');
-                            if (!mounted) return;
-                            _checkPermissions();
-                          },
-                          child: Container(
-                            color: context.colors.danger,
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Center(
-                              child: Text(
-                                _isUsageStatsMissing
-                                    ? 'Usage access is missing. Revoke cannot enforce or track limits. Tap to fix.'
-                                    : 'Revoke is missing a core Android permission. Tap to fix.',
-                                style: AppTheme.baseBold.copyWith(
-                                  color: context.scheme.onError,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                      SliverToBoxAdapter(child: _buildPermissionAlertCard()),
                     SliverToBoxAdapter(
                       child: Column(
                         children: [

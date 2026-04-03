@@ -28,13 +28,11 @@ class MainActivity : FlutterActivity() {
     private var overlayReceiverRegistered = false
     private var pendingPleaPayload: Map<String, String?>? = null
     private var pendingBlockedAttemptPayload: Map<String, Any>? = null
+    private var pendingOpenSquadSetup: Boolean = false
 
     private val overlayReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                "com.revoke.app.SHOW_OVERLAY" -> {
-                    methodChannel?.invokeMethod("showOverlay", null)
-                }
                 "com.revoke.app.REQUEST_PLEA" -> {
                     val appName = intent.getStringExtra("appName")
                     val packageName = intent.getStringExtra("packageName")
@@ -48,6 +46,14 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    private fun dispatchOpenSquadSetup() {
+        if (methodChannel == null) {
+            pendingOpenSquadSetup = true
+            return
+        }
+        methodChannel?.invokeMethod("openSquadSetup", null)
     }
 
     private fun dispatchPleaRequest(appName: String?, packageName: String?) {
@@ -76,10 +82,15 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handleIncomingIntent(intent: Intent?) {
-        if (intent?.action == "com.revoke.app.REQUEST_PLEA") {
-            val appName = intent.getStringExtra("appName")
-            val packageName = intent.getStringExtra("packageName")
-            dispatchPleaRequest(appName, packageName)
+        when (intent?.action) {
+            "com.revoke.app.REQUEST_PLEA" -> {
+                val appName = intent.getStringExtra("appName")
+                val packageName = intent.getStringExtra("packageName")
+                dispatchPleaRequest(appName, packageName)
+            }
+            "com.revoke.app.OPEN_SQUAD_SETUP" -> {
+                dispatchOpenSquadSetup()
+            }
         }
     }
 
@@ -94,6 +105,10 @@ class MainActivity : FlutterActivity() {
         pendingBlockedAttemptPayload?.let {
             methodChannel?.invokeMethod("blockedAttempt", it)
             pendingBlockedAttemptPayload = null
+        }
+        if (pendingOpenSquadSetup) {
+            methodChannel?.invokeMethod("openSquadSetup", null)
+            pendingOpenSquadSetup = false
         }
         handleIncomingIntent(intent)
         methodChannel?.setMethodCallHandler { call, result ->
@@ -200,6 +215,11 @@ class MainActivity : FlutterActivity() {
                 }
                 "checkAccessibilityPermission" -> {
                     result.success(AccessibilityPermissionUtils.isAccessibilityServiceEnabled(this))
+                }
+                "syncUserOverlayContext" -> {
+                    val hasSquad = call.argument<Boolean>("hasSquad") == true
+                    EnforcementEngine.syncUserOverlayContext(this, hasSquad)
+                    result.success(true)
                 }
                 "getAppDetails" -> {
                     val packageName = call.argument<String>("packageName")
@@ -324,7 +344,6 @@ class MainActivity : FlutterActivity() {
     private fun registerOverlayReceiverIfNeeded() {
         if (overlayReceiverRegistered) return
         val filter = android.content.IntentFilter().apply {
-            addAction("com.revoke.app.SHOW_OVERLAY")
             addAction("com.revoke.app.REQUEST_PLEA")
             addAction("com.revoke.app.BLOCKED_ATTEMPT")
         }

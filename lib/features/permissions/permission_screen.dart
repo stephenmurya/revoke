@@ -10,7 +10,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/theme_extensions.dart';
 import '../../core/widgets/revoke_progress_bar.dart';
 
-enum _PermissionKey { usageAccess, overlay, exactAlarm }
+enum _PermissionKey { accessibility, usageAccess, overlay, exactAlarm }
 
 class _PermissionDisclosure {
   const _PermissionDisclosure({
@@ -40,6 +40,16 @@ class PermissionScreen extends StatefulWidget {
 class _PermissionScreenState extends State<PermissionScreen>
     with WidgetsBindingObserver {
   static final List<_PermissionDisclosure> _disclosures = [
+    _PermissionDisclosure(
+      key: _PermissionKey.accessibility,
+      title: 'Grant Accessibility Access',
+      shortTitle: 'Accessibility',
+      icon: PhosphorIcons.lightning(),
+      whyNeeded:
+          'Without this permission, Revoke loses its instant fast path and may react later to app launches.',
+      prominentDisclosure:
+          'Revoke uses the Accessibility Service to instantly detect when a distracting app is opened and block it. We do not collect or transmit your screen content.',
+    ),
     _PermissionDisclosure(
       key: _PermissionKey.usageAccess,
       title: 'Grant Usage Access',
@@ -72,13 +82,15 @@ class _PermissionScreenState extends State<PermissionScreen>
     ),
   ];
 
+  bool _hasAccessibility = false;
   bool _hasUsageStats = false;
   bool _hasOverlay = false;
   bool _hasExactAlarm = false;
   int _currentStep = 0;
   StreamSubscription<int>? _permissionSubscription;
 
-  bool get _allGranted => _hasUsageStats && _hasOverlay && _hasExactAlarm;
+  bool get _allGranted =>
+      _hasAccessibility && _hasUsageStats && _hasOverlay && _hasExactAlarm;
   int get _currentStageNumber =>
       _allGranted ? _disclosures.length : _currentStep + 1;
 
@@ -111,15 +123,18 @@ class _PermissionScreenState extends State<PermissionScreen>
     final perms = await NativeBridge.checkPermissions();
     if (!mounted) return;
 
+    final nextAccessibility = perms['accessibility'] ?? false;
     final nextUsage = perms['usage_stats'] ?? false;
     final nextOverlay = perms['overlay'] ?? false;
     final nextExactAlarm = perms['exact_alarm'] ?? false;
     final changed =
+        nextAccessibility != _hasAccessibility ||
         nextUsage != _hasUsageStats ||
         nextOverlay != _hasOverlay ||
         nextExactAlarm != _hasExactAlarm;
 
     setState(() {
+      _hasAccessibility = nextAccessibility;
       _hasUsageStats = nextUsage;
       _hasOverlay = nextOverlay;
       _hasExactAlarm = nextExactAlarm;
@@ -142,6 +157,7 @@ class _PermissionScreenState extends State<PermissionScreen>
 
   bool _isGranted(_PermissionKey key) {
     return switch (key) {
+      _PermissionKey.accessibility => _hasAccessibility,
       _PermissionKey.usageAccess => _hasUsageStats,
       _PermissionKey.overlay => _hasOverlay,
       _PermissionKey.exactAlarm => _hasExactAlarm,
@@ -164,6 +180,8 @@ class _PermissionScreenState extends State<PermissionScreen>
     }
 
     switch (disclosure.key) {
+      case _PermissionKey.accessibility:
+        await NativeBridge.openAccessibilitySettings();
       case _PermissionKey.usageAccess:
         await NativeBridge.requestUsageStats();
       case _PermissionKey.overlay:
@@ -210,7 +228,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                         Text(
                           isGranted
                               ? (_allGranted
-                                    ? 'All three required Android permissions are enabled.'
+                                    ? 'All four required Android permissions are enabled.'
                                     : '${disclosure.shortTitle} is enabled. Continue to the next disclosure.')
                               : 'Tap the button below only after you understand what this permission allows Revoke to do.',
                           style: AppTheme.bodySmall.copyWith(
@@ -297,7 +315,7 @@ class _PermissionScreenState extends State<PermissionScreen>
         ),
         const SizedBox(height: 10),
         Text(
-          'Before Revoke can enforce anything, Android needs three core permissions.',
+          'Before Revoke can enforce anything, Android needs four core permissions.',
           style: AppTheme.baseRegular.copyWith(
             color: context.colors.textSecondary,
           ),

@@ -79,23 +79,20 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_checkAndReviveNativeService());
+      unawaited(_syncNativeUserOverlayContext());
     }
   }
 
   void _bindGlobalCallbacks() {
-    NativeBridge.onShowOverlay = () {
-      final uid = AuthService.currentUser?.uid;
-      if (uid != null) {
-        ScoringService.syncFocusScore(uid);
-      }
-      AppRouter.router.push('/lock_screen');
-    };
-
     NativeBridge.onRequestPlea = (appName, packageName) {
       AppRouter.router.go(
         '/plea-compose',
         extra: {'appName': appName, 'packageName': packageName},
       );
+    };
+
+    NativeBridge.onOpenSquadSetup = () {
+      AppRouter.router.go('/onboarding?step=share_squad');
     };
 
     NativeBridge.onBlockedAttempt = (appName, packageName, blockedAtMs) {
@@ -110,6 +107,7 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
   Future<void> _syncNativeScheduleStateOnce() async {
     try {
       await ScheduleService.syncWithNative();
+      await _syncNativeUserOverlayContext();
       debugPrint('[GlobalAppServices] native schedule state synced');
     } catch (_) {
       // Native sync is best-effort. Flutter routing must still boot cleanly.
@@ -121,6 +119,26 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
       await NativeBridge.checkAndReviveService();
     } catch (_) {
       // Best-effort watchdog poke; app boot must continue even if native rejects.
+    }
+  }
+
+  Future<void> _syncNativeUserOverlayContext() async {
+    final user = AuthService.currentUser;
+    if (user == null) {
+      try {
+        await NativeBridge.syncUserOverlayContext(hasSquad: false);
+      } catch (_) {}
+      return;
+    }
+
+    try {
+      final userData = await AuthService.getUserData();
+      final squadId = (userData?['squadId'] as String?)?.trim();
+      await NativeBridge.syncUserOverlayContext(
+        hasSquad: squadId != null && squadId.isNotEmpty,
+      );
+    } catch (_) {
+      // Best-effort native context sync; blocker should still function safely.
     }
   }
 
@@ -144,6 +162,8 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
             });
       }
     }
+
+    unawaited(_syncNativeUserOverlayContext());
 
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {

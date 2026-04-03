@@ -1,6 +1,6 @@
 ﻿# Revoke Project Status
 
-Last updated: Apr 3, 2026
+Last updated: Apr 4, 2026
 
 Source of truth: repository implementation + PRD (`prd/prd.md`).
 
@@ -60,6 +60,7 @@ Source of truth: repository implementation + PRD (`prd/prd.md`).
 - [x] ♿ Accessibility fast path + adaptive polling fallback (event-driven detection with lighter service backstop when Accessibility is enabled)
 - [x] 📣 Google Play accessibility disclosure gate + settings bridge (dedicated onboarding step with resume-state auto-advance)
 - [x] 🏠 Anti-flash blocker sequence (`GLOBAL_ACTION_HOME` before native blocker overlay renders)
+- [x] 🎭 Native cooked-screen consolidation + redesign (single live blocker UI in `BlockerOverlayController`, state-aware presentation model, no-squad CTA path, full-screen overlay polish)
 
 ## In Progress
 - [ ] 🛡️ Solo fallback abuse limits + telemetry (caps, cooldowns, and logs for safety/observability)
@@ -82,6 +83,7 @@ Source of truth: repository implementation + PRD (`prd/prd.md`).
 - Enforcement hardening shipped: native schedule sync now performs immediate foreground evaluation, usage-limit math is session-scoped from `activatedAt`, and Time Blocks are decoupled from usage-limit `queryEvents` logic with safe non-fatal error boundaries.
 - Replay/permission polish shipped: stale approved pleas no longer reapply temp unlocks on startup, onboarding/permissions flows were rebuilt for small screens, and the blocker overlay HUD now uses branded Revoke visuals.
 - Curbox-derived hardening shipped: Revoke is now hybrid rather than polling-only, with a shared `EnforcementEngine`, an Accessibility fast path, adaptive fallback polling, a Play-compliant Accessibility disclosure step, and an anti-flash HOME-before-overlay sequence.
+- Blocker overlay redesign shipped: legacy cooked-screen leftovers were retired, the live blocker is now a single native full-screen UI driven by `BlockPresentation`, overlay dismissal/re-show behavior was stabilized, and the blocker now supports state-aware copy, compact stats, and a no-squad recovery CTA.
 - Uninstalled-app UX hardening shipped: missing target packages now render as ghost apps with explicit “Restriction remains active” messaging instead of broken/missing UI.
 - Solo tribunal handling shipped: pleas with zero eligible voters are now auto-resolved by `SYSTEM_WARDEN` with immediate verdict + system message, preventing stuck active pleas.
 - Uninstall/reinstall anti-cheat hardening shipped: Android now listens for package removals and immediately clears stale temporary approvals from `SharedPreferences` and running monitor state; temp approvals returned to Flutter are now install-aware.
