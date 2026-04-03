@@ -1,6 +1,6 @@
 ﻿# Revoke Project Status
 
-Last updated: Feb 21, 2026
+Last updated: Apr 3, 2026
 
 Source of truth: repository implementation + PRD (`prd/prd.md`).
 
@@ -46,55 +46,70 @@ Source of truth: repository implementation + PRD (`prd/prd.md`).
 - [x] 🧹 Native amnesty/unlock cleanup hardening (uninstalled packages removed from `temp_unlocks` + stale approval UI filtered)
 - [x] 📲 Regime target-app integrity UX (ghost apps in details/editor now support replace/remove actions)
 - [x] 👥 Tribunal eligibility guardrails (explicit no-squad reason-code contract + client fallback UX path)
+- [x] 🩺 Android watchdog + self-healing reliability path (WorkManager periodic watchdog, boot enqueue, app-start enqueue, Flutter revive bridge)
+- [x] 🔒 Same-squad Firestore visibility rules + emulator verification (`/users`, `/regimes`, `/rapSheet`, `/pleas`)
+- [x] 🧾 Rap Sheet snapshot denormalization (`/users/{uid}/rapSheet/latest` + last-5 safe infractions)
+- [x] 🧪 Multi-block validator QA coverage (overlap, min-duration, cross-midnight, fragmented blocks, deterministic tests)
+- [x] ⏱️ Session-scoped usage tracking (`UsageStatsManager.queryEvents`) + dashboard remaining-time UI
+- [x] ⚡ Zero-latency regime enforcement on save/sync (immediate foreground evaluation + tight 2s reset)
+- [x] 🧱 Time Block / Usage Limit native decoupling fix (strict branching + service-survival error boundaries)
+- [x] 🔁 Approved-plea replay guard (prevents stale approved pleas from reapplying temp unlocks on app boot)
+- [x] 🪪 Permissions/onboarding UX hardening (small-screen overflow fixes, pinned CTA, staged permission progress)
+- [x] 🛑 Blocker overlay branding refresh (native “Cooked” HUD now uses Revoke logo + stacked wordmark)
 
 ## In Progress
-- [ ] 🧪 Multi-block QA + edge-case hardening (timezone/DST, fragmented schedules, regression coverage)
 - [ ] 🛡️ Solo fallback abuse limits + telemetry (caps, cooldowns, and logs for safety/observability)
+- [ ] ✅ Device-side enforcement QA (watchdog revive, exact on-device block timing, Crashlytics verification)
 - [ ] ✅ Edge-case test coverage (uninstall/reinstall behavior, stale approvals, no-squad and no-voter plea handling)
 - [ ] Website Blocker Flow Consolidation (skipped for now)
 - [ ] Production Hardening Pass (skipped for now)
 
 ## Execution Notes (Condensed)
 - `Website Blocker Flow Consolidation` remains pending because no website-blocker entry points currently exist in repo code.
-- `Production Hardening Pass` is partially complete: debug prints removed in key Flutter paths, Firestore indexes expanded in `firestore.indexes.json`, and rules emulator tests added in `functions/test/firestore.rules.test.js`; local emulator execution is currently blocked by Java 21 requirement.
+- `Production Hardening Pass` is partially complete: debug prints removed in key Flutter paths, Firestore indexes expanded in `firestore.indexes.json`, rules emulator tests added in `functions/test/firestore.rules.test.js`, and Firebase emulator execution now works locally with a modern JDK.
 - Multi-block rollout shipped: schema supports `blocks[]` + `emoji` with backward compatibility; create/edit supports multi-block schedules; home card actions include tribunal break/delete; approved break pleas pause monitoring; approved delete pleas remove regimes; native Android enforcement now handles multi-window schedules with legacy fallback and usage-limit custom windows.
 - Create regime UX refresh shipped: step order is `Select blocking type` -> `Set conditions` -> `Regime details`; top chips removed; time-block editor moved to pill-based rows; usage limit uses inline `CupertinoTimerPicker` + optional `All day long`; details page order and condition summary were clarified; target-app selection display is icon-only; updated surfaces use Phosphor icons.
 - Home UX refresh shipped: regime cards were redesigned for clearer scanability, hierarchy, and actions.
 - Stability fixes shipped: usage-limit edit assertion fixed via timer interval normalization; tribunal delete flow made idempotent and safer around resolved pleas/admin overrides; verdict UX now uses explicit `Close` and includes accept/reject tally with voter names/photos; tribunal chat rebuild conflicts reduced; app root/auth lifecycle hardened to keep global dependencies stable; onboarding redirect guard fixed to prevent init-screen hang.
 - Android background reliability shipped: foreground-service starts now fail safely (non-fatal) under Android 12+ start restrictions, and Amnesty background handling now has a native receiver path that does not depend on a live Flutter engine/method-channel attachment.
+- Launch readiness sprint shipped: AppMonitor watchdog worker, same-squad Firestore rules, rap-sheet snapshot builder, and emulator-backed backend verification are in place; remaining validation is primarily device-side QA.
+- Enforcement hardening shipped: native schedule sync now performs immediate foreground evaluation, usage-limit math is session-scoped from `activatedAt`, and Time Blocks are decoupled from usage-limit `queryEvents` logic with safe non-fatal error boundaries.
+- Replay/permission polish shipped: stale approved pleas no longer reapply temp unlocks on startup, onboarding/permissions flows were rebuilt for small screens, and the blocker overlay HUD now uses branded Revoke visuals.
 - Uninstalled-app UX hardening shipped: missing target packages now render as ghost apps with explicit “Restriction remains active” messaging instead of broken/missing UI.
 - Solo tribunal handling shipped: pleas with zero eligible voters are now auto-resolved by `SYSTEM_WARDEN` with immediate verdict + system message, preventing stuck active pleas.
 - Uninstall/reinstall anti-cheat hardening shipped: Android now listens for package removals and immediately clears stale temporary approvals from `SharedPreferences` and running monitor state; temp approvals returned to Flutter are now install-aware.
 - Regime editor hardening shipped: ghost apps in regime details now show explicit replace/remove actions so users can repair stale target packages without deleting the entire regime.
 - Tribunal no-squad guardrail shipped: `createPlea` now returns explicit reason-code details for no-squad failures, and client flows show a targeted “Open Squad” recovery action instead of generic errors.
-- QA progress: added schedule migration/validation unit tests in `test/core/models/schedule_model_test.dart` and `test/core/utils/schedule_block_validator_test.dart`; targeted run passed (10 tests).
+- QA progress: schedule migration/validation unit tests are in place, `test/core/utils/schedule_block_validator_test.dart` now passes expanded edge-case coverage (13 tests), and backend emulator tests for rules + rap-sheet snapshot pass locally (8 tests).
 
 ## Implementation Plan (Remaining)
-1. **🧪 Multi-block QA + edge-case hardening**
-   - Add unit tests for interval overlap, min-duration, and cross-midnight behavior.
-   - Add widget tests for block editor interactions, timeline overlays, and home regime card actions.
-   - Add integration checks for migration, save/edit flows, break/delete tribunal requests, and native sync behavior.
-   - Validate timezone and DST transitions plus highly fragmented schedules.
+1. **✅ Device-side enforcement QA**
+   - Verify watchdog revival on-device after force-stopping/killing the monitor service.
+   - Verify immediate block timing for current-time Time Blocks and limit-reached Usage Limits.
+   - Verify Crashlytics non-fatal payloads for native service/watchdog failures.
 
-2. **Website Blocker Flow Consolidation** (Skipped for now)
+2. **🧪 Remaining edge-case QA**
+   - Add widget/integration checks for block editor interactions, timeline overlays, and home regime card actions.
+   - Validate timezone and DST transitions plus uninstall/reinstall/stale-approval edge cases.
+
+3. **Website Blocker Flow Consolidation** (Skipped for now)
    - Pick single entry-point architecture for website restriction state changes.
    - Remove duplicate triggers/handlers and route all paths through one coordinator.
 
-3. **Production Hardening Pass** (Skipped for now)
+4. **Production Hardening Pass** (Skipped for now)
    - Expand emulator coverage and release verification pass.
 
 ## Suggested Execution Order
-1. 🧪 Multi-block QA + edge-case hardening
-2. Website Blocker Flow Consolidation (when unskipped)
-3. Production Hardening Pass (when unskipped)
+1. ✅ Device-side enforcement QA
+2. 🧪 Remaining edge-case QA
+3. Website Blocker Flow Consolidation (when unskipped)
+4. Production Hardening Pass (when unskipped)
 
 ## Next Steps (Aligned to PRD)
-- [ ] Firestore rules + data model for cross-user regime visibility
-- [ ] Build a safe member snapshot for Rap Sheet
 - [ ] Challenges pillar implementation beyond placeholder
 - [ ] Notifications + Analytics pages (currently placeholders) and real dashboards
 - [ ] Focus Score: make stats fully source-backed and document data sources in detail UX
-- [ ] OEM reliability hardening (WorkManager fallback + stronger service-running UX)
+- [ ] OEM reliability hardening beyond current watchdog pass (manufacturer-specific guidance + stronger service-running UX)
 - [ ] iOS strategy decision (scaffold only vs enforcement parity plan)
 
 ## Backlog

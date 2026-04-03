@@ -103,6 +103,7 @@ class ScheduleBlock {
 }
 
 class ScheduleModel {
+  static const Object _keepActivatedAt = Object();
   static const String defaultEmoji = '\u{1F3AF}';
   static const List<String> curatedEmojis = <String>[
     '\u{1F3AF}',
@@ -128,6 +129,7 @@ class ScheduleModel {
   final Duration? durationLimit;
   final bool isActive;
   final String emoji;
+  final DateTime? activatedAt;
 
   ScheduleModel({
     required this.id,
@@ -139,6 +141,7 @@ class ScheduleModel {
     this.durationLimit,
     this.isActive = true,
     this.emoji = defaultEmoji,
+    this.activatedAt,
   });
 
   TimeOfDay? get startTime => blocks.isEmpty ? null : blocks.first.startTime;
@@ -162,6 +165,7 @@ class ScheduleModel {
       'durationSeconds': durationLimit?.inSeconds,
       'isActive': isActive,
       'emoji': emoji,
+      'activatedAtMs': activatedAt?.millisecondsSinceEpoch,
     };
   }
 
@@ -225,6 +229,11 @@ class ScheduleModel {
       String() => int.tryParse(json['durationSeconds']),
       _ => null,
     };
+    final activatedAtMs = switch (json['activatedAtMs']) {
+      num() => json['activatedAtMs'].toInt(),
+      String() => int.tryParse(json['activatedAtMs']),
+      _ => null,
+    };
 
     return ScheduleModel(
       id: (json['id'] as String?)?.trim() ?? '',
@@ -240,6 +249,9 @@ class ScheduleModel {
           : Duration(seconds: durationSeconds),
       isActive: json['isActive'] ?? true,
       emoji: emoji,
+      activatedAt: activatedAtMs == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(activatedAtMs),
     );
   }
 
@@ -252,6 +264,7 @@ class ScheduleModel {
     Duration? durationLimit,
     bool? isActive,
     String? emoji,
+    Object? activatedAt = _keepActivatedAt,
   }) {
     return ScheduleModel(
       id: id,
@@ -263,6 +276,9 @@ class ScheduleModel {
       durationLimit: durationLimit ?? this.durationLimit,
       isActive: isActive ?? this.isActive,
       emoji: emoji ?? this.emoji,
+      activatedAt: identical(activatedAt, _keepActivatedAt)
+          ? this.activatedAt
+          : activatedAt as DateTime?,
     );
   }
 }

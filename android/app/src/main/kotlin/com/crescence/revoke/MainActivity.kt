@@ -138,6 +138,16 @@ class MainActivity : FlutterActivity() {
                         call.argument<Number>("nextWakeupMs")?.toLong() ?: 0L
                     result.success(syncSchedulesToNative(schedulesJson, nextWakeupMs))
                 }
+                "getSessionUsage" -> {
+                    val rawPackages = call.argument<List<*>>("packageNames") ?: emptyList<Any?>()
+                    val packageNames =
+                        rawPackages
+                            .mapNotNull { it?.toString()?.trim() }
+                            .filter { it.isNotEmpty() }
+                    val activationTimestamp =
+                        call.argument<Number>("activationTimestamp")?.toLong() ?: 0L
+                    result.success(getSessionUsage(packageNames, activationTimestamp))
+                }
                 "scheduleNextWakeup" -> {
                     val timestampMs =
                         call.argument<Number>("timestampMs")?.toLong() ?: 0L
@@ -343,12 +353,17 @@ class MainActivity : FlutterActivity() {
             putExtra("schedules", safeSchedulesJson)
         }
 
+        val handledInProcess =
+            AppMonitorService.syncSchedulesAndEvaluate(
+                schedulesJson = safeSchedulesJson,
+                trigger = "syncSchedules",
+            )
         val shouldRun = AppMonitorCoordinator.shouldServiceBeRunning(this)
         val status = AppMonitorCoordinator.checkAndReviveService(
             context = this,
             trigger = "syncSchedules",
         )
-        if (status.serviceRunning) {
+        if (!handledInProcess && status.serviceRunning) {
             dispatchScheduleSyncToRunningService(serviceIntent)
         }
         return if (shouldRun) {
@@ -381,6 +396,16 @@ class MainActivity : FlutterActivity() {
             )
         }
     }
+
+    private fun getSessionUsage(
+        packageNames: List<String>,
+        activationTimestamp: Long,
+    ): Map<String, Long> =
+        UsageEventsSessionCalculator.getSessionUsage(
+            context = this,
+            packageNames = packageNames,
+            activationTimestamp = activationTimestamp,
+        )
 
     private fun hasCurrentlyActiveRegimes(schedulesJson: String): Boolean {
         val safeJson = schedulesJson.trim()

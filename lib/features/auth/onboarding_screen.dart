@@ -448,35 +448,36 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       header: "GRANT\nGOD MODE.",
       subtext:
           "Revoke needs Usage Access, Overlay, and Exact Alarms. The full disclosure and grant flow happens on the next screen.",
-      child: Column(
-        children: [
-          const Spacer(),
-          _buildPermissionTile(
-            "Usage Access",
-            "Lets Revoke detect the app currently on screen.",
-            _hasUsageStats,
-            openPermissionSetup,
-          ),
-          const SizedBox(height: 16),
-          _buildPermissionTile(
-            "Draw Over Apps",
-            "Lets Revoke place the lock-screen over restricted apps.",
-            _hasOverlay,
-            openPermissionSetup,
-          ),
-          const SizedBox(height: 16),
-          _buildPermissionTile(
-            "Exact Alarms",
-            "Lets Revoke wake exactly when a focus regime begins.",
-            _hasExactAlarm,
-            openPermissionSetup,
-          ),
-          const Spacer(),
-          _buildPrimaryButton(
-            label: allGranted ? "Continue" : "Open permission setup",
-            onPressed: allGranted ? _nextPage : openPermissionSetup,
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            _buildPermissionTile(
+              "Usage Access",
+              "Lets Revoke detect the app currently on screen.",
+              _hasUsageStats,
+              openPermissionSetup,
+            ),
+            const SizedBox(height: 16),
+            _buildPermissionTile(
+              "Draw Over Apps",
+              "Lets Revoke place the lock-screen over restricted apps.",
+              _hasOverlay,
+              openPermissionSetup,
+            ),
+            const SizedBox(height: 16),
+            _buildPermissionTile(
+              "Exact Alarms",
+              "Lets Revoke wake exactly when a focus regime begins.",
+              _hasExactAlarm,
+              openPermissionSetup,
+            ),
+            const SizedBox(height: 24),
+            _buildPrimaryButton(
+              label: allGranted ? "Continue" : "Open permission setup",
+              onPressed: allGranted ? _nextPage : openPermissionSetup,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -850,6 +851,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     VoidCallback onTap,
   ) {
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.scheme.surface,
         borderRadius: BorderRadius.circular(12),
@@ -859,24 +862,55 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               : context.scheme.outlineVariant,
         ),
       ),
-      child: ListTile(
-        onTap: isGranted ? null : onTap,
-        title: Text(title, style: AppTheme.h3),
-        subtitle: Text(desc, style: AppTheme.bodySmall),
-        trailing: isGranted
-            ? Icon(PhosphorIcons.checkCircle(), color: context.colors.success)
-            : ElevatedButton(
-                onPressed: onTap,
-                style: AppTheme.secondaryButtonStyle.copyWith(
-                  padding: const WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 420;
+          final action = isGranted
+              ? Icon(PhosphorIcons.checkCircle(), color: context.colors.success)
+              : ElevatedButton(
+                  onPressed: onTap,
+                  style: AppTheme.secondaryButtonStyle.copyWith(
+                    padding: const WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    backgroundColor: WidgetStatePropertyAll(
+                      Theme.of(context).scaffoldBackgroundColor,
+                    ),
                   ),
-                  backgroundColor: WidgetStatePropertyAll(
-                    Theme.of(context).scaffoldBackgroundColor,
-                  ),
+                  child: const Text("OPEN"),
+                );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTheme.h3),
+                const SizedBox(height: 8),
+                Text(desc, style: AppTheme.bodySmall),
+                const SizedBox(height: 12),
+                Align(alignment: Alignment.centerLeft, child: action),
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppTheme.h3),
+                    const SizedBox(height: 8),
+                    Text(desc, style: AppTheme.bodySmall),
+                  ],
                 ),
-                child: const Text("OPEN"),
               ),
+              const SizedBox(width: 16),
+              action,
+            ],
+          );
+        },
       ),
     );
   }

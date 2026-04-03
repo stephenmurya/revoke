@@ -29,9 +29,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<ScheduleModel> _schedules = [];
   bool _isLoading = true;
   bool _isMissingPermissions = false;
+  bool _isUsageStatsMissing = false;
   StreamSubscription? _permissionSubscription;
   StreamSubscription? _temporaryApprovalSubscription;
   Set<String> _temporaryApprovedPackages = const <String>{};
+  Timer? _usageLimitRefreshTimer;
+  Map<String, _UsageLimitStatus> _usageLimitStatuses =
+      const <String, _UsageLimitStatus>{};
 
   @override
   void initState() {
@@ -41,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _refreshTemporaryApprovals();
     _schedules = widget.schedules;
     _isLoading = false;
+    unawaited(_refreshUsageLimitStatuses());
     AuthService.validateSession();
 
     _permissionSubscription = Stream.periodic(const Duration(seconds: 5))
@@ -52,6 +57,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         .listen((_) {
           _refreshTemporaryApprovals();
         });
+
+    _usageLimitRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      unawaited(_refreshUsageLimitStatuses());
+    });
   }
 
   @override
@@ -59,6 +68,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _permissionSubscription?.cancel();
     _temporaryApprovalSubscription?.cancel();
+    _usageLimitRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -68,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _checkPermissions();
       _refreshTemporaryApprovals();
       _loadSchedules();
+      unawaited(_refreshUsageLimitStatuses());
     }
   }
 
@@ -77,32 +88,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final oldKey = oldWidget.schedules
         .map(
           (s) =>
-              '${s.id}:${s.isActive ? 1 : 0}:${s.name}:${s.targetApps.length}',
+              '${s.id}:${s.isActive ? 1 : 0}:${s.type.index}:${s.name}:${s.targetApps.length}:${s.blocks.length}:${s.durationLimit?.inSeconds ?? 0}:${s.activatedAt?.millisecondsSinceEpoch ?? 0}',
         )
         .join('|');
     final newKey = widget.schedules
         .map(
           (s) =>
-              '${s.id}:${s.isActive ? 1 : 0}:${s.name}:${s.targetApps.length}',
+              '${s.id}:${s.isActive ? 1 : 0}:${s.type.index}:${s.name}:${s.targetApps.length}:${s.blocks.length}:${s.durationLimit?.inSeconds ?? 0}:${s.activatedAt?.millisecondsSinceEpoch ?? 0}',
         )
         .join('|');
     if (oldKey != newKey) {
       setState(() {
         _schedules = widget.schedules;
       });
+      unawaited(_refreshUsageLimitStatuses());
     }
   }
 
   Future<void> _checkPermissions() async {
     final perms = await NativeBridge.checkPermissions();
+    _applyPermissionState(perms);
+  }
+
+  void _applyPermissionState(Map<String, bool> perms) {
+    final usageStatsMissing = !(perms['usage_stats'] ?? false);
     final nextMissing =
-        !(perms['usage_stats'] ?? false) ||
+        usageStatsMissing ||
         !(perms['overlay'] ?? false) ||
         !(perms['exact_alarm'] ?? false);
     if (!mounted) return;
-    if (nextMissing != _isMissingPermissions) {
+    if (nextMissing != _isMissingPermissions ||
+        usageStatsMissing != _isUsageStatsMissing) {
       setState(() {
         _isMissingPermissions = nextMissing;
+        _isUsageStatsMissing = usageStatsMissing;
       });
     }
   }
@@ -136,11 +155,111 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _schedules = schedules;
         _isLoading = false;
       });
+      unawaited(_refreshUsageLimitStatuses());
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _schedules = const [];
         _isLoading = false;
+        _usageLimitStatuses = const <String, _UsageLimitStatus>{};
+      });
+    }
+  }
+
+  bool _isUsageLimitSessionActive(ScheduleModel schedule) {
+    if (!schedule.isActive || schedule.type != ScheduleType.usageLimit) {
+      return false;
+    }
+    if (!schedule.days.contains(DateTime.now().weekday)) {
+      return false;
+    }
+    if (schedule.blocks.isEmpty) {
+      return true;
+    }
+    final now = TimeOfDay.fromDateTime(DateTime.now());
+    final nowMin = now.hour * 60 + now.minute;
+    return ScheduleBlockValidator.isMinuteWithinBlocks(schedule.blocks, nowMin);
+  }
+
+  Future<void> _refreshUsageLimitStatuses() async {
+    final usageLimitSchedules = _schedules
+        .where(_isUsageLimitSessionActive)
+        .toList(growable: false);
+
+    if (usageLimitSchedules.isEmpty) {
+      if (!mounted) return;
+      if (_usageLimitStatuses.isNotEmpty) {
+        setState(() {
+          _usageLimitStatuses = const <String, _UsageLimitStatus>{};
+        });
+      }
+      return;
+    }
+
+    try {
+      final perms = await NativeBridge.checkPermissions();
+      _applyPermissionState(perms);
+      if (!(perms['usage_stats'] ?? false)) {
+        if (!mounted) return;
+        setState(() {
+          _usageLimitStatuses = {
+            for (final schedule in usageLimitSchedules)
+              schedule.id: _UsageLimitStatus.missingPermission(
+                limitMillis: schedule.durationLimit?.inMilliseconds ?? 0,
+              ),
+          };
+        });
+        return;
+      }
+
+      final entries = await Future.wait(
+        usageLimitSchedules.map((schedule) async {
+          final activationTimestamp =
+              schedule.activatedAt?.millisecondsSinceEpoch;
+          if (activationTimestamp == null || activationTimestamp <= 0) {
+            return MapEntry(
+              schedule.id,
+              _UsageLimitStatus.pending(
+                limitMillis: schedule.durationLimit?.inMilliseconds ?? 0,
+              ),
+            );
+          }
+          final usageByPackage = await NativeBridge.getSessionUsage(
+            schedule.targetApps,
+            activationTimestamp,
+          );
+          final usedMillis = schedule.targetApps.fold<int>(
+            0,
+            (sum, packageName) => sum + (usageByPackage[packageName] ?? 0),
+          );
+          final limitMillis = schedule.durationLimit?.inMilliseconds ?? 0;
+          return MapEntry(
+            schedule.id,
+            _UsageLimitStatus(
+              usedMillis: usedMillis,
+              remainingMillis: limitMillis - usedMillis,
+              missingUsageAccess: false,
+              pendingActivation: false,
+            ),
+          );
+        }),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _usageLimitStatuses = Map<String, _UsageLimitStatus>.fromEntries(
+          entries,
+        );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _usageLimitStatuses = {
+          for (final schedule in usageLimitSchedules)
+            schedule.id: _UsageLimitStatus.missingPermission(
+              limitMillis: schedule.durationLimit?.inMilliseconds ?? 0,
+            ),
+        };
       });
     }
   }
@@ -181,7 +300,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Center(
                               child: Text(
-                                'Revoke is missing a core Android permission. Tap to fix.',
+                                _isUsageStatsMissing
+                                    ? 'Usage access is missing. Revoke cannot enforce or track limits. Tap to fix.'
+                                    : 'Revoke is missing a core Android permission. Tap to fix.',
                                 style: AppTheme.baseBold.copyWith(
                                   color: context.scheme.onError,
                                   letterSpacing: 1,
@@ -282,6 +403,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         nowMin,
       );
     }
+    if (schedule.type == ScheduleType.usageLimit) {
+      return _usageLimitStatuses[schedule.id]?.limitReached ?? false;
+    }
     return false;
   }
 
@@ -321,15 +445,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     if (schedule.type == ScheduleType.usageLimit) {
-      final totalMinutes = schedule.durationLimit?.inMinutes ?? 0;
-      if (totalMinutes <= 0) return 'Usage limit pending';
-      final hours = totalMinutes ~/ 60;
-      final minutes = totalMinutes % 60;
-      if (hours > 0 && minutes > 0) {
-        return 'Daily cap ${hours}h ${minutes}m';
+      final status = _usageLimitStatuses[schedule.id];
+      if (status?.missingUsageAccess == true || _isUsageStatsMissing) {
+        return 'Restore usage access';
       }
-      if (hours > 0) return 'Daily cap ${hours}h';
-      return 'Daily cap ${minutes}m';
+      if (_isUsageLimitSessionActive(schedule) && status != null) {
+        if (status.pendingActivation) {
+          return 'Waiting to start';
+        }
+        if (status.limitReached) {
+          return 'Limit reached';
+        }
+        return _formatRemainingMillis(status.remainingMillis);
+      }
+      if (schedule.blocks.isNotEmpty &&
+          schedule.days.contains(DateTime.now().weekday)) {
+        final nextStart = _nextBlockStartTime(schedule);
+        if (nextStart != null) {
+          return 'Usage window ${nextStart.format(context)}';
+        }
+      }
+      return _formatUsageLimitCap(schedule.durationLimit);
     }
 
     if (schedule.blocks.isEmpty) {
@@ -350,6 +486,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return 'Next block ${nextStart.format(context)}';
     }
     return 'Active on selected days';
+  }
+
+  String _formatUsageLimitCap(Duration? duration) {
+    final totalMinutes = duration?.inMinutes ?? 0;
+    if (totalMinutes <= 0) return 'Usage limit pending';
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours > 0 && minutes > 0) {
+      return 'Session cap ${hours}h ${minutes}m';
+    }
+    if (hours > 0) return 'Session cap ${hours}h';
+    return 'Session cap ${minutes}m';
+  }
+
+  String _formatRemainingMillis(int remainingMillis) {
+    if (remainingMillis <= 0) return 'Limit reached';
+    final totalMinutes = ((remainingMillis + 59999) ~/ 60000).clamp(
+      0,
+      1440 * 7,
+    );
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours > 0 && minutes > 0) {
+      return '${hours}h ${minutes}m remaining';
+    }
+    if (hours > 0) return '${hours}h remaining';
+    return '${totalMinutes}m remaining';
   }
 
   IconData _blockTypeIcon(ScheduleType type) {
@@ -699,17 +862,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildScheduleCard(ScheduleModel schedule) {
     final isBlocking = _isCurrentlyBlocking(schedule);
+    final usageLimitStatus = _usageLimitStatuses[schedule.id];
+    final isLimitReached = usageLimitStatus?.limitReached ?? false;
+    final isUsageBannerState =
+        schedule.type == ScheduleType.usageLimit &&
+        (usageLimitStatus?.missingUsageAccess == true || _isUsageStatsMissing);
     final hasTemporaryApproval = schedule.targetApps.any(
       _temporaryApprovedPackages.contains,
     );
     final borderColor = hasTemporaryApproval
         ? context.colors.success
-        : (isBlocking
+        : (isLimitReached
+              ? context.colors.danger
+              : isBlocking
               ? context.scheme.primary
               : context.scheme.outlineVariant.withValues(alpha: 0.6));
     final statusColor = hasTemporaryApproval
         ? context.colors.success
-        : (isBlocking ? context.scheme.primary : context.colors.textSecondary);
+        : (isLimitReached || isUsageBannerState
+              ? context.colors.danger
+              : (isBlocking
+                    ? context.scheme.primary
+                    : context.colors.textSecondary));
     final statusLabel = hasTemporaryApproval
         ? 'Temporarily unlocked'
         : _buildScheduleStatus(schedule);
@@ -717,7 +891,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final dayLabel = _daySummary(schedule.days);
     final blockCount = schedule.type == ScheduleType.timeBlock
         ? '${schedule.blocks.length} blocks'
-        : 'Daily cap';
+        : 'Session cap';
 
     return InkWell(
       borderRadius: BorderRadius.circular(24),
@@ -732,7 +906,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         decoration: BoxDecoration(
           color: context.scheme.surface,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: borderColor, width: isBlocking ? 2 : 1),
+          border: Border.all(
+            color: borderColor,
+            width: isBlocking || isLimitReached ? 2 : 1,
+          ),
           boxShadow: [
             BoxShadow(
               color: context.scheme.onSurface.withValues(alpha: 0.04),
@@ -1022,4 +1199,37 @@ class _RegimePleaRequest {
     required this.reason,
     required this.durationMinutes,
   });
+}
+
+class _UsageLimitStatus {
+  final int usedMillis;
+  final int remainingMillis;
+  final bool missingUsageAccess;
+  final bool pendingActivation;
+
+  const _UsageLimitStatus({
+    required this.usedMillis,
+    required this.remainingMillis,
+    required this.missingUsageAccess,
+    required this.pendingActivation,
+  });
+
+  const _UsageLimitStatus.missingPermission({required int limitMillis})
+    : this(
+        usedMillis: 0,
+        remainingMillis: limitMillis,
+        missingUsageAccess: true,
+        pendingActivation: false,
+      );
+
+  const _UsageLimitStatus.pending({required int limitMillis})
+    : this(
+        usedMillis: 0,
+        remainingMillis: limitMillis,
+        missingUsageAccess: false,
+        pendingActivation: true,
+      );
+
+  bool get limitReached =>
+      !missingUsageAccess && !pendingActivation && remainingMillis <= 0;
 }

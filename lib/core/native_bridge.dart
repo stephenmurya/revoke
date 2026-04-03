@@ -97,6 +97,23 @@ class NativeBridge {
     });
   }
 
+  /// Returns exact usage per package since the provided activation timestamp.
+  static Future<Map<String, int>> getSessionUsage(
+    List<String> packageNames,
+    int activationTimestamp,
+  ) async {
+    final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+      'getSessionUsage',
+      {
+        'packageNames': packageNames,
+        'activationTimestamp': activationTimestamp,
+      },
+    );
+    return result.map(
+      (key, value) => MapEntry(key.toString(), (value as num?)?.toInt() ?? 0),
+    );
+  }
+
   /// Schedules the next exact Android wakeup for regime enforcement.
   static Future<void> scheduleNextWakeup(int timestampMs) async {
     await _channel.invokeMethod('scheduleNextWakeup', {

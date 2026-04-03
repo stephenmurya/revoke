@@ -105,6 +105,7 @@ class RegimeService {
       'limitMinutes': schedule.durationLimit?.inMinutes,
       'durationSeconds': schedule.durationLimit?.inSeconds,
       'isActive': schedule.isActive,
+      'activatedAtMs': schedule.activatedAt?.millisecondsSinceEpoch,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -152,6 +153,8 @@ class RegimeService {
 
     final durationSeconds = (data['durationSeconds'] as num?)?.toInt();
     final limitMinutes = (data['limitMinutes'] as num?)?.toInt();
+    final activatedAtMs = (data['activatedAtMs'] as num?)?.toInt();
+    final activatedAtTimestamp = data['activatedAt'];
     final rawType = (data['type'] as num?)?.toInt() ?? 0;
     final safeType = rawType.clamp(0, ScheduleType.values.length - 1);
     final type = ScheduleType.values[safeType];
@@ -178,6 +181,11 @@ class RegimeService {
       emoji: rawEmoji == null || rawEmoji.isEmpty
           ? ScheduleModel.defaultEmoji
           : rawEmoji,
+      activatedAt: activatedAtMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(activatedAtMs)
+          : (activatedAtTimestamp is Timestamp
+                ? activatedAtTimestamp.toDate()
+                : null),
     );
   }
 

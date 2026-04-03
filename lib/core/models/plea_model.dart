@@ -14,6 +14,7 @@ class PleaModel {
   final Map<String, String> votes;
   final String status;
   final DateTime createdAt;
+  final DateTime? resolvedAt;
 
   PleaModel({
     required this.id,
@@ -29,6 +30,7 @@ class PleaModel {
     required this.votes,
     required this.status,
     required this.createdAt,
+    this.resolvedAt,
   });
 
   factory PleaModel.fromJson(Map<String, dynamic> json, String docId) {
@@ -62,6 +64,10 @@ class PleaModel {
     final createdAt = createdAtRaw is Timestamp
         ? createdAtRaw.toDate()
         : DateTime.now();
+    final resolvedAtRaw = json['resolvedAt'];
+    final resolvedAt = resolvedAtRaw is Timestamp
+        ? resolvedAtRaw.toDate()
+        : null;
 
     return PleaModel(
       id: docId,
@@ -79,6 +85,7 @@ class PleaModel {
       votes: normalizedVotes,
       status: json['status'] as String? ?? 'active',
       createdAt: createdAt,
+      resolvedAt: resolvedAt,
     );
   }
 
@@ -96,6 +103,7 @@ class PleaModel {
       'votes': votes,
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
+      if (resolvedAt != null) 'resolvedAt': Timestamp.fromDate(resolvedAt!),
     };
   }
 }

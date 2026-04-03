@@ -8,6 +8,7 @@ import '../../core/app_router.dart';
 import '../../core/native_bridge.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/theme_extensions.dart';
+import '../../core/widgets/revoke_progress_bar.dart';
 
 enum _PermissionKey { usageAccess, overlay, exactAlarm }
 
@@ -17,7 +18,6 @@ class _PermissionDisclosure {
     required this.title,
     required this.shortTitle,
     required this.icon,
-    required this.accessedData,
     required this.whyNeeded,
     required this.prominentDisclosure,
   });
@@ -26,7 +26,6 @@ class _PermissionDisclosure {
   final String title;
   final String shortTitle;
   final IconData icon;
-  final String accessedData;
   final String whyNeeded;
   final String prominentDisclosure;
 }
@@ -46,36 +45,30 @@ class _PermissionScreenState extends State<PermissionScreen>
       title: 'Grant Usage Access',
       shortTitle: 'Usage Access',
       icon: PhosphorIcons.chartBar(),
-      accessedData:
-          'Android tells Revoke which apps are currently running on your screen so enforcement can react to the foreground app.',
       whyNeeded:
-          'Without this access, Revoke cannot detect when a distracting app is open and cannot enforce a focus regime.',
+          'Without this permission, Revoke cannot tell when a restricted app is on screen.',
       prominentDisclosure:
-          'Revoke needs Usage Access to monitor which apps are currently running on your screen. This allows us to enforce your focus regimes and block distracting apps. We do not transmit or store your browsing history.',
+          'Revoke needs Usage Access to detect the app currently on screen so blocking can start at the right moment.',
     ),
     _PermissionDisclosure(
       key: _PermissionKey.overlay,
       title: 'Allow Display Over Other Apps',
       shortTitle: 'Display Over Apps',
       icon: PhosphorIcons.appWindow(),
-      accessedData:
-          'Revoke draws a full-screen blocker over restricted apps when you try to open them during an active regime.',
       whyNeeded:
-          'This is the enforcement surface. Without overlay permission, the app can detect the distraction but cannot actually stop access.',
+          'Without this permission, Revoke can detect a distraction but cannot cover it with the blocker.',
       prominentDisclosure:
-          'Revoke needs \'Display Over Other Apps\' permission to draw the strict lock-screen over distracting apps when a regime is active, preventing you from accessing them.',
+          'Revoke needs Display Over Other Apps so it can place the blocker above restricted apps.',
     ),
     _PermissionDisclosure(
       key: _PermissionKey.exactAlarm,
       title: 'Allow Exact Alarms',
       shortTitle: 'Exact Alarms',
       icon: PhosphorIcons.alarm(),
-      accessedData:
-          'Revoke stores the next regime start time and asks Android to wake the app at that exact minute.',
       whyNeeded:
-          'This lets enforcement begin on time without running a battery-draining foreground service all day.',
+          'Without this permission, a regime may start late instead of at the exact scheduled minute.',
       prominentDisclosure:
-          'Revoke needs \'Exact Alarms\' to wake up your device at the precise minute your focus regime begins.',
+          'Revoke needs Exact Alarms so scheduled enforcement can wake up exactly on time.',
     ),
   ];
 
@@ -86,6 +79,8 @@ class _PermissionScreenState extends State<PermissionScreen>
   StreamSubscription<int>? _permissionSubscription;
 
   bool get _allGranted => _hasUsageStats && _hasOverlay && _hasExactAlarm;
+  int get _currentStageNumber =>
+      _allGranted ? _disclosures.length : _currentStep + 1;
 
   @override
   void initState() {
@@ -188,32 +183,45 @@ class _PermissionScreenState extends State<PermissionScreen>
       child: Scaffold(
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            padding: EdgeInsets.fromLTRB(
+              24,
+              20,
+              24,
+              16 + MediaQuery.of(context).padding.bottom,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(),
-                const SizedBox(height: 24),
-                _buildProgressRow(),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 240),
-                    child: _buildDisclosureCard(disclosure, isGranted),
-                  ),
-                ),
                 const SizedBox(height: 20),
-                Text(
-                  isGranted
-                      ? (_allGranted
-                            ? 'All three required Android permissions are enabled.'
-                            : '${disclosure.shortTitle} is enabled. Continue to the next disclosure.')
-                      : 'Tap the button below only after you understand what this permission allows Revoke to do.',
-                  style: AppTheme.bodySmall.copyWith(
-                    color: context.colors.textSecondary,
+                _buildStageProgress(),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 240),
+                          child: _buildDisclosureCard(disclosure, isGranted),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          isGranted
+                              ? (_allGranted
+                                    ? 'All three required Android permissions are enabled.'
+                                    : '${disclosure.shortTitle} is enabled. Continue to the next disclosure.')
+                              : 'Tap the button below only after you understand what this permission allows Revoke to do.',
+                          style: AppTheme.bodySmall.copyWith(
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -239,12 +247,49 @@ class _PermissionScreenState extends State<PermissionScreen>
     );
   }
 
+  Widget _buildStageProgress() {
+    final disclosure = _disclosures[_currentStep];
+    final stageGranted = _isGranted(disclosure.key);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '${disclosure.shortTitle} - $_currentStageNumber/${_disclosures.length}',
+              style: AppTheme.smMedium.copyWith(
+                color: context.scheme.onSurface,
+                letterSpacing: 0.4,
+              ),
+            ),
+            const Spacer(),
+            Icon(
+              stageGranted
+                  ? PhosphorIcons.checkCircle()
+                  : PhosphorIcons.dotsThree(),
+              size: 20,
+              color: stageGranted
+                  ? context.colors.success
+                  : context.colors.textSecondary,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        RevokeProgressBar(
+          totalSteps: _disclosures.length,
+          currentStep: _allGranted ? _disclosures.length - 1 : _currentStep,
+        ),
+      ],
+    );
+  }
+
   Widget _buildHeader() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Before Revoke can enforce anything, Android needs three core permissions.',
+          'Grant Revoke Permissions',
           style: AppTheme.h2.copyWith(
             color: context.scheme.onSurface,
             letterSpacing: -0.2,
@@ -252,74 +297,12 @@ class _PermissionScreenState extends State<PermissionScreen>
         ),
         const SizedBox(height: 10),
         Text(
-          'Read each disclosure, then choose “I Understand / Grant” to open the relevant Android settings page.',
+          'Before Revoke can enforce anything, Android needs three core permissions.',
           style: AppTheme.baseRegular.copyWith(
             color: context.colors.textSecondary,
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildProgressRow() {
-    return Row(
-      children: List.generate(_disclosures.length, (index) {
-        final disclosure = _disclosures[index];
-        final granted = _isGranted(disclosure.key);
-        final isCurrent = index == _currentStep;
-
-        return Expanded(
-          child: Container(
-            margin: EdgeInsets.only(
-              right: index == _disclosures.length - 1 ? 0 : 10,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: granted
-                  ? context.colors.success.withValues(alpha: 0.14)
-                  : isCurrent
-                  ? context.scheme.primary.withValues(alpha: 0.12)
-                  : context.scheme.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: granted
-                    ? context.colors.success
-                    : isCurrent
-                    ? context.scheme.primary
-                    : context.scheme.outlineVariant,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  granted ? PhosphorIcons.checkCircle() : disclosure.icon,
-                  size: 16,
-                  color: granted
-                      ? context.colors.success
-                      : isCurrent
-                      ? context.scheme.primary
-                      : context.colors.textSecondary,
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    disclosure.shortTitle,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.xsMedium.copyWith(
-                      color: granted
-                          ? context.colors.success
-                          : isCurrent
-                          ? context.scheme.primary
-                          : context.colors.textSecondary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }),
     );
   }
 
@@ -341,75 +324,102 @@ class _PermissionScreenState extends State<PermissionScreen>
           width: 1.5,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: isGranted
-                      ? context.colors.success.withValues(alpha: 0.12)
-                      : context.scheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(
-                  isGranted ? PhosphorIcons.checkCircle() : disclosure.icon,
-                  color: isGranted
-                      ? context.colors.success
-                      : context.scheme.primary,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              if (compact) ...[
+                Row(
                   children: [
-                    Text(
-                      'Prominent disclosure',
-                      style: AppTheme.xsMedium.copyWith(
-                        color: context.colors.textSecondary,
-                        letterSpacing: 0.9,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(disclosure.title, style: AppTheme.h2),
+                    _buildDisclosureIcon(disclosure, isGranted),
+                    const Spacer(),
+                    _buildStatusPill(isGranted),
                   ],
                 ),
+                const SizedBox(height: 16),
+                Text(
+                  'Prominent disclosure',
+                  style: AppTheme.xsMedium.copyWith(
+                    color: context.colors.textSecondary,
+                    letterSpacing: 0.9,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(disclosure.title, style: AppTheme.h2),
+              ] else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDisclosureIcon(disclosure, isGranted),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Prominent disclosure',
+                            style: AppTheme.xsMedium.copyWith(
+                              color: context.colors.textSecondary,
+                              letterSpacing: 0.9,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(disclosure.title, style: AppTheme.h2),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    _buildStatusPill(isGranted),
+                  ],
+                ),
+              const SizedBox(height: 24),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: context.scheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Text(
+                  disclosure.prominentDisclosure,
+                  style: AppTheme.baseRegular.copyWith(
+                    color: context.scheme.onSurface,
+                    height: 1.45,
+                  ),
+                ),
               ),
-              _buildStatusPill(isGranted),
+              const SizedBox(height: 18),
+              _buildSection(
+                title: 'Why Revoke needs it',
+                body: disclosure.whyNeeded,
+              ),
             ],
-          ),
-          const SizedBox(height: 24),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: context.scheme.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Text(
-              disclosure.prominentDisclosure,
-              style: AppTheme.baseRegular.copyWith(
-                color: context.scheme.onSurface,
-                height: 1.45,
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          _buildSection(
-            title: 'What Revoke accesses',
-            body: disclosure.accessedData,
-          ),
-          const SizedBox(height: 16),
-          _buildSection(
-            title: 'Why Revoke needs it',
-            body: disclosure.whyNeeded,
-          ),
-        ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDisclosureIcon(
+    _PermissionDisclosure disclosure,
+    bool isGranted,
+  ) {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: isGranted
+            ? context.colors.success.withValues(alpha: 0.12)
+            : context.scheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Icon(
+        isGranted ? PhosphorIcons.checkCircle() : disclosure.icon,
+        color: isGranted ? context.colors.success : context.scheme.primary,
+        size: 28,
       ),
     );
   }
@@ -458,7 +468,7 @@ class _PermissionScreenState extends State<PermissionScreen>
 
   String _buildPrimaryLabel(_PermissionDisclosure disclosure, bool isGranted) {
     if (!isGranted) {
-      return 'I Understand / Grant ${disclosure.shortTitle}';
+      return 'Grant ${disclosure.shortTitle}';
     }
     if (_allGranted) {
       return 'Continue to Revoke';

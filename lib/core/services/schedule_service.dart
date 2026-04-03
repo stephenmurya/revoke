@@ -238,6 +238,25 @@ class ScheduleService {
     return local;
   }
 
+  static ScheduleModel _resolveActivationTimestamp(
+    ScheduleModel next, {
+    ScheduleModel? previous,
+  }) {
+    if (!next.isActive || next.type != ScheduleType.usageLimit) {
+      return next.copyWith(activatedAt: null);
+    }
+
+    if (next.activatedAt != null) {
+      return next;
+    }
+
+    if (previous?.isActive == true && previous?.activatedAt != null) {
+      return next.copyWith(activatedAt: previous!.activatedAt);
+    }
+
+    return next.copyWith(activatedAt: DateTime.now());
+  }
+
   static Stream<List<ScheduleModel>> watchSchedules() async* {
     final local = await _readLocalSchedules();
     yield local;
@@ -255,15 +274,20 @@ class ScheduleService {
   static Future<void> saveSchedule(ScheduleModel schedule) async {
     final schedules = await _readLocalSchedules();
     final index = schedules.indexWhere((s) => s.id == schedule.id);
+    final existing = index == -1 ? null : schedules[index];
+    final normalized = _resolveActivationTimestamp(
+      schedule,
+      previous: existing,
+    );
     if (index == -1) {
-      schedules.add(schedule);
+      schedules.add(normalized);
     } else {
-      schedules[index] = schedule;
+      schedules[index] = normalized;
     }
     await _writeLocalSchedules(schedules);
-    await _markPendingUpsert(schedule.id);
+    await _markPendingUpsert(normalized.id);
     unawaited(_syncWithNativeInBackground());
-    unawaited(_pushSingleToCloudInBackground(schedule));
+    unawaited(_pushSingleToCloudInBackground(normalized));
     unawaited(_flushPendingCloudSyncInBackground());
   }
 
@@ -283,6 +307,11 @@ class ScheduleService {
     if (index == -1) return;
     final updated = schedules[index].copyWith(
       isActive: !schedules[index].isActive,
+      activatedAt:
+          schedules[index].isActive ||
+              schedules[index].type != ScheduleType.usageLimit
+          ? null
+          : DateTime.now(),
     );
     schedules[index] = updated;
     await _writeLocalSchedules(schedules);
@@ -294,7 +323,23 @@ class ScheduleService {
 
   static Future<void> syncWithNative() async {
     final schedules = await _readLocalSchedules();
-    final activeSchedules = schedules.where((s) => s.isActive).toList();
+    final normalizedSchedules = <ScheduleModel>[];
+    var schedulesChanged = false;
+
+    for (final schedule in schedules) {
+      final normalized = _resolveActivationTimestamp(schedule);
+      if (normalized.activatedAt != schedule.activatedAt) {
+        schedulesChanged = true;
+      }
+      normalizedSchedules.add(normalized);
+    }
+
+    if (schedulesChanged) {
+      await _writeLocalSchedules(normalizedSchedules);
+    }
+
+    final activeSchedules =
+        normalizedSchedules.where((s) => s.isActive).toList();
     final nextWakeupMs =
         RegimeWakeupCalculator.computeNextWakeupTimestampMs(activeSchedules) ??
         0;

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/app_router.dart';
 import 'core/models/plea_model.dart';
@@ -47,6 +48,7 @@ class GlobalAppServices extends StatefulWidget {
 
 class _GlobalAppServicesState extends State<GlobalAppServices>
     with WidgetsBindingObserver {
+  static const int _maxProcessedApprovedPleas = 250;
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<List<PleaModel>>? _approvedPleasSubscription;
   final Set<String> _processedPleas = <String>{};
@@ -135,9 +137,11 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
       _approvedPleasUid = nextUid;
 
       if (nextUid != null && nextUid.isNotEmpty) {
-        _approvedPleasSubscription = SquadService.getUserApprovedPleasStream(
-          nextUid,
-        ).listen(_handleApprovedPleas);
+        _processedPleas.addAll(await _loadProcessedPleas(nextUid));
+        _approvedPleasSubscription =
+            SquadService.getUserApprovedPleasStream(nextUid).listen((pleas) {
+              unawaited(_handleApprovedPleas(nextUid, pleas));
+            });
       }
     }
 
@@ -148,16 +152,60 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
     });
   }
 
-  void _handleApprovedPleas(List<PleaModel> pleas) {
+  Future<Set<String>> _loadProcessedPleas(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored =
+        prefs.getStringList(_processedApprovedPleasKey(uid)) ??
+        const <String>[];
+    return stored.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+  }
+
+  Future<void> _persistProcessedPleas(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final values = _processedPleas
+        .where((id) => id.trim().isNotEmpty)
+        .take(_maxProcessedApprovedPleas)
+        .toList(growable: false);
+    await prefs.setStringList(_processedApprovedPleasKey(uid), values);
+  }
+
+  String _processedApprovedPleasKey(String uid) =>
+      'processed_approved_pleas_$uid';
+
+  bool _isApprovalStillActionable(PleaModel plea, DateTime now) {
+    final packageName = plea.packageName.trim();
+    if (packageName.isEmpty) return false;
+    if (packageName.startsWith('regime-delete:')) {
+      return true;
+    }
+
+    final grantedMinutes = plea.durationMinutes > 0 ? plea.durationMinutes : 5;
+    final effectiveAt = plea.resolvedAt ?? plea.createdAt;
+    final expiresAt = effectiveAt.add(Duration(minutes: grantedMinutes));
+    return now.isBefore(expiresAt);
+  }
+
+  Future<void> _handleApprovedPleas(String uid, List<PleaModel> pleas) async {
+    var didChangeProcessedSet = false;
+    final now = DateTime.now();
+
     for (final plea in pleas) {
       if (_processedPleas.contains(plea.id)) continue;
 
       final packageName = plea.packageName.trim();
+      final shouldApply = _isApprovalStillActionable(plea, now);
+      if (!shouldApply) {
+        _processedPleas.add(plea.id);
+        didChangeProcessedSet = true;
+        continue;
+      }
+
       final grantedMinutes = plea.durationMinutes > 0
           ? plea.durationMinutes
           : 5;
       if (packageName.isEmpty) {
         _processedPleas.add(plea.id);
+        didChangeProcessedSet = true;
         continue;
       }
 
@@ -172,6 +220,11 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
         NativeBridge.temporaryUnlock(packageName, grantedMinutes);
       }
       _processedPleas.add(plea.id);
+      didChangeProcessedSet = true;
+    }
+
+    if (didChangeProcessedSet && _approvedPleasUid == uid) {
+      await _persistProcessedPleas(uid);
     }
   }
 

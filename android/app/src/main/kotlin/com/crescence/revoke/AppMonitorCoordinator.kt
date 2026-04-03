@@ -236,9 +236,21 @@ object AppMonitorCoordinator {
     }
 
     private fun hasTargetApps(schedule: JSONObject): Boolean {
-        val targetApps = schedule.optJSONArray("targetApps") ?: return false
+        val targetApps = schedule.optJSONArray("targetApps") ?: schedule.optJSONArray("apps") ?: return false
         for (i in 0 until targetApps.length()) {
-            if (targetApps.optString(i, "").trim().isNotEmpty()) {
+            val raw = targetApps.opt(i)
+            val packageName =
+                when (raw) {
+                    is String -> raw.trim()
+                    is JSONObject ->
+                        listOf(
+                            raw.optString("packageName", "").trim(),
+                            raw.optString("pkg", "").trim(),
+                            raw.optString("id", "").trim(),
+                        ).firstOrNull { it.isNotEmpty() }.orEmpty()
+                    else -> targetApps.optString(i, "").trim()
+                }
+            if (packageName.isNotEmpty()) {
                 return true
             }
         }

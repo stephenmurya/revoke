@@ -27,8 +27,26 @@ class AppMonitorService : Service() {
     companion object {
         @Volatile
         private var running: Boolean = false
+        @Volatile
+        private var currentInstance: AppMonitorService? = null
 
         fun isRunning(): Boolean = running
+
+        fun syncSchedulesAndEvaluate(schedulesJson: String, trigger: String): Boolean {
+            val instance = currentInstance ?: return false
+            instance.handler.post {
+                instance.handleScheduleSync(schedulesJson, trigger)
+            }
+            return true
+        }
+
+        fun requestImmediateForegroundEvaluation(trigger: String): Boolean {
+            val instance = currentInstance ?: return false
+            instance.handler.post {
+                instance.forceEvaluateForegroundApp(trigger)
+            }
+            return true
+        }
     }
 
     private data class TimeWindow(val startTotalMin: Int, val endTotalMin: Int)
@@ -63,6 +81,7 @@ class AppMonitorService : Service() {
         super.onCreate()
         try {
             running = true
+            currentInstance = this
             windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
 
@@ -162,7 +181,7 @@ class AppMonitorService : Service() {
             "com.revoke.app.SYNC_SCHEDULES" -> {
                 val schedulesJson = intent.getStringExtra("schedules")
                 if (schedulesJson != null) {
-                    updateSchedules(schedulesJson)
+                    handleScheduleSync(schedulesJson, "syncSchedules_intent")
                 }
             }
             "com.revoke.app.TEMP_UNLOCK" -> {
@@ -206,6 +225,35 @@ class AppMonitorService : Service() {
         if (now - lastHealthWriteAt < 5_000L) return
         lastHealthWriteAt = now
         prefs.edit().putLong("monitor_last_tick_ms", now).apply()
+    }
+
+    private fun handleScheduleSync(schedulesJson: String, trigger: String) {
+        updateSchedules(schedulesJson)
+        forceEvaluateForegroundApp(trigger)
+    }
+
+    private fun forceEvaluateForegroundApp(trigger: String) {
+        try {
+            val restrictedDetected = checkForegroundApp(System.currentTimeMillis())
+            resetMonitorLoop(delayMs = 2_000L)
+            android.util.Log.d(
+                "RevokeMonitor",
+                "Forced foreground evaluation completed from $trigger. restricted=$restrictedDetected",
+            )
+        } catch (error: Exception) {
+            AppMonitorCoordinator.recordServiceException(
+                this,
+                "force_evaluate_foreground_app",
+                error,
+                extraKeys = mapOf("trigger" to trigger),
+            )
+        }
+    }
+
+    private fun resetMonitorLoop(delayMs: Long = 2_000L) {
+        if (!monitorLoopStarted) return
+        handler.removeCallbacks(runnable)
+        handler.postDelayed(runnable, delayMs)
     }
 
     private fun isScreenInteractive(): Boolean {
@@ -551,6 +599,9 @@ class AppMonitorService : Service() {
 
     override fun onDestroy() {
         running = false
+        if (currentInstance === this) {
+            currentInstance = null
+        }
         handler.removeCallbacks(runnable)
         monitorLoopStarted = false
         if (!suppressAutoRestart) {
@@ -793,31 +844,17 @@ class AppMonitorService : Service() {
                     continue
                 }
 
-                val usageStatsManager =
-                    getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-                val startOfDay = java.util.Calendar.getInstance().apply {
-                    set(java.util.Calendar.HOUR_OF_DAY, 0)
-                    set(java.util.Calendar.MINUTE, 0)
-                    set(java.util.Calendar.SECOND, 0)
-                    set(java.util.Calendar.MILLISECOND, 0)
-                }.timeInMillis
                 val nowMs = System.currentTimeMillis()
-
-                val usageStats = usageStatsManager.queryUsageStats(
-                    UsageStatsManager.INTERVAL_DAILY,
-                    startOfDay,
-                    nowMs
-                )
-
-                var usedMs = 0L
-                if (usageStats != null) {
-                    for (stats in usageStats) {
-                        if (stats.packageName == packageName) {
-                            usedMs = stats.totalTimeInForeground
-                            break
-                        }
-                    }
-                }
+                val activationTimestamp = resolveActivationTimestamp(schedule, nowMs)
+                val targetPackages = extractTargetPackages(schedule)
+                val usageByPackage =
+                    UsageEventsSessionCalculator.getSessionUsage(
+                        context = this,
+                        packageNames = targetPackages,
+                        activationTimestamp = activationTimestamp,
+                        nowMs = nowMs,
+                    )
+                val usedMs = targetPackages.sumOf { usageByPackage[it] ?: 0L }
 
                 val usedMinutes = usedMs / (1000L * 60L)
                 if (usedMinutes >= limitMinutes.toLong()) {
@@ -847,6 +884,32 @@ class AppMonitorService : Service() {
             }
         }
         return null
+    }
+
+    private fun extractTargetPackages(schedule: JSONObject): List<String> {
+        val apps = schedule.optJSONArray("targetApps") ?: return emptyList()
+        val packages = mutableListOf<String>()
+        for (i in 0 until apps.length()) {
+            val pkg = apps.optString(i, "").trim()
+            if (pkg.isNotEmpty()) {
+                packages.add(pkg)
+            }
+        }
+        return packages
+    }
+
+    private fun resolveActivationTimestamp(schedule: JSONObject, nowMs: Long): Long {
+        val rawTimestamp =
+            when {
+                schedule.has("activatedAtMs") && !schedule.isNull("activatedAtMs") ->
+                    schedule.optLong("activatedAtMs", 0L)
+                else -> 0L
+            }
+        return when {
+            rawTimestamp <= 0L -> nowMs
+            rawTimestamp > nowMs -> nowMs
+            else -> rawTimestamp
+        }
     }
 
     private var currentBlockedApp: String? = null
