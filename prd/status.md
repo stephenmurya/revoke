@@ -56,11 +56,17 @@ Source of truth: repository implementation + PRD (`prd/prd.md`).
 - [x] 🔁 Approved-plea replay guard (prevents stale approved pleas from reapplying temp unlocks on app boot)
 - [x] 🪪 Permissions/onboarding UX hardening (small-screen overflow fixes, pinned CTA, staged permission progress)
 - [x] 🛑 Blocker overlay branding refresh (native “Cooked” HUD now uses Revoke logo + stacked wordmark)
+- [x] 🧠 Hybrid enforcement architecture pass (`EnforcementEngine` shared between `AppMonitorService` and `RevokeAccessibilityService`)
+- [x] ♿ Accessibility fast path + adaptive polling fallback (event-driven detection with lighter service backstop when Accessibility is enabled)
+- [x] 📣 Google Play accessibility disclosure gate + settings bridge (dedicated onboarding step with resume-state auto-advance)
+- [x] 🏠 Anti-flash blocker sequence (`GLOBAL_ACTION_HOME` before native blocker overlay renders)
 
 ## In Progress
 - [ ] 🛡️ Solo fallback abuse limits + telemetry (caps, cooldowns, and logs for safety/observability)
 - [ ] ✅ Device-side enforcement QA (watchdog revive, exact on-device block timing, Crashlytics verification)
 - [ ] ✅ Edge-case test coverage (uninstall/reinstall behavior, stale approvals, no-squad and no-voter plea handling)
+- [ ] 🔒 Separate `:enforcement` process evaluation after native state moves off single-process `SharedPreferences`
+- [ ] 🧪 Optional Shizuku hard mode / Device Admin spike only if product + policy review green-light it
 - [ ] Website Blocker Flow Consolidation (skipped for now)
 - [ ] Production Hardening Pass (skipped for now)
 
@@ -75,6 +81,7 @@ Source of truth: repository implementation + PRD (`prd/prd.md`).
 - Launch readiness sprint shipped: AppMonitor watchdog worker, same-squad Firestore rules, rap-sheet snapshot builder, and emulator-backed backend verification are in place; remaining validation is primarily device-side QA.
 - Enforcement hardening shipped: native schedule sync now performs immediate foreground evaluation, usage-limit math is session-scoped from `activatedAt`, and Time Blocks are decoupled from usage-limit `queryEvents` logic with safe non-fatal error boundaries.
 - Replay/permission polish shipped: stale approved pleas no longer reapply temp unlocks on startup, onboarding/permissions flows were rebuilt for small screens, and the blocker overlay HUD now uses branded Revoke visuals.
+- Curbox-derived hardening shipped: Revoke is now hybrid rather than polling-only, with a shared `EnforcementEngine`, an Accessibility fast path, adaptive fallback polling, a Play-compliant Accessibility disclosure step, and an anti-flash HOME-before-overlay sequence.
 - Uninstalled-app UX hardening shipped: missing target packages now render as ghost apps with explicit “Restriction remains active” messaging instead of broken/missing UI.
 - Solo tribunal handling shipped: pleas with zero eligible voters are now auto-resolved by `SYSTEM_WARDEN` with immediate verdict + system message, preventing stuck active pleas.
 - Uninstall/reinstall anti-cheat hardening shipped: Android now listens for package removals and immediately clears stale temporary approvals from `SharedPreferences` and running monitor state; temp approvals returned to Flutter are now install-aware.
@@ -92,24 +99,31 @@ Source of truth: repository implementation + PRD (`prd/prd.md`).
    - Add widget/integration checks for block editor interactions, timeline overlays, and home regime card actions.
    - Validate timezone and DST transitions plus uninstall/reinstall/stale-approval edge cases.
 
-3. **Website Blocker Flow Consolidation** (Skipped for now)
+3. **🔒 Deferred Curbox-inspired native hardening**
+   - Revisit a separate `:enforcement` process only after native persistence is migrated away from single-process `SharedPreferences`.
+   - Decide whether Shizuku hard mode or Device Admin is worth the policy/product cost.
+
+4. **Website Blocker Flow Consolidation** (Skipped for now)
    - Pick single entry-point architecture for website restriction state changes.
    - Remove duplicate triggers/handlers and route all paths through one coordinator.
 
-4. **Production Hardening Pass** (Skipped for now)
+5. **Production Hardening Pass** (Skipped for now)
    - Expand emulator coverage and release verification pass.
 
 ## Suggested Execution Order
 1. ✅ Device-side enforcement QA
 2. 🧪 Remaining edge-case QA
-3. Website Blocker Flow Consolidation (when unskipped)
-4. Production Hardening Pass (when unskipped)
+3. 🔒 Deferred Curbox-inspired native hardening
+4. Website Blocker Flow Consolidation (when unskipped)
+5. Production Hardening Pass (when unskipped)
 
 ## Next Steps (Aligned to PRD)
 - [ ] Challenges pillar implementation beyond placeholder
 - [ ] Notifications + Analytics pages (currently placeholders) and real dashboards
 - [ ] Focus Score: make stats fully source-backed and document data sources in detail UX
 - [ ] OEM reliability hardening beyond current watchdog pass (manufacturer-specific guidance + stronger service-running UX)
+- [ ] Evaluate separate-process enforcement only after native state storage is multi-process safe
+- [ ] Decide whether Shizuku hard mode or Device Admin belongs in product scope at all
 - [ ] iOS strategy decision (scaffold only vs enforcement parity plan)
 
 ## Backlog

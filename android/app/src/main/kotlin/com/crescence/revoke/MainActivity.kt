@@ -123,6 +123,14 @@ class MainActivity : FlutterActivity() {
                     requestExactAlarms()
                     result.success(true)
                 }
+                "openAccessibilitySettings" -> {
+                    openAccessibilitySettings()
+                    result.success(true)
+                }
+                "requestAccessibilityPermission" -> {
+                    openAccessibilitySettings()
+                    result.success(true)
+                }
                 "getInstalledApps" -> {
                     // Running on a background thread to prevent UI stutter
                     Thread {
@@ -189,6 +197,9 @@ class MainActivity : FlutterActivity() {
                         trigger = "flutter_method_channel",
                     )
                     result.success(status.toMap())
+                }
+                "checkAccessibilityPermission" -> {
+                    result.success(AccessibilityPermissionUtils.isAccessibilityServiceEnabled(this))
                 }
                 "getAppDetails" -> {
                     val packageName = call.argument<String>("packageName")
@@ -339,7 +350,7 @@ class MainActivity : FlutterActivity() {
 
     private fun syncSchedulesToNative(schedulesJson: String?, nextWakeupMs: Long): Boolean {
         val safeSchedulesJson = schedulesJson?.trim().takeUnless { it.isNullOrEmpty() } ?: "[]"
-        persistSchedules(safeSchedulesJson)
+        EnforcementEngine.syncSchedules(this, safeSchedulesJson)
         AppMonitorCoordinator.enqueueWatchdog(this)
 
         if (nextWakeupMs > 0L) {
@@ -371,11 +382,6 @@ class MainActivity : FlutterActivity() {
         } else {
             true
         }
-    }
-
-    private fun persistSchedules(schedulesJson: String) {
-        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
-        prefs.edit().putString("schedules", schedulesJson).apply()
     }
 
     private fun dispatchScheduleSyncToRunningService(intent: Intent) {
@@ -797,12 +803,26 @@ class MainActivity : FlutterActivity() {
             true
         }
 
+        val accessibility = AccessibilityPermissionUtils.isAccessibilityServiceEnabled(this)
+
         return mapOf(
             "usage_stats" to usageStats,
             "overlay" to overlay,
             "exact_alarm" to exactAlarm,
-            "battery_optimization_ignored" to batteryOptimizationIgnored
+            "battery_optimization_ignored" to batteryOptimizationIgnored,
+            "accessibility" to accessibility
         )
+    }
+
+    private fun openAccessibilitySettings() {
+        try {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+            // Ignore
+        }
     }
 
     private fun requestIgnoreBatteryOptimizations() {

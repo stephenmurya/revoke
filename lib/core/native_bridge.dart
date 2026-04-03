@@ -56,6 +56,16 @@ class NativeBridge {
     await _channel.invokeMethod('requestExactAlarms');
   }
 
+  /// Opens Android accessibility settings for the fast-path enforcement service.
+  static Future<void> requestAccessibilityPermission() async {
+    await openAccessibilitySettings();
+  }
+
+  /// Opens Android accessibility settings.
+  static Future<void> openAccessibilitySettings() async {
+    await _channel.invokeMethod('openAccessibilitySettings');
+  }
+
   /// Fetches a list of installed apps.
   static Future<List<Map<String, dynamic>>> getInstalledApps() async {
     final List<dynamic> result = await _channel.invokeMethod(
@@ -84,6 +94,12 @@ class NativeBridge {
       'checkAndReviveService',
     );
     return Map<String, dynamic>.from(result);
+  }
+
+  /// Returns whether the Accessibility fast path is currently enabled.
+  static Future<bool> checkAccessibilityPermission() async {
+    final result = await _channel.invokeMethod('checkAccessibilityPermission');
+    return result == true;
   }
 
   /// Syncs schedule state with Android so native can decide whether to run.

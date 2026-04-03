@@ -10,6 +10,7 @@ import '../../core/utils/theme_extensions.dart';
 import '../../core/widgets/revoke_logo.dart';
 import '../../core/widgets/revoke_progress_bar.dart';
 import 'package:share_plus/share_plus.dart';
+import 'accessibility_disclosure_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -20,6 +21,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen>
     with WidgetsBindingObserver {
+  static const int _recruitmentStepIndex = 7;
   static const String _squadCodePrefix = 'REV-';
   static const int _squadCodeTotalLength = 7;
   static const int _squadCodeSuffixLength = 3;
@@ -27,7 +29,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final PageController _pageController = PageController();
   int _currentPage = 0;
   final int _totalSteps =
-      7; // Auth, Alias, Perms, Delusion, Reality, Vow, Recruit
+      8; // Auth, Alias, Perms, Accessibility, Delusion, Reality, Vow, Recruit
 
   // Form Data
   String? _nickname;
@@ -47,6 +49,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   bool _hasUsageStats = false;
   bool _hasOverlay = false;
   bool _hasExactAlarm = false;
+  bool _hasAccessibility = false;
 
   @override
   void initState() {
@@ -103,11 +106,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   Future<void> _checkPermissions() async {
     final perms = await NativeBridge.checkPermissions();
+    final hasAccessibility = await NativeBridge.checkAccessibilityPermission();
     if (mounted) {
       setState(() {
         _hasUsageStats = perms['usage_stats'] ?? false;
         _hasOverlay = perms['overlay'] ?? false;
         _hasExactAlarm = perms['exact_alarm'] ?? false;
+        _hasAccessibility = hasAccessibility;
       });
     }
   }
@@ -226,14 +231,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Future<void> _jumpToShareSquadStep() async {
-    if (_currentPage == 6) {
+    if (_currentPage == _recruitmentStepIndex) {
       await _handleStepSixEntering();
       return;
     }
 
-    _pageController.jumpToPage(6);
+    _pageController.jumpToPage(_recruitmentStepIndex);
     if (mounted) {
-      setState(() => _currentPage = 6);
+      setState(() => _currentPage = _recruitmentStepIndex);
     }
     await _handleStepSixEntering();
   }
@@ -324,7 +329,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     physics: const NeverScrollableScrollPhysics(),
                     onPageChanged: (page) {
                       setState(() => _currentPage = page);
-                      if (page == 6) {
+                      if (page == _recruitmentStepIndex) {
                         _handleStepSixEntering();
                       }
                     },
@@ -332,6 +337,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       _buildStepAuth(),
                       _buildStepAlias(),
                       _buildStepPermissions(),
+                      _buildStepAccessibilityDisclosure(),
                       _buildStepDelusion(),
                       _buildStepReality(),
                       _buildStepVow(),
@@ -444,10 +450,28 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       context.go('/permissions');
     }
 
+    void continueFromPermissions() {
+      if (!allGranted) {
+        openPermissionSetup();
+        return;
+      }
+
+      if (_hasAccessibility) {
+        _pageController.animateToPage(
+          4,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+        return;
+      }
+
+      _nextPage();
+    }
+
     return _buildBaseStep(
       header: "GRANT\nGOD MODE.",
       subtext:
-          "Revoke needs Usage Access, Overlay, and Exact Alarms. The full disclosure and grant flow happens on the next screen.",
+          "Revoke needs Usage Access, Overlay, and Exact Alarms before enforcement can start.",
       child: SingleChildScrollView(
         child: Column(
           children: [
@@ -474,11 +498,21 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             const SizedBox(height: 24),
             _buildPrimaryButton(
               label: allGranted ? "Continue" : "Open permission setup",
-              onPressed: allGranted ? _nextPage : openPermissionSetup,
+              onPressed: continueFromPermissions,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStepAccessibilityDisclosure() {
+    return AccessibilityDisclosureScreen(
+      onCompleted: () {
+        if (!mounted) return;
+        setState(() => _hasAccessibility = true);
+        _nextPage();
+      },
     );
   }
 
@@ -848,8 +882,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     String title,
     String desc,
     bool isGranted,
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    String buttonLabel = "OPEN",
+    bool isOptional = false,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -877,7 +913,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       Theme.of(context).scaffoldBackgroundColor,
                     ),
                   ),
-                  child: const Text("OPEN"),
+                  child: Text(buttonLabel),
                 );
 
           if (compact) {
@@ -887,6 +923,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 Text(title, style: AppTheme.h3),
                 const SizedBox(height: 8),
                 Text(desc, style: AppTheme.bodySmall),
+                if (isOptional) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    "Optional, but strongly recommended.",
+                    style: AppTheme.bodySmall.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Align(alignment: Alignment.centerLeft, child: action),
               ],
@@ -903,6 +948,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     Text(title, style: AppTheme.h3),
                     const SizedBox(height: 8),
                     Text(desc, style: AppTheme.bodySmall),
+                    if (isOptional) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        "Optional, but strongly recommended.",
+                        style: AppTheme.bodySmall.copyWith(
+                          color: context.colors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

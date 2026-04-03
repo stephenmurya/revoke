@@ -1,6 +1,6 @@
 # Project Revoke: Technical PRD (Re-baselined)
 
-Version: 1.1 (Feb 2026)
+Version: 1.2 (Apr 2026)
 
 Status: Active (Aligned to repository implementation)
 
@@ -12,37 +12,66 @@ Core Philosophy: Social accountability through friction and peer-governed access
 
 Revoke is a discipline app with:
 
-1. A hard enforcement layer on Android (Usage Stats + Overlay + Foreground Service).
+1. A hard enforcement layer on Android (Accessibility fast path + Usage Stats fallback + Overlay + Foreground Service + watchdog recovery).
 2. A social governance layer (Squads + Tribunals) for temporary clearance.
 
-When a blocked app is opened during an active regime, a native overlay blocks access. Users can request temporary clearance via a Tribunal where squad members attend, chat, and vote. Verdict resolution is server-authoritative.
+When a blocked app is opened during an active regime, Revoke prefers an event-driven Accessibility path to detect the launch instantly, snap the user back Home, and paint the native blocker overlay. The foreground service remains as the resilient fallback and session-usage evaluator. Users can request temporary clearance via a Tribunal where squad members attend, chat, and vote. Verdict resolution is server-authoritative.
 
 ## 2. Current Technical Stack
 
 - Flutter app (routing via `go_router`).
 - Firebase: Auth, Firestore, Cloud Functions (Node.js 22), FCM.
-- Native Android: Kotlin foreground service (`AppMonitorService`) + overlay + MethodChannel bridge.
+- Native Android: Kotlin `AccessibilityService` fast path (`RevokeAccessibilityService`) + shared `EnforcementEngine` + foreground-service fallback (`AppMonitorService`) + `TYPE_APPLICATION_OVERLAY` blocker + WorkManager watchdog + MethodChannel bridge.
 - State management: service-layer patterns (no Riverpod dependency in current implementation).
 
 ## 3. System Requirements (Current Baseline)
 
 ### 3.1 Android Enforcement
 
-- Foreground service monitors foreground apps using `UsageStatsManager` and blocks restricted apps using an overlay.
+- Hybrid event-driven enforcement is the current baseline:
+  - `RevokeAccessibilityService` listens for `TYPE_WINDOW_STATE_CHANGED` events and evaluates the visible package with near-zero latency.
+  - `EnforcementEngine` is the shared Kotlin decision layer used by both the Accessibility service and `AppMonitorService`.
+  - `AppMonitorService` remains the resilient backstop for OEM-kill scenarios, periodic reevaluation, usage-limit maintenance, and boot/app-start recovery.
+- Anti-flash blocker path:
+  - If the Accessibility fast path detects a blocked app, it immediately fires `GLOBAL_ACTION_HOME`.
+  - Revoke then paints the full-screen native blocker overlay over Home so the target app does not visibly render first.
 - Adaptive polling:
-  - 2s in high-risk situations (restricted app detected / immediately after a block).
-  - 5s during an active schedule window.
-  - 9s otherwise.
-  - 10s and skip enforcement when screen is off.
+  - If Accessibility is enabled and healthy, aggressive foreground polling is suspended.
+  - In fast-path mode, the fallback service drops to:
+    - 15s right after a restricted detection
+    - 5s when an active usage-limit regime or blocker overlay still needs maintenance
+    - 12s otherwise
+  - If Accessibility is unavailable, the service falls back to primary `UsageStatsManager` polling:
+    - 2s during recent high-risk periods
+    - 5s otherwise
 - Boot persistence:
   - Service restarts on device boot (`BOOT_COMPLETED` receiver).
+  - WorkManager watchdog (`AppMonitorWatchdogWorker`) re-enqueues on boot/app start and revives the monitor service if needed.
   - Best-effort restart strategy on service/task removal.
 - Battery optimization:
   - App requires exemption from battery optimizations for reliability.
+- Compliance/onboarding:
+  - Accessibility permission is gated behind a dedicated prominent disclosure screen before users are sent to Android Accessibility Settings.
+  - Flutter re-checks the Accessibility permission on resume and advances onboarding automatically once granted.
+
+### 3.1.1 Regime Evaluation Rules
+
+- Time Blocks and Usage Limits are strictly decoupled in native evaluation.
+- Time Blocks:
+  - only check whether the current local time falls inside one of the configured enforcement windows
+  - never read `activatedAt`
+  - never query `UsageStatsManager.queryEvents`
+- Usage Limits:
+  - require an `activatedAt` timestamp
+  - calculate usage strictly from that activation point using `UsageStatsManager.queryEvents`
+  - include the still-open-app edge case when no background event has fired yet
+- Native evaluation is wrapped in non-fatal error boundaries so malformed regime payloads do not crash the enforcement service.
 
 ### 3.2 Regimes (Schedules)
 
 - Users define regimes (time blocks and usage limits) and the apps affected.
+- Multi-window schedules are supported via `blocks[]` with cross-midnight validation and native parity.
+- Usage-limit regimes persist an `activatedAt` timestamp only while the limit session is active.
 - Regimes are cloud-synced and survive reinstall/new devices:
   - `/users/{uid}/regimes/{regimeId}`
 - Native enforcement consumes regimes via MethodChannel schedule sync.
@@ -140,6 +169,24 @@ Schedulers:
 
 ## 6. Planned Migration Milestones
 
+### 6.1 Reference-Driven Hardening Status (Curbox Audit)
+
+- Implemented:
+  - shared `EnforcementEngine` now owns blocking decisions for both the Accessibility fast path and the foreground-service fallback
+  - `RevokeAccessibilityService` is live as the zero-latency fast path for app detection
+  - adaptive polling is in place, so `AppMonitorService` backs off when Accessibility is healthy and resumes primary polling when it is not
+  - the Google Play accessibility disclosure gate and settings bridge are live in onboarding
+  - the anti-flash `GLOBAL_ACTION_HOME` blocker sequence is live before the native overlay appears
+  - Revoke retained its stronger boot/watchdog architecture rather than regressing to an accessibility-only model
+  - Revoke retained its session-scoped `queryEvents` usage-limit math instead of adopting Curbox's day-relative totals
+  - Revoke retained the existing overlay-based blocker instead of switching to a background-launched blocker Activity
+- Deferred:
+  - a separate `:enforcement` process remains intentionally deferred because the current native persistence layer still depends on single-process `SharedPreferences`
+  - any Shizuku-backed hard mode remains deferred behind flavor/flag and policy review
+  - Device Admin / uninstall-prevention work remains deferred and is not part of the Play-baseline architecture
+
+Legacy roadmap items retained below for backlog continuity:
+
 P0:
 - Optional migration to a vote subcollection model (Option A) for simpler integrity boundaries:
   - `/pleas/{pleaId}/votes/{uid}`
@@ -152,4 +199,3 @@ P1:
 P2:
 - Reintroduce / prioritize previously drafted features if desired:
   - Vandalism (wallpaper), Simp Protocol, MAD heartbeat, leaderboards.
-

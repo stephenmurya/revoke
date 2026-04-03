@@ -85,12 +85,11 @@ class AppMonitorService : Service() {
             windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
 
-            // Load persisted schedules
-            val savedSchedules = prefs.getString("schedules", null)
-            if (savedSchedules != null) {
-                updateSchedules(savedSchedules)
-                android.util.Log.d("RevokeMonitor", "Loaded ${activeSchedules.size} persisted schedules")
-            }
+            EnforcementEngine.ensureLoaded(this)
+            android.util.Log.d(
+                "RevokeMonitor",
+                "Loaded ${EnforcementEngine.getScheduleCount(this)} persisted schedules",
+            )
             loadTempUnlocks()
 
             startForegroundService()
@@ -153,11 +152,17 @@ class AppMonitorService : Service() {
                 writeSelfHealth(now)
 
                 if (!isScreenInteractive()) {
-                    hideBlockerOverlay()
+                    BlockerOverlayController.hide(this@AppMonitorService, "screen_not_interactive")
                     nextDelayMs = 10_000L
                 } else {
-                    val restrictedDetected = checkForegroundApp(now)
-                    nextDelayMs = computeNextPollDelayMs(now, restrictedDetected)
+                    val fastPathActive = AccessibilityPermissionUtils.isFastPathActive(this@AppMonitorService)
+                    val restrictedDetected =
+                        if (fastPathActive) {
+                            maintainEnforcementWhileAccessibilityActive(now)
+                        } else {
+                            checkForegroundApp(now)
+                        }
+                    nextDelayMs = computeNextPollDelayMs(now, restrictedDetected, fastPathActive)
                 }
             } catch (e: Exception) {
                 AppMonitorCoordinator.recordServiceException(
@@ -228,13 +233,27 @@ class AppMonitorService : Service() {
     }
 
     private fun handleScheduleSync(schedulesJson: String, trigger: String) {
-        updateSchedules(schedulesJson)
+        EnforcementEngine.syncSchedules(this, schedulesJson)
         forceEvaluateForegroundApp(trigger)
     }
 
     private fun forceEvaluateForegroundApp(trigger: String) {
         try {
-            val restrictedDetected = checkForegroundApp(System.currentTimeMillis())
+            val now = System.currentTimeMillis()
+            val packageName = resolveForegroundPackage(now)
+            val restrictedDetected =
+                if (packageName.isNullOrBlank()) {
+                    EnforcementEngine.clearForegroundPackage()
+                    BlockerOverlayController.hide(this, "$trigger:no_foreground_package")
+                    false
+                } else {
+                    EnforcementEngine.evaluateAndApply(
+                        context = this,
+                        packageName = packageName,
+                        source = trigger,
+                        shouldLog = true,
+                    )
+                }
             resetMonitorLoop(delayMs = 2_000L)
             android.util.Log.d(
                 "RevokeMonitor",
@@ -262,12 +281,27 @@ class AppMonitorService : Service() {
     }
 
     private fun computeNextPollDelayMs(now: Long, restrictedDetected: Boolean): Long {
-        if (restrictedDetected) return 2_000L
+        return computeNextPollDelayMs(now, restrictedDetected, fastPathActive = false)
+    }
 
-        // Stay in fast mode briefly after a block to reduce "open app then slip past" windows.
-        if (now - lastRestrictedDetectedAt < 20_000L) return 2_000L
+    private fun computeNextPollDelayMs(
+        now: Long,
+        restrictedDetected: Boolean,
+        fastPathActive: Boolean,
+    ): Long {
+        if (restrictedDetected) return if (fastPathActive) 15_000L else 2_000L
 
-        return if (isRiskWindowNow(now)) 5_000L else 9_000L
+        return if (fastPathActive) {
+            if (EnforcementEngine.hasActiveUsageLimitRegimeNow(this, now) || BlockerOverlayController.isShowing()) {
+                5_000L
+            } else {
+                12_000L
+            }
+        } else if (now - lastRestrictedDetectedAt < 20_000L) {
+            2_000L
+        } else {
+            5_000L
+        }
     }
 
     private fun isRiskWindowNow(now: Long): Boolean {
@@ -536,8 +570,7 @@ class AppMonitorService : Service() {
     }
 
     private fun shouldStopForIdle(now: Long): Boolean {
-        val activeRegimes = getCurrentlyActiveRegimes(now)
-        return activeRegimes.isEmpty() && !hasActiveTemporaryState(now)
+        return !AppMonitorCoordinator.shouldServiceBeRunning(this, now)
     }
 
     private fun stopMonitoringForIdle() {
@@ -546,7 +579,7 @@ class AppMonitorService : Service() {
         suppressAutoRestart = true
         monitorLoopStarted = false
         handler.removeCallbacks(runnable)
-        hideBlockerOverlay()
+        BlockerOverlayController.hide(this, "stop_monitoring_for_idle")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -612,21 +645,71 @@ class AppMonitorService : Service() {
 
     private fun checkForegroundApp(now: Long): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return false
-        if (isAmnestyActive()) {
-            hideBlockerOverlay()
+
+        val foregroundPackage = resolveForegroundPackage(now)
+        if (foregroundPackage.isNullOrBlank()) {
+            if (lastLoggedApp.isNotEmpty()) {
+                android.util.Log.d("RevokeMonitor", "No valid foreground app detected")
+                lastLoggedApp = ""
+            }
+            EnforcementEngine.clearForegroundPackage()
+            BlockerOverlayController.hide(this, "service_poll:no_foreground_package")
             return false
         }
 
-        val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        
-        // queryEvents is cheaper than queryUsageStats, but it can still be heavy if the window is too large.
-        // Scan only recent events and keep fallback logic for reliability.
-        val start = if (lastEventsQueryAt <= 0L) {
-            now - 15_000
-        } else {
-            (lastEventsQueryAt - 2_000).coerceAtLeast(now - 30_000)
+        if (foregroundPackage == packageName) {
+            EnforcementEngine.recordForegroundPackage(foregroundPackage)
+            BlockerOverlayController.hide(this, "service_poll:revoke_foreground")
+            return false
         }
+
+        val shouldLogLogic = foregroundPackage != lastLoggedApp
+        if (shouldLogLogic) {
+            android.util.Log.d("RevokeMonitor", "Current App: $foregroundPackage")
+            lastLoggedApp = foregroundPackage
+        }
+
+        val restrictedDetected =
+            EnforcementEngine.evaluateAndApply(
+                context = this,
+                packageName = foregroundPackage,
+                source = "service_poll",
+                shouldLog = shouldLogLogic,
+            )
+        if (restrictedDetected) {
+            lastRestrictedDetectedAt = now
+        }
+        return restrictedDetected
+    }
+
+    private fun maintainEnforcementWhileAccessibilityActive(now: Long): Boolean {
+        if (!EnforcementEngine.hasActiveUsageLimitRegimeNow(this, now) && !BlockerOverlayController.isShowing()) {
+            return false
+        }
+
+        val restrictedDetected =
+            EnforcementEngine.evaluateLastObservedPackage(
+                context = this,
+                source = "service_accessibility_backstop",
+            )
+        if (restrictedDetected) {
+            lastRestrictedDetectedAt = now
+        }
+        return restrictedDetected
+    }
+
+    private fun resolveForegroundPackage(now: Long): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return null
+
+        val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val start =
+            if (lastEventsQueryAt <= 0L) {
+                now - 15_000L
+            } else {
+                (lastEventsQueryAt - 2_000L).coerceAtLeast(now - 30_000L)
+            }
         lastEventsQueryAt = now
+
         val usageEvents = usageStatsManager.queryEvents(start, now)
         val event = UsageEvents.Event()
         var lastEventTime = 0L
@@ -635,66 +718,45 @@ class AppMonitorService : Service() {
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event)
             if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-                event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                event.eventType == UsageEvents.Event.ACTIVITY_RESUMED
+            ) {
                 if (event.timeStamp > lastEventTime) {
                     lastEventTime = event.timeStamp
-                    lastKnownForegroundPackage = event.packageName
-                    foundViaEvents = true
+                    lastKnownForegroundPackage = event.packageName?.toString()?.trim().orEmpty()
+                    foundViaEvents = lastKnownForegroundPackage.isNotEmpty()
                 }
             }
         }
 
-        // Fallback: queryUsageStats is heavier, so run it at a lower cadence.
         val shouldRunUsageStatsFallback =
             (!foundViaEvents || lastKnownForegroundPackage.isEmpty()) &&
-            (now - lastUsageStatsFallbackAt >= usageStatsFallbackIntervalMs)
+                (now - lastUsageStatsFallbackAt >= usageStatsFallbackIntervalMs)
 
         if (shouldRunUsageStatsFallback) {
             lastUsageStatsFallbackAt = now
-            val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 1000 * 60 * 15, now)
-            if (stats != null && stats.isNotEmpty()) {
+            val stats =
+                usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    now - 1000L * 60L * 15L,
+                    now,
+                )
+            if (!stats.isNullOrEmpty()) {
                 var latestStats: android.app.usage.UsageStats? = null
                 for (usageStats in stats) {
                     if (latestStats == null || usageStats.lastTimeUsed > latestStats!!.lastTimeUsed) {
                         latestStats = usageStats
                     }
                 }
-                if (latestStats != null && (now - latestStats!!.lastTimeUsed) < 1000 * 60 * 5) {
-                    val resolvedPackage = latestStats!!.packageName
-                    if (resolvedPackage != lastKnownForegroundPackage) {
+                if (latestStats != null && (now - latestStats!!.lastTimeUsed) < 1000L * 60L * 5L) {
+                    val resolvedPackage = latestStats!!.packageName.orEmpty()
+                    if (resolvedPackage.isNotEmpty()) {
                         lastKnownForegroundPackage = resolvedPackage
-                        android.util.Log.d("RevokeMonitor", "Found via stats: $lastKnownForegroundPackage")
                     }
                 }
             }
         }
-        
-        if (lastKnownForegroundPackage.isNotEmpty()) {
-            if (lastKnownForegroundPackage != packageName) { 
-                // Only log if the app has changed to avoid spamming the logcat
-                val shouldLogLogic = lastKnownForegroundPackage != lastLoggedApp
-                if (shouldLogLogic) {
-                     android.util.Log.d("RevokeMonitor", "Current App: $lastKnownForegroundPackage")
-                     lastLoggedApp = lastKnownForegroundPackage
-                }
-                
-                val restrictedAppName = getRestrictedAppName(lastKnownForegroundPackage, shouldLogLogic)
-                if (restrictedAppName != null) {
-                    lastRestrictedDetectedAt = now
-                    if (shouldLogLogic) android.util.Log.d("RevokeMonitor", "Blocking $restrictedAppName")
-                    showBlockerOverlay(restrictedAppName, lastKnownForegroundPackage)
-                    return true
-                } else {
-                    hideBlockerOverlay()
-                    return false
-                }
-            } else {
-                // We are in Revoke, hide overlay
-                hideBlockerOverlay()
-                return false
-            }
-        }
-        return false
+
+        return lastKnownForegroundPackage.takeIf { it.isNotBlank() }
     }
 
     private fun getRestrictedAppName(packageName: String, shouldLog: Boolean): String? {
@@ -1197,4 +1259,3 @@ class AppMonitorService : Service() {
         return true
     }
 }
-
