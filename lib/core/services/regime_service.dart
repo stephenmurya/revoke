@@ -36,15 +36,17 @@ class RegimeService {
   }
 
   // Legacy helper for direct cross-user reads. Keep best-effort behavior only.
-  // Rap Sheet now uses server-generated snapshots via callable.
+  // Rap Sheet reads same-squad regimes directly and falls back server-side only
+  // when the denormalized snapshot has not been materialized yet.
   static Future<List<ScheduleModel>> getRegimesForUser(String userId) async {
     final normalized = userId.trim();
     if (normalized.isEmpty) return const <ScheduleModel>[];
     try {
-      final snapshot = await _regimesRef(
-        normalized,
-      ).where('isEnabled', isEqualTo: true).get();
-      return snapshot.docs.map(_fromFirestore).toList();
+      final snapshot = await _regimesRef(normalized).get();
+      return snapshot.docs
+          .map(_fromFirestore)
+          .where((schedule) => schedule.isActive)
+          .toList(growable: false);
     } catch (_) {
       return const <ScheduleModel>[];
     }

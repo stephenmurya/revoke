@@ -78,6 +78,14 @@ class NativeBridge {
     await _channel.invokeMethod('startService');
   }
 
+  /// Asks Android to verify the monitor service state and revive it if needed.
+  static Future<Map<String, dynamic>> checkAndReviveService() async {
+    final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+      'checkAndReviveService',
+    );
+    return Map<String, dynamic>.from(result);
+  }
+
   /// Syncs schedule state with Android so native can decide whether to run.
   static Future<void> syncSchedules(
     String jsonSchedules, {

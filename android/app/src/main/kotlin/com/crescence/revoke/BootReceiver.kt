@@ -3,9 +3,7 @@ package com.crescence.revoke
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
-import androidx.core.content.ContextCompat
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -15,30 +13,24 @@ class BootReceiver : BroadcastReceiver() {
         if (!isBootAction) return
 
         AlarmScheduler.restorePersistedNextRegimeWakeup(context)
-        Log.d("RevokeBoot", "Boot action received: $action. Starting AppMonitorService.")
-        val serviceIntent = Intent(context, AppMonitorService::class.java)
+        AppMonitorCoordinator.enqueueWatchdog(context)
+        Log.d("RevokeBoot", "Boot action received: $action. Checking AppMonitorService.")
         try {
-            ContextCompat.startForegroundService(context, serviceIntent)
+            AppMonitorCoordinator.checkAndReviveService(context, "boot")
         } catch (error: Exception) {
-            if (isForegroundServiceStartNotAllowed(error)) {
-                Log.e(
-                    "RevokeBoot",
-                    "Foreground start blocked at boot. Will retry when app returns to foreground.",
-                    error
-                )
-            } else {
-                Log.e("RevokeBoot", "Failed to start AppMonitorService at boot.", error)
-            }
+            AppMonitorCoordinator.recordNonFatal(
+                context = context,
+                source = "BootReceiver",
+                message = "Unhandled boot revive failure.",
+                error = error,
+                extraKeys = mapOf("trigger" to "boot"),
+            )
+            Log.e("RevokeBoot", "Failed to check AppMonitorService at boot.", error)
         }
     }
 
     companion object {
         private const val ACTION_QUICKBOOT_POWERON =
             "android.intent.action.QUICKBOOT_POWERON"
-
-        private fun isForegroundServiceStartNotAllowed(error: Exception): Boolean {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
-            return error.javaClass.name == "android.app.ForegroundServiceStartNotAllowedException"
-        }
     }
 }

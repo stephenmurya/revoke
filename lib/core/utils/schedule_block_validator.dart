@@ -20,6 +20,18 @@ class ScheduleBlockValidationResult {
   String? get firstError => issues.isEmpty ? null : issues.first.message;
 }
 
+class ScheduleBlockEnforcementSegment {
+  final int blockIndex;
+  final int startMinute;
+  final int endMinute;
+
+  const ScheduleBlockEnforcementSegment({
+    required this.blockIndex,
+    required this.startMinute,
+    required this.endMinute,
+  });
+}
+
 class ScheduleBlockValidator {
   static const int _minutesPerDay = 1440;
 
@@ -28,7 +40,6 @@ class ScheduleBlockValidator {
     Duration? minimumDuration = const Duration(minutes: 15),
   }) {
     final byIndex = <int, Set<String>>{};
-    final segments = <_BlockSegment>[];
 
     for (var i = 0; i < blocks.length; i++) {
       final block = blocks[i];
@@ -45,41 +56,28 @@ class ScheduleBlockValidator {
           'Block must be at least ${minimumDuration.inMinutes} minutes.',
         );
       }
-
-      if (block.crossesMidnight) {
-        segments.add(
-          _BlockSegment(
-            index: i,
-            start: block.startMinutes,
-            end: _minutesPerDay,
-          ),
-        );
-        segments.add(_BlockSegment(index: i, start: 0, end: block.endMinutes));
-      } else {
-        segments.add(
-          _BlockSegment(
-            index: i,
-            start: block.startMinutes,
-            end: block.endMinutes,
-          ),
-        );
-      }
     }
 
-    final sorted = List<_BlockSegment>.from(segments)
-      ..sort((a, b) {
-        final byStart = a.start.compareTo(b.start);
-        if (byStart != 0) return byStart;
-        return a.end.compareTo(b.end);
-      });
+    final sorted =
+        List<ScheduleBlockEnforcementSegment>.from(
+          toEnforcementSegments(blocks),
+        )..sort((a, b) {
+          final byStart = a.startMinute.compareTo(b.startMinute);
+          if (byStart != 0) return byStart;
+          return a.endMinute.compareTo(b.endMinute);
+        });
 
     for (var i = 1; i < sorted.length; i++) {
       final previous = sorted[i - 1];
       final current = sorted[i];
-      if (previous.index == current.index) continue;
-      if (current.start < previous.end) {
-        _addIssue(byIndex, previous.index, 'Block overlaps another block.');
-        _addIssue(byIndex, current.index, 'Block overlaps another block.');
+      if (previous.blockIndex == current.blockIndex) continue;
+      if (current.startMinute < previous.endMinute) {
+        _addIssue(
+          byIndex,
+          previous.blockIndex,
+          'Block overlaps another block.',
+        );
+        _addIssue(byIndex, current.blockIndex, 'Block overlaps another block.');
       }
     }
 
@@ -169,6 +167,49 @@ class ScheduleBlockValidator {
     return shortest;
   }
 
+  static List<ScheduleBlockEnforcementSegment> toEnforcementSegments(
+    List<ScheduleBlock> blocks,
+  ) {
+    final segments = <ScheduleBlockEnforcementSegment>[];
+    for (var i = 0; i < blocks.length; i++) {
+      final block = blocks[i];
+      if (block.duration.inMinutes <= 0) continue;
+      if (block.crossesMidnight) {
+        segments.add(
+          ScheduleBlockEnforcementSegment(
+            blockIndex: i,
+            startMinute: block.startMinutes,
+            endMinute: _minutesPerDay,
+          ),
+        );
+        segments.add(
+          ScheduleBlockEnforcementSegment(
+            blockIndex: i,
+            startMinute: 0,
+            endMinute: block.endMinutes,
+          ),
+        );
+      } else {
+        segments.add(
+          ScheduleBlockEnforcementSegment(
+            blockIndex: i,
+            startMinute: block.startMinutes,
+            endMinute: block.endMinutes,
+          ),
+        );
+      }
+    }
+    return segments;
+  }
+
+  static Duration totalActiveDuration(List<ScheduleBlock> blocks) {
+    final totalMinutes = blocks.fold<int>(
+      0,
+      (sum, block) => sum + block.duration.inMinutes,
+    );
+    return Duration(minutes: totalMinutes);
+  }
+
   static void _addIssue(
     Map<int, Set<String>> byIndex,
     int blockIndex,
@@ -176,16 +217,4 @@ class ScheduleBlockValidator {
   ) {
     byIndex.putIfAbsent(blockIndex, () => <String>{}).add(message);
   }
-}
-
-class _BlockSegment {
-  final int index;
-  final int start;
-  final int end;
-
-  const _BlockSegment({
-    required this.index,
-    required this.start,
-    required this.end,
-  });
 }

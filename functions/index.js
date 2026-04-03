@@ -14,6 +14,9 @@ initializeApp();
 
 const db = getFirestore();
 const messaging = getMessaging();
+const RAP_SHEET_VERSION = 1;
+const RAP_SHEET_MAX_INFRACTIONS = 5;
+const RAP_SHEET_QUERY_LIMIT = 25;
 
 async function logSquadEvent(squadId, type, title, user, metadata) {
   const normalizedSquadId = (squadId || "").toString().trim();
@@ -1751,6 +1754,58 @@ exports.markPleaForDeletion = onCall({
   }
 });
 
+exports.syncRapSheetSnapshotOnPleaWrite = onDocumentWritten({
+  region: "us-central1",
+  document: "pleas/{pleaId}",
+}, async (event) => {
+  const pleaId = (event.params?.pleaId || "").toString().trim();
+  const after = event.data?.after?.data() || null;
+  const before = event.data?.before?.data() || null;
+  const uid = (after?.userId || before?.userId || "").toString().trim();
+  if (!uid) return;
+
+  try {
+    await buildRapSheetSnapshot(uid, {
+      source: "plea_write",
+      pleaId,
+    });
+  } catch (error) {
+    logger.error("syncRapSheetSnapshotOnPleaWrite crashed.", {
+      uid,
+      pleaId,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+  }
+});
+
+exports.syncRapSheetSnapshotOnBlockedAttempt = onDocumentCreated({
+  region: "us-central1",
+  document: "users/{uid}/scoreEvents/{eventId}",
+}, async (event) => {
+  const uid = (event.params?.uid || "").toString().trim();
+  const eventId = (event.params?.eventId || "").toString().trim();
+  const scoreEvent = event.data?.data() || {};
+  if (!uid) return;
+  if ((scoreEvent.type || "").toString().trim().toLowerCase() !== "blocked_attempt") {
+    return;
+  }
+
+  try {
+    await buildRapSheetSnapshot(uid, {
+      source: "blocked_attempt",
+      eventId,
+    });
+  } catch (error) {
+    logger.error("syncRapSheetSnapshotOnBlockedAttempt crashed.", {
+      uid,
+      eventId,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+  }
+});
+
 exports.getMemberRapSheetSnapshot = onCall({
   region: "us-central1",
 }, async (request) => {
@@ -1789,84 +1844,32 @@ exports.getMemberRapSheetSnapshot = onCall({
       }
     }
 
-    const regimesSnap = await db
-        .collection("users")
-        .doc(targetUid)
-        .collection("regimes")
-        .get();
-
-    const activeProtocols = [];
-    const blacklistApps = new Set();
-
-    for (const regimeDoc of regimesSnap.docs) {
-      const regime = regimeDoc.data() || {};
-      const isEnabled = Boolean(
-          regime.isEnabled ?? regime.isActive ?? true,
-      );
-      if (!isEnabled) continue;
-
-      const regimeName = (regime.name || "").toString().trim() || "REGIME";
-      activeProtocols.push(regimeName);
-
-      const targets = Array.isArray(regime.targetApps) ?
-        regime.targetApps :
-        (Array.isArray(regime.apps) ? regime.apps : []);
-      for (const app of targets) {
-        const appName = (app || "").toString().trim();
-        if (!appName) continue;
-        blacklistApps.add(appName);
-      }
+    const regimeSummary = await _buildRegimeProtocolSummary(targetUid);
+    let rapSheetSnapshot = await _loadRapSheetSnapshotDoc(targetUid);
+    if (!rapSheetSnapshot) {
+      rapSheetSnapshot = await buildRapSheetSnapshot(targetUid, {
+        source: "callable_fallback",
+        actorUid: uid,
+      });
     }
-
-    const pleaBaseQuery = db
-        .collection("pleas")
-        .where("squadId", "==", targetUser.squadId)
-        .where("userId", "==", targetUid);
-
-    let totalPleas = 0;
-    let approvedPleas = 0;
-    let rejectedPleas = 0;
-
-    try {
-      const [totalAgg, approvedAgg, rejectedAgg] = await Promise.all([
-        pleaBaseQuery.count().get(),
-        pleaBaseQuery.where("status", "==", "approved").count().get(),
-        pleaBaseQuery.where("status", "==", "rejected").count().get(),
-      ]);
-
-      totalPleas = Number(totalAgg.data().count) || 0;
-      approvedPleas = Number(approvedAgg.data().count) || 0;
-      rejectedPleas = Number(rejectedAgg.data().count) || 0;
-    } catch (_) {
-      // Fallback path if aggregate query support is unavailable.
-      const pleasSnap = await pleaBaseQuery.get();
-      totalPleas = pleasSnap.size;
-      for (const pleaDoc of pleasSnap.docs) {
-        const status = (pleaDoc.data()?.status || "").toString().trim().toLowerCase();
-        if (status === "approved") approvedPleas += 1;
-        if (status === "rejected") rejectedPleas += 1;
-      }
-    }
-
-    const sortedProtocols = activeProtocols
-        .map((name) => name.toString().trim())
-        .filter((name) => Boolean(name))
-        .sort((a, b) => a.localeCompare(b));
-    const sortedBlacklist = [...blacklistApps].sort((a, b) => a.localeCompare(b));
 
     const snapshot = {
       targetUid,
       squadId: targetUser.squadId,
-      activeProtocols: sortedProtocols,
-      activeProtocolCount: sortedProtocols.length,
-      blacklistApps: sortedBlacklist,
-      blacklistCount: sortedBlacklist.length,
-      pleaStats: {
-        total: totalPleas,
-        approved: approvedPleas,
-        rejected: rejectedPleas,
+      activeProtocols: regimeSummary.activeProtocols,
+      activeProtocolCount: regimeSummary.activeProtocols.length,
+      blacklistApps: regimeSummary.blacklistApps,
+      blacklistCount: regimeSummary.blacklistApps.length,
+      pleaStats: rapSheetSnapshot?.pleaStats || {
+        total: 0,
+        approved: 0,
+        rejected: 0,
       },
-      generatedAtMs: Date.now(),
+      latestInfractions: Array.isArray(rapSheetSnapshot?.latestInfractions) ?
+        rapSheetSnapshot.latestInfractions :
+        [],
+      updatedAtMs: Number(rapSheetSnapshot?.updatedAtMs) || Date.now(),
+      version: Number(rapSheetSnapshot?.version) || RAP_SHEET_VERSION,
     };
 
     return {
@@ -1885,6 +1888,232 @@ exports.getMemberRapSheetSnapshot = onCall({
     throw new HttpsError("internal", "Failed to get member snapshot.");
   }
 });
+
+async function buildRapSheetSnapshot(uid, cause) {
+  const normalizedUid = (uid || "").toString().trim();
+  if (!normalizedUid) return null;
+
+  const causeMeta = cause && typeof cause === "object" ? cause : {
+    source: (cause || "unknown").toString(),
+  };
+  const userRef = db.collection("users").doc(normalizedUid);
+  const snapshotRef = userRef.collection("rapSheet").doc("latest");
+  const userSnap = await userRef.get();
+
+  if (!userSnap.exists) {
+    try {
+      await snapshotRef.delete();
+    } catch (_) {}
+    return null;
+  }
+
+  const userData = userSnap.data() || {};
+  const squadId = (userData.squadId || "").toString().trim();
+  const pleas = await _loadUserPleasForRapSheet(normalizedUid, squadId);
+  const blockedAttempts = await _loadBlockedAttemptInfractions(normalizedUid);
+  const pleaStats = _computeRapSheetPleaStats(pleas);
+  const latestInfractions = _mergeLatestInfractions([
+    ..._buildPleaInfractions(pleas),
+    ...blockedAttempts,
+  ]);
+  const updatedAtMs = Date.now();
+
+  const snapshotData = {
+    uid: normalizedUid,
+    squadId,
+    pleaStats,
+    latestInfractions,
+    updatedAtMs,
+    version: RAP_SHEET_VERSION,
+  };
+
+  await snapshotRef.set({
+    ...snapshotData,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, {merge: true});
+
+  logger.info("buildRapSheetSnapshot completed.", {
+    uid: normalizedUid,
+    squadId,
+    cause: causeMeta,
+    infractionCount: latestInfractions.length,
+  });
+
+  return snapshotData;
+}
+
+async function _loadRapSheetSnapshotDoc(uid) {
+  const normalizedUid = (uid || "").toString().trim();
+  if (!normalizedUid) return null;
+  const snap = await db
+      .collection("users")
+      .doc(normalizedUid)
+      .collection("rapSheet")
+      .doc("latest")
+      .get();
+  return snap.exists ? (snap.data() || null) : null;
+}
+
+async function _buildRegimeProtocolSummary(uid) {
+  const normalizedUid = (uid || "").toString().trim();
+  if (!normalizedUid) {
+    return {activeProtocols: [], blacklistApps: []};
+  }
+
+  const regimesSnap = await db
+      .collection("users")
+      .doc(normalizedUid)
+      .collection("regimes")
+      .get();
+
+  const activeProtocols = new Set();
+  const blacklistApps = new Set();
+
+  for (const regimeDoc of regimesSnap.docs) {
+    const regime = regimeDoc.data() || {};
+    const isEnabled = Boolean(regime.isEnabled ?? regime.isActive ?? true);
+    if (!isEnabled) continue;
+
+    const regimeName = (regime.name || "").toString().trim();
+    if (regimeName) {
+      activeProtocols.add(regimeName);
+    }
+
+    const targets = Array.isArray(regime.targetApps) ?
+      regime.targetApps :
+      (Array.isArray(regime.apps) ? regime.apps : []);
+    for (const app of targets) {
+      const appName = (app || "").toString().trim();
+      if (appName) blacklistApps.add(appName);
+    }
+  }
+
+  return {
+    activeProtocols: [...activeProtocols].sort((a, b) => a.localeCompare(b)),
+    blacklistApps: [...blacklistApps].sort((a, b) => a.localeCompare(b)),
+  };
+}
+
+async function _loadUserPleasForRapSheet(uid, squadId) {
+  if (!squadId) return [];
+
+  const pleasSnap = await db
+      .collection("pleas")
+      .where("squadId", "==", squadId)
+      .where("userId", "==", uid)
+      .get();
+
+  return pleasSnap.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
+}
+
+function _computeRapSheetPleaStats(pleas) {
+  let approved = 0;
+  let rejected = 0;
+
+  for (const plea of pleas) {
+    const status = (plea.status || "").toString().trim().toLowerCase();
+    if (status === "approved") approved += 1;
+    if (status === "rejected") rejected += 1;
+  }
+
+  return {
+    total: pleas.length,
+    approved,
+    rejected,
+  };
+}
+
+function _buildPleaInfractions(pleas) {
+  return pleas
+      .map((plea) => ({
+        kind: "plea",
+        sourceId: (plea.id || "").toString().trim(),
+        status: (plea.status || "active").toString().trim().toLowerCase(),
+        appName: (plea.appName || "").toString().trim(),
+        packageName: (plea.packageName || "").toString().trim(),
+        occurredAtMs: _resolvePleaOccurredAtMs(plea),
+      }))
+      .filter((entry) => entry.sourceId && entry.occurredAtMs > 0);
+}
+
+async function _loadBlockedAttemptInfractions(uid) {
+  const scoreEventsSnap = await db
+      .collection("users")
+      .doc(uid)
+      .collection("scoreEvents")
+      .orderBy("createdAtMs", "desc")
+      .limit(RAP_SHEET_QUERY_LIMIT)
+      .get();
+
+  return scoreEventsSnap.docs
+      .map((doc) => ({
+        sourceId: doc.id,
+        ...doc.data(),
+      }))
+      .filter((event) =>
+        (event.type || "").toString().trim().toLowerCase() === "blocked_attempt",
+      )
+      .map((event) => ({
+        kind: "blocked_attempt",
+        sourceId: (event.sourceId || "").toString().trim(),
+        status: "",
+        appName: (event.appName || "").toString().trim(),
+        packageName: (event.packageName || "").toString().trim(),
+        occurredAtMs: _resolveScoreEventOccurredAtMs(event),
+      }))
+      .filter((entry) => entry.sourceId && entry.occurredAtMs > 0);
+}
+
+function _mergeLatestInfractions(infractions) {
+  const deduped = new Map();
+  const sorted = infractions
+      .filter((entry) => entry && entry.kind && entry.sourceId)
+      .sort((a, b) => (Number(b.occurredAtMs) || 0) - (Number(a.occurredAtMs) || 0));
+
+  for (const entry of sorted) {
+    const key = `${entry.kind}:${entry.sourceId}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, {
+        kind: entry.kind,
+        sourceId: entry.sourceId,
+        status: entry.status || "",
+        appName: entry.appName || "",
+        packageName: entry.packageName || "",
+        occurredAtMs: Number(entry.occurredAtMs) || 0,
+      });
+    }
+    if (deduped.size >= RAP_SHEET_MAX_INFRACTIONS) break;
+  }
+
+  return [...deduped.values()];
+}
+
+function _resolvePleaOccurredAtMs(plea) {
+  const resolvedAtMs = _timestampToMillis(plea.resolvedAt);
+  if (resolvedAtMs > 0) return resolvedAtMs;
+
+  const explicitMs = Number(plea.resolvedAtMs || plea.createdAtMs);
+  if (Number.isFinite(explicitMs) && explicitMs > 0) {
+    return Math.floor(explicitMs);
+  }
+
+  return _timestampToMillis(plea.createdAt);
+}
+
+function _resolveScoreEventOccurredAtMs(event) {
+  const explicitMs = Number(event.createdAtMs);
+  if (Number.isFinite(explicitMs) && explicitMs > 0) {
+    return Math.floor(explicitMs);
+  }
+  return _timestampToMillis(event.createdAt);
+}
+
+exports.__testables = {
+  buildRapSheetSnapshot,
+};
 
 exports.updateUserStatus = onCall({
   region: "us-central1",
@@ -3070,6 +3299,21 @@ function _votesAreEqual(a, b) {
     if (a[key] !== b[key]) return false;
   }
   return true;
+}
+
+function _timestampToMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") {
+    return value.toMillis();
+  }
+  if (value instanceof Timestamp) {
+    return value.toMillis();
+  }
+  const raw = Number(value);
+  if (Number.isFinite(raw) && raw > 0) {
+    return Math.floor(raw);
+  }
+  return 0;
 }
 
 function _dateOnlyUtc(ms) {

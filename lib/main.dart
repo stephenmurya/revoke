@@ -45,7 +45,8 @@ class GlobalAppServices extends StatefulWidget {
   State<GlobalAppServices> createState() => _GlobalAppServicesState();
 }
 
-class _GlobalAppServicesState extends State<GlobalAppServices> {
+class _GlobalAppServicesState extends State<GlobalAppServices>
+    with WidgetsBindingObserver {
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<List<PleaModel>>? _approvedPleasSubscription;
   final Set<String> _processedPleas = <String>{};
@@ -55,7 +56,9 @@ class _GlobalAppServicesState extends State<GlobalAppServices> {
   void initState() {
     super.initState();
     debugPrint('[GlobalAppServices] init');
+    WidgetsBinding.instance.addObserver(this);
     _bindGlobalCallbacks();
+    unawaited(_checkAndReviveNativeService());
     unawaited(_syncNativeScheduleStateOnce());
     _authSubscription = AuthService.authStateChanges.listen(_handleAuthChange);
     _handleAuthChange(AuthService.currentUser);
@@ -64,9 +67,17 @@ class _GlobalAppServicesState extends State<GlobalAppServices> {
   @override
   void dispose() {
     debugPrint('[GlobalAppServices] dispose');
+    WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.cancel();
     _approvedPleasSubscription?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_checkAndReviveNativeService());
+    }
   }
 
   void _bindGlobalCallbacks() {
@@ -100,6 +111,14 @@ class _GlobalAppServicesState extends State<GlobalAppServices> {
       debugPrint('[GlobalAppServices] native schedule state synced');
     } catch (_) {
       // Native sync is best-effort. Flutter routing must still boot cleanly.
+    }
+  }
+
+  Future<void> _checkAndReviveNativeService() async {
+    try {
+      await NativeBridge.checkAndReviveService();
+    } catch (_) {
+      // Best-effort watchdog poke; app boot must continue even if native rejects.
     }
   }
 

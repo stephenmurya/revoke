@@ -189,6 +189,78 @@ class _MemberDetailSheetState extends State<MemberDetailSheet> {
                       },
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  _Section(
+                    title: 'LATEST INFRACTIONS',
+                    subtitle: 'Recent blocked attempts and plea outcomes.',
+                    child: FutureBuilder<MemberRapSheetSnapshot?>(
+                      future: _snapshotFuture,
+                      builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return _mutedLine(
+                            context,
+                            'Pulling latest infractions...',
+                          );
+                        }
+
+                        final data = snap.data;
+                        if (data == null || data.latestInfractions.isEmpty) {
+                          return _emptyLine(context, 'No recent infractions.');
+                        }
+
+                        return Column(
+                          children: [
+                            for (final infraction
+                                in data.latestInfractions.take(5))
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 7,
+                                      height: 7,
+                                      margin: const EdgeInsets.only(top: 6),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: infraction.kind == 'plea'
+                                            ? context.colors.warning
+                                            : context.colors.danger,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _formatInfractionLabel(infraction),
+                                            style: AppTheme.bodyMedium.copyWith(
+                                              color: context.scheme.onSurface,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _formatInfractionTimestamp(
+                                              infraction,
+                                            ),
+                                            style: AppTheme.bodySmall.copyWith(
+                                              color:
+                                                  context.colors.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -375,6 +447,30 @@ class _MemberDetailSheetState extends State<MemberDetailSheet> {
         style: AppTheme.bodySmall.copyWith(color: context.colors.textSecondary),
       ),
     );
+  }
+
+  static String _formatInfractionLabel(MemberRapSheetInfraction infraction) {
+    final appLabel = infraction.appName.isNotEmpty
+        ? infraction.appName
+        : infraction.packageName;
+    if (infraction.kind == 'plea') {
+      final status = infraction.status.trim().toUpperCase();
+      final suffix = appLabel.isEmpty ? '' : ' for $appLabel';
+      return 'Plea $status$suffix';
+    }
+    final suffix = appLabel.isEmpty ? '' : ': $appLabel';
+    return 'Blocked attempt$suffix';
+  }
+
+  static String _formatInfractionTimestamp(
+    MemberRapSheetInfraction infraction,
+  ) {
+    final dt = infraction.occurredAt.toLocal();
+    final month = dt.month.toString().padLeft(2, '0');
+    final day = dt.day.toString().padLeft(2, '0');
+    final hour = dt.hour.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    return '$month/$day $hour:$minute';
   }
 
   static Color _ringColor(BuildContext context, UserModel user) {

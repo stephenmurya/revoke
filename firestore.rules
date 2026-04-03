@@ -101,7 +101,22 @@ service cloud.firestore {
 
       // Cloud-synced regimes live under the user's document.
       match /regimes/{regimeId} {
-        allow read, write: if isAdmin() || isSelf(userId);
+        allow read: if isAdmin() ||
+          canReadUserDoc(
+            userId,
+            get(/databases/$(database)/documents/users/$(userId)).data
+          );
+        allow write: if isAdmin() || isSelf(userId);
+      }
+
+      // Denormalized squad-visible rap sheet summary (server-written).
+      match /rapSheet/{docId} {
+        allow read: if isAdmin() ||
+          canReadUserDoc(
+            userId,
+            get(/databases/$(database)/documents/users/$(userId)).data
+          );
+        allow create, update, delete: if false;
       }
 
       // Canonical score event stream (server-written).

@@ -27,7 +27,9 @@ before(async () => {
 });
 
 after(async () => {
-  await testEnv.cleanup();
+  if (testEnv) {
+    await testEnv.cleanup();
+  }
 });
 
 afterEach(async () => {
@@ -61,7 +63,7 @@ test("own score events are readable but not client-writable", async () => {
   }));
 });
 
-test("cross-user regime reads are denied even for same-squad members", async () => {
+test("same-squad members can read another member's regimes but cannot write them", async () => {
   await seedWithBypass(async (db) => {
     await setDoc(doc(db, "users/alice"), {
       uid: "alice",
@@ -78,7 +80,67 @@ test("cross-user regime reads are denied even for same-squad members", async () 
   });
 
   const bobDb = testEnv.authenticatedContext("bob").firestore();
-  await assertFails(getDoc(doc(bobDb, "users/alice/regimes/regime_1")));
+  await assertSucceeds(getDoc(doc(bobDb, "users/alice/regimes/regime_1")));
+  await assertFails(setDoc(doc(bobDb, "users/alice/regimes/regime_1"), {
+    name: "Tampered",
+    isEnabled: false,
+  }));
+});
+
+test("same-squad members can read another member's rap sheet snapshot", async () => {
+  await seedWithBypass(async (db) => {
+    await setDoc(doc(db, "users/alice"), {
+      uid: "alice",
+      squadId: "squad_1",
+    });
+    await setDoc(doc(db, "users/bob"), {
+      uid: "bob",
+      squadId: "squad_1",
+    });
+    await setDoc(doc(db, "users/alice/rapSheet/latest"), {
+      uid: "alice",
+      squadId: "squad_1",
+      pleaStats: {
+        total: 2,
+        approved: 1,
+        rejected: 1,
+      },
+      latestInfractions: [],
+      updatedAtMs: 1710000000000,
+      version: 1,
+    });
+  });
+
+  const bobDb = testEnv.authenticatedContext("bob").firestore();
+  await assertSucceeds(getDoc(doc(bobDb, "users/alice/rapSheet/latest")));
+});
+
+test("cross-squad members cannot read another member's rap sheet snapshot", async () => {
+  await seedWithBypass(async (db) => {
+    await setDoc(doc(db, "users/alice"), {
+      uid: "alice",
+      squadId: "squad_1",
+    });
+    await setDoc(doc(db, "users/charlie"), {
+      uid: "charlie",
+      squadId: "squad_2",
+    });
+    await setDoc(doc(db, "users/alice/rapSheet/latest"), {
+      uid: "alice",
+      squadId: "squad_1",
+      pleaStats: {
+        total: 1,
+        approved: 0,
+        rejected: 1,
+      },
+      latestInfractions: [],
+      updatedAtMs: 1710000000000,
+      version: 1,
+    });
+  });
+
+  const charlieDb = testEnv.authenticatedContext("charlie").firestore();
+  await assertFails(getDoc(doc(charlieDb, "users/alice/rapSheet/latest")));
 });
 
 test("same-squad members can read plea vote docs", async () => {

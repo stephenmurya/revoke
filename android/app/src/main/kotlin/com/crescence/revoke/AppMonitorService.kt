@@ -61,23 +61,28 @@ class AppMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        running = true
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
-        
-        // Load persisted schedules
-        val savedSchedules = prefs.getString("schedules", null)
-        if (savedSchedules != null) {
-            updateSchedules(savedSchedules)
-            android.util.Log.d("RevokeMonitor", "Loaded ${activeSchedules.size} persisted schedules")
+        try {
+            running = true
+            windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+
+            // Load persisted schedules
+            val savedSchedules = prefs.getString("schedules", null)
+            if (savedSchedules != null) {
+                updateSchedules(savedSchedules)
+                android.util.Log.d("RevokeMonitor", "Loaded ${activeSchedules.size} persisted schedules")
+            }
+            loadTempUnlocks()
+
+            startForegroundService()
+
+            // CRITICAL: Start the monitoring loop
+            startMonitorLoopIfNeeded()
+            android.util.Log.d("RevokeMonitor", "Monitoring loop started")
+        } catch (error: Exception) {
+            AppMonitorCoordinator.recordServiceException(this, "onCreate", error)
+            throw error
         }
-        loadTempUnlocks()
-        
-        startForegroundService()
-        
-        // CRITICAL: Start the monitoring loop
-        startMonitorLoopIfNeeded()
-        android.util.Log.d("RevokeMonitor", "Monitoring loop started")
     }
 
     private fun startMonitorLoopIfNeeded() {
@@ -136,6 +141,11 @@ class AppMonitorService : Service() {
                     nextDelayMs = computeNextPollDelayMs(now, restrictedDetected)
                 }
             } catch (e: Exception) {
+                AppMonitorCoordinator.recordServiceException(
+                    this@AppMonitorService,
+                    "monitor_loop",
+                    e,
+                )
                 android.util.Log.e("RevokeMonitor", "Error in monitor loop: ${e.message}", e)
                 nextDelayMs = 5_000L
             }
@@ -323,8 +333,8 @@ class AppMonitorService : Service() {
                 System.currentTimeMillis() + delayMs.coerceAtLeast(0L),
                 pending
             )
-        } catch (_: Exception) {
-            // Best effort.
+        } catch (error: Exception) {
+            AppMonitorCoordinator.recordServiceException(this, "schedule_restart", error)
         }
     }
 
@@ -372,7 +382,8 @@ class AppMonitorService : Service() {
                 }
             }
             persistTempUnlocks()
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            AppMonitorCoordinator.recordServiceException(this, "load_temp_unlocks", error)
             tempUnlockedPackages.clear()
         }
     }
@@ -533,7 +544,8 @@ class AppMonitorService : Service() {
                 ).show()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            AppMonitorCoordinator.recordServiceException(this, "update_schedules", e)
+            android.util.Log.e("RevokeMonitor", "Failed to sync schedules into service.", e)
         }
     }
 
@@ -1018,7 +1030,12 @@ class AppMonitorService : Service() {
                 android.util.Log.d("Revoke", "Overlay Redesign Applied")
 
             } catch (e: Exception) {
-                e.printStackTrace()
+                AppMonitorCoordinator.recordServiceException(
+                    this@AppMonitorService,
+                    "show_blocker_overlay",
+                    e,
+                )
+                android.util.Log.e("RevokeMonitor", "Failed to render blocker overlay.", e)
             }
         }
     }
@@ -1086,7 +1103,12 @@ class AppMonitorService : Service() {
                 overlayView = null
                 currentBlockedApp = null
             } catch (e: Exception) {
-                e.printStackTrace()
+                AppMonitorCoordinator.recordServiceException(
+                    this@AppMonitorService,
+                    "hide_blocker_overlay",
+                    e,
+                )
+                android.util.Log.e("RevokeMonitor", "Failed to remove blocker overlay.", e)
             }
         }
     }

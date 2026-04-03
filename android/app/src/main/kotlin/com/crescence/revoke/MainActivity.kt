@@ -85,6 +85,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        AppMonitorCoordinator.enqueueWatchdog(this)
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         pendingPleaPayload?.let {
             methodChannel?.invokeMethod("requestPlea", it)
@@ -165,8 +166,19 @@ class MainActivity : FlutterActivity() {
                     }
 
                     val intent = Intent(this, AppMonitorService::class.java)
-                    val started = startMonitorServiceSafely(intent, "startService")
+                    val started = AppMonitorCoordinator.startMonitorServiceSafely(
+                        context = this,
+                        intent = intent,
+                        reason = "startService",
+                    )
                     result.success(started)
+                }
+                "checkAndReviveService" -> {
+                    val status = AppMonitorCoordinator.checkAndReviveService(
+                        context = this,
+                        trigger = "flutter_method_channel",
+                    )
+                    result.success(status.toMap())
                 }
                 "getAppDetails" -> {
                     val packageName = call.argument<String>("packageName")
@@ -232,7 +244,11 @@ class MainActivity : FlutterActivity() {
                         intent.action = "com.revoke.app.TEMP_UNLOCK"
                         intent.putExtra("packageName", packageName)
                         intent.putExtra("minutes", minutes)
-                        val started = startMonitorServiceSafely(intent, "temporaryUnlock")
+                        val started = AppMonitorCoordinator.startMonitorServiceSafely(
+                            this,
+                            intent,
+                            "temporaryUnlock"
+                        )
                         result.success(started)
                     } else {
                         result.error("INVALID_ARGUMENT", "packageName is required", null)
@@ -314,6 +330,7 @@ class MainActivity : FlutterActivity() {
     private fun syncSchedulesToNative(schedulesJson: String?, nextWakeupMs: Long): Boolean {
         val safeSchedulesJson = schedulesJson?.trim().takeUnless { it.isNullOrEmpty() } ?: "[]"
         persistSchedules(safeSchedulesJson)
+        AppMonitorCoordinator.enqueueWatchdog(this)
 
         if (nextWakeupMs > 0L) {
             AlarmScheduler.scheduleNextRegimeWakeup(this, nextWakeupMs)
@@ -326,12 +343,17 @@ class MainActivity : FlutterActivity() {
             putExtra("schedules", safeSchedulesJson)
         }
 
-        return if (hasCurrentlyActiveRegimes(safeSchedulesJson)) {
-            startMonitorServiceSafely(serviceIntent, "syncSchedules")
+        val shouldRun = AppMonitorCoordinator.shouldServiceBeRunning(this)
+        val status = AppMonitorCoordinator.checkAndReviveService(
+            context = this,
+            trigger = "syncSchedules",
+        )
+        if (status.serviceRunning) {
+            dispatchScheduleSyncToRunningService(serviceIntent)
+        }
+        return if (shouldRun) {
+            status.serviceRunning || status.restartSucceeded
         } else {
-            if (AppMonitorService.isRunning()) {
-                dispatchScheduleSyncToRunningService(serviceIntent)
-            }
             true
         }
     }
@@ -345,6 +367,13 @@ class MainActivity : FlutterActivity() {
         try {
             startService(intent)
         } catch (error: Exception) {
+            AppMonitorCoordinator.recordNonFatal(
+                context = this,
+                source = "MainActivity",
+                message = "Failed to deliver schedule sync to running service.",
+                error = error,
+                extraKeys = mapOf("trigger" to "dispatchScheduleSync"),
+            )
             android.util.Log.e(
                 "RevokeServiceSync",
                 "Failed to deliver schedule sync to running AppMonitorService.",
@@ -838,35 +867,4 @@ class MainActivity : FlutterActivity() {
         android.util.Log.d("RevokeAmnesty", "Monitoring paused for $safeMinutes minute(s).")
     }
 
-    private fun startMonitorServiceSafely(intent: Intent, reason: String): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
-            true
-        } catch (error: Exception) {
-            if (isForegroundServiceStartNotAllowed(error)) {
-                android.util.Log.e(
-                    "RevokeServiceStart",
-                    "Foreground service start blocked for $reason. " +
-                        "Will retry when app returns to foreground.",
-                    error
-                )
-            } else {
-                android.util.Log.e(
-                    "RevokeServiceStart",
-                    "Failed to start monitor service for $reason.",
-                    error
-                )
-            }
-            false
-        }
-    }
-
-    private fun isForegroundServiceStartNotAllowed(error: Exception): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
-        return error.javaClass.name == "android.app.ForegroundServiceStartNotAllowedException"
-    }
 }

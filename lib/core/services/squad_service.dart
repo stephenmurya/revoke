@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../models/plea_model.dart';
 import '../models/squad_log_model.dart';
 import '../models/member_rap_sheet_snapshot.dart';
+import 'regime_service.dart';
 import 'scoring_service.dart';
 
 class PleaNoSquadException implements Exception {
@@ -278,6 +279,51 @@ class SquadService {
   ) async {
     final normalizedTargetUid = targetUid.trim();
     if (normalizedTargetUid.isEmpty) return null;
+
+    final regimes = await RegimeService.getRegimesForUser(normalizedTargetUid);
+    final protocolNames =
+        regimes
+            .map((regime) => regime.name.trim())
+            .where((name) => name.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+    final blacklistApps =
+        regimes
+            .expand((regime) => regime.targetApps)
+            .map((pkg) => pkg.trim())
+            .where((pkg) => pkg.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+
+    final snapshotRef = _firestore
+        .collection('users')
+        .doc(normalizedTargetUid)
+        .collection('rapSheet')
+        .doc('latest');
+    final snapshotDoc = await snapshotRef.get();
+    if (snapshotDoc.exists && snapshotDoc.data() != null) {
+      final directSnapshot = MemberRapSheetSnapshot.fromMap(
+        snapshotDoc.data() ?? const {},
+      );
+      return MemberRapSheetSnapshot(
+        targetUid: directSnapshot.targetUid.isEmpty
+            ? normalizedTargetUid
+            : directSnapshot.targetUid,
+        squadId: directSnapshot.squadId,
+        activeProtocols: protocolNames,
+        activeProtocolCount: protocolNames.length,
+        blacklistApps: blacklistApps,
+        blacklistCount: blacklistApps.length,
+        pleaTotal: directSnapshot.pleaTotal,
+        pleaApproved: directSnapshot.pleaApproved,
+        pleaRejected: directSnapshot.pleaRejected,
+        latestInfractions: directSnapshot.latestInfractions,
+        updatedAt: directSnapshot.updatedAt,
+        version: directSnapshot.version,
+      );
+    }
 
     final callable = _functions.httpsCallable('getMemberRapSheetSnapshot');
     final response = await callable.call({'targetUid': normalizedTargetUid});
