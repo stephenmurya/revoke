@@ -5,6 +5,7 @@ import '../../core/utils/theme_extensions.dart';
 import 'appearance_screen.dart';
 import 'notifications_screen.dart';
 import 'pages/account_settings_page.dart';
+import 'whitelist_apps_screen.dart';
 import 'widgets/settings_option_tile.dart';
 
 class ControlsHubScreen extends StatefulWidget {
@@ -51,7 +52,7 @@ class _ControlsHubScreenState extends State<ControlsHubScreen> {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          padding: const EdgeInsets.fromLTRB(8, 12, 8, 28),
           children: [
             TextField(
               controller: _searchController,
@@ -131,6 +132,12 @@ final List<_ControlsSection> _controlsSections = [
     subtitle: 'Alert preferences for shame, pleas, and verdicts.',
     icon: PhosphorIcons.bell(),
     destination: NotificationsScreen(),
+  ),
+  _ControlsSection(
+    title: 'Whitelist Apps',
+    subtitle: 'Ignore maps, music, dialer, and other utility apps.',
+    icon: PhosphorIcons.listChecks(),
+    destination: WhitelistAppsScreen(),
   ),
   _ControlsSection(
     title: 'Appearance & Experience',

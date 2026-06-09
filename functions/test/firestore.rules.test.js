@@ -87,6 +87,37 @@ test("same-squad members can read another member's regimes but cannot write them
   }));
 });
 
+test("users can sync only their own taper plans", async () => {
+  await seedWithBypass(async (db) => {
+    await setDoc(doc(db, "users/alice"), {
+      uid: "alice",
+      squadId: "squad_1",
+    });
+    await setDoc(doc(db, "users/bob"), {
+      uid: "bob",
+      squadId: "squad_1",
+    });
+    await setDoc(doc(db, "users/alice/taperPlans/plan_1"), {
+      status: "active",
+      targetDailyMinutes: 45,
+    });
+  });
+
+  const aliceDb = testEnv.authenticatedContext("alice").firestore();
+  const bobDb = testEnv.authenticatedContext("bob").firestore();
+
+  await assertSucceeds(getDoc(doc(aliceDb, "users/alice/taperPlans/plan_1")));
+  await assertSucceeds(setDoc(doc(aliceDb, "users/alice/taperPlans/plan_2"), {
+    status: "active",
+    targetDailyMinutes: 30,
+  }));
+  await assertFails(getDoc(doc(bobDb, "users/alice/taperPlans/plan_1")));
+  await assertFails(setDoc(doc(bobDb, "users/alice/taperPlans/plan_3"), {
+    status: "active",
+    targetDailyMinutes: 10,
+  }));
+});
+
 test("same-squad members can read another member's rap sheet snapshot", async () => {
   await seedWithBypass(async (db) => {
     await setDoc(doc(db, "users/alice"), {

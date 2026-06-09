@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/scheduler.dart';
@@ -28,7 +27,6 @@ class TribunalScreen extends StatefulWidget {
 }
 
 class _TribunalScreenState extends State<TribunalScreen> {
-  static const String _architectEmail = 'stephenmurya@gmail.com';
   static const String _resolvedOutcomeKey = 'tribunal_resolved_outcomes';
   final TextEditingController _messageController = TextEditingController();
   final FocusNode _messageFocusNode = FocusNode();
@@ -46,8 +44,6 @@ class _TribunalScreenState extends State<TribunalScreen> {
   bool _isAdminObserver = false;
   bool _adminClaimChecked = false;
   bool _sessionReady = false;
-  bool _ghostMode = false;
-  bool _applyingOverride = false;
   bool _typingIntent = false;
   PleaModel? _resolvedPlea;
   Future<Map<String, _VoterProfile>>? _voterProfilesFuture;
@@ -93,8 +89,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
       return;
     }
 
-    final email = user?.email?.trim().toLowerCase();
-    bool isAdmin = email == _architectEmail;
+    bool isAdmin = false;
     String resolvedSenderName = 'Member';
 
     try {
@@ -131,9 +126,6 @@ class _TribunalScreenState extends State<TribunalScreen> {
       _adminClaimChecked = true;
       _sessionReady = true;
       _senderName = resolvedSenderName;
-      // Default admin chat to Ghost Mode to avoid callable-layer rejection for admin users
-      // and make mock tribunal simulations immediately usable.
-      _ghostMode = isAdmin;
     });
   }
 
@@ -144,26 +136,12 @@ class _TribunalScreenState extends State<TribunalScreen> {
 
     setState(() => _sending = true);
     try {
-      if (_isAdminObserver && _ghostMode) {
-        await FirebaseFirestore.instance
-            .collection('pleas')
-            .doc(widget.pleaId)
-            .collection('messages')
-            .add({
-              'senderId': 'THE_ARCHITECT',
-              'senderName': 'The Architect',
-              'text': text,
-              'isSystem': true,
-              'timestamp': FieldValue.serverTimestamp(),
-            });
-      } else {
-        await SquadService.sendPleaMessage(
-          pleaId: widget.pleaId,
-          senderId: uid,
-          senderName: _senderName,
-          text: text,
-        );
-      }
+      await SquadService.sendPleaMessage(
+        pleaId: widget.pleaId,
+        senderId: uid,
+        senderName: _senderName,
+        text: text,
+      );
       _messageController.clear();
       _replyingTo = null;
       _scrollMessagesToBottom();
@@ -215,88 +193,6 @@ class _TribunalScreenState extends State<TribunalScreen> {
       ).showSnackBar(SnackBar(content: Text('VOTE FAILED: $e')));
     } finally {
       if (mounted) setState(() => _voting = false);
-    }
-  }
-
-  Future<void> _confirmAndOverride({
-    required String verdict,
-    required PleaModel plea,
-  }) async {
-    if (_applyingOverride) return;
-
-    final reasonController = TextEditingController();
-    final shouldProceed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: dialogContext.scheme.surface,
-          title: Text('Force Resolve this plea?', style: AppTheme.h3),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${plea.userName} on ${plea.appName} (${plea.durationMinutes}m)',
-                style: AppTheme.bodySmall.copyWith(
-                  color: dialogContext.colors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: reasonController,
-                maxLines: 3,
-                decoration: AppTheme.defaultInputDecoration(
-                  hintText: 'Reason (optional)',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(verdict == 'approved' ? 'Approve' : 'Reject'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldProceed != true) return;
-
-    setState(() => _applyingOverride = true);
-    try {
-      final callable = FirebaseFunctions.instance.httpsCallable(
-        'adminOverridePlea',
-      );
-      await callable.call({
-        'pleaId': widget.pleaId,
-        'verdict': verdict,
-        'reason': reasonController.text.trim(),
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Override applied: ${verdict.toUpperCase()}')),
-      );
-    } on FirebaseFunctionsException catch (e) {
-      if (!mounted) return;
-      final message = e.message ?? e.code;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Override failed: $message')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Override failed: $e')));
-    } finally {
-      if (mounted) {
-        setState(() => _applyingOverride = false);
-      }
     }
   }
 
@@ -590,90 +486,6 @@ class _TribunalScreenState extends State<TribunalScreen> {
     );
   }
 
-  Widget _buildAdminTribunalControls(PleaModel plea) {
-    final isActive = plea.status.trim().toLowerCase() == 'active';
-    final successScheme = ColorScheme.fromSeed(
-      seedColor: context.colors.success,
-      brightness: Theme.of(context).brightness,
-    );
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.scheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Admin Tribunal Controls', style: AppTheme.bodyMedium),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: (_applyingOverride || !isActive)
-                      ? null
-                      : () => _confirmAndOverride(
-                          verdict: 'approved',
-                          plea: plea,
-                        ),
-                  style: AppTheme.primaryButtonStyle.copyWith(
-                    backgroundColor: WidgetStatePropertyAll(
-                      context.colors.success,
-                    ),
-                    foregroundColor: WidgetStatePropertyAll(
-                      successScheme.onPrimary,
-                    ),
-                  ),
-                  child: const Text('Approve'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: (_applyingOverride || !isActive)
-                      ? null
-                      : () => _confirmAndOverride(
-                          verdict: 'rejected',
-                          plea: plea,
-                        ),
-                  style: AppTheme.dangerButtonStyle,
-                  child: const Text('Reject'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Ghost Mode', style: AppTheme.bodyMedium),
-                    Text(
-                      'Send as The Architect',
-                      style: AppTheme.bodySmall.copyWith(
-                        color: context.colors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Switch.adaptive(
-                value: _ghostMode,
-                onChanged: (value) => setState(() => _ghostMode = value),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   void _handleResolutionLifecycle(PleaModel plea) {
     final status = plea.status.trim().toLowerCase();
     if (status != 'approved' && status != 'rejected') return;
@@ -919,6 +731,12 @@ class _TribunalScreenState extends State<TribunalScreen> {
                 final isAdmin = _isAdminObserver;
                 final showObserverBanner = isAdmin && !isParticipant;
                 final voteLocked = !canVote || _voting;
+                final canChat =
+                    currentUid != null &&
+                    isParticipant &&
+                    !isAdmin &&
+                    (lifecycleStatus == 'active' ||
+                        lifecycleStatus == 'pending');
 
                 if (_showVerdictOverlay && _resolvedPlea != null) {
                   return _buildVerdictPage(_resolvedPlea!);
@@ -997,10 +815,6 @@ class _TribunalScreenState extends State<TribunalScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (isAdmin) ...[
-                                  _buildAdminTribunalControls(plea),
-                                  const SizedBox(height: 10),
-                                ],
                                 if (!isRequester && !isAdmin) ...[
                                   Row(
                                     children: [
@@ -1103,60 +917,66 @@ class _TribunalScreenState extends State<TribunalScreen> {
                                     ),
                                   ),
                                 ],
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Expanded(
-                                      child: SizedBox(
+                                if (canChat)
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      Expanded(
+                                        child: SizedBox(
+                                          height: 56,
+                                          child: TextField(
+                                            controller: _messageController,
+                                            focusNode: _messageFocusNode,
+                                            onTap: () => _typingIntent = true,
+                                            onTapOutside: (_) {
+                                              _typingIntent = false;
+                                              _messageFocusNode.unfocus();
+                                            },
+                                            textCapitalization:
+                                                TextCapitalization.sentences,
+                                            textInputAction:
+                                                TextInputAction.send,
+                                            onSubmitted: (_) {
+                                              if (!_sending) {
+                                                _sendMessage();
+                                              }
+                                            },
+                                            decoration:
+                                                AppTheme.defaultInputDecoration(
+                                                  hintText:
+                                                      'Type your argument...',
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      SizedBox(
                                         height: 56,
-                                        child: TextField(
-                                          controller: _messageController,
-                                          focusNode: _messageFocusNode,
-                                          onTap: () => _typingIntent = true,
-                                          onTapOutside: (_) {
-                                            _typingIntent = false;
-                                            _messageFocusNode.unfocus();
-                                          },
-                                          textCapitalization:
-                                              TextCapitalization.sentences,
-                                          decoration:
-                                              AppTheme.defaultInputDecoration(
-                                                hintText: isAdmin
-                                                    ? (_ghostMode
-                                                          ? 'Ghost message as The Architect...'
-                                                          : 'Send admin note...')
-                                                    : 'Type your argument...',
-                                              ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    SizedBox(
-                                      height: 56,
-                                      child: ElevatedButton(
-                                        onPressed: _sending
-                                            ? null
-                                            : _sendMessage,
-                                        style: AppTheme.primaryButtonStyle
-                                            .copyWith(
-                                              padding:
-                                                  const WidgetStatePropertyAll(
-                                                    EdgeInsets.symmetric(
-                                                      horizontal: 18,
+                                        child: ElevatedButton(
+                                          onPressed: _sending
+                                              ? null
+                                              : _sendMessage,
+                                          style: AppTheme.primaryButtonStyle
+                                              .copyWith(
+                                                padding:
+                                                    const WidgetStatePropertyAll(
+                                                      EdgeInsets.symmetric(
+                                                        horizontal: 18,
+                                                      ),
                                                     ),
-                                                  ),
-                                              minimumSize:
-                                                  const WidgetStatePropertyAll(
-                                                    Size(56, 56),
-                                                  ),
-                                            ),
-                                        child: Icon(
-                                          PhosphorIcons.paperPlaneRight(),
+                                                minimumSize:
+                                                    const WidgetStatePropertyAll(
+                                                      Size(56, 56),
+                                                    ),
+                                              ),
+                                          child: Icon(
+                                            PhosphorIcons.paperPlaneRight(),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
+                                    ],
+                                  ),
                               ],
                             ),
                           ),

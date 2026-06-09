@@ -2,6 +2,7 @@ package com.crescence.revoke
 
 import android.accessibilityservice.AccessibilityService
 import android.os.Build
+import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +13,11 @@ class RevokeAccessibilityService : AccessibilityService() {
     companion object {
         private const val HOME_OVERLAY_DELAY_MS = 140L
         private const val RECENTS_OVERLAY_DELAY_MS = 220L
+        private const val SESSION_END_GRACE_MS = 4_000L
+        private const val PREFS_NAME = "RevokeConfig"
+        private const val KEY_SOFT_REMINDER_ENABLED = "soft_reminder_enabled"
+        private const val KEY_INTERSTITIAL_THRESHOLD_MS = "interstitial_threshold_ms"
+        private const val DEFAULT_INTERSTITIAL_THRESHOLD_MS = 900_000L
 
         @Volatile
         private var running: Boolean = false
@@ -23,6 +29,12 @@ class RevokeAccessibilityService : AccessibilityService() {
     private var lastEvaluatedPackage: String = ""
     private var lastEvaluationAtMs: Long = 0L
     private var pendingOverlayToken: Long = 0L
+    private var activeSessionPackage: String = ""
+    private var activeSessionStartedAtMs: Long = 0L
+    private var activeSessionToken: Long = 0L
+    private var pendingSessionClearToken: Long = 0L
+    private var currentForegroundPackage: String = ""
+    private var interstitialShownForSession: Boolean = false
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -37,7 +49,7 @@ class RevokeAccessibilityService : AccessibilityService() {
 
         val observedPackage = event.packageName?.toString()?.trim().orEmpty()
         if (observedPackage.isEmpty()) return
-        if (EnforcementEngine.shouldIgnorePackage(applicationContext, observedPackage)) return
+        if (isTransientIgnoredPackage(observedPackage)) return
         if (BlockerOverlayController.isShowing()) {
             Log.d(
                 "RevokeAccessibility",
@@ -47,6 +59,7 @@ class RevokeAccessibilityService : AccessibilityService() {
         }
 
         val now = System.currentTimeMillis()
+        currentForegroundPackage = observedPackage
         if (observedPackage == lastEvaluatedPackage && now - lastEvaluationAtMs < 250L) {
             return
         }
@@ -55,6 +68,17 @@ class RevokeAccessibilityService : AccessibilityService() {
         lastEvaluationAtMs = now
 
         try {
+            val ignoredForEnforcement =
+                EnforcementEngine.shouldIgnorePackage(applicationContext, observedPackage)
+            if (ignoredForEnforcement) {
+                if (isLauncherPackage(observedPackage)) {
+                    clearActiveRestrictedSession("accessibility_launcher_foreground")
+                } else {
+                    scheduleActiveRestrictedSessionClear("accessibility_ignored_foreground")
+                }
+                return
+            }
+
             EnforcementEngine.recordForegroundPackage(observedPackage)
             val blockPresentation =
                 EnforcementEngine.findBlockPresentation(
@@ -85,9 +109,27 @@ class RevokeAccessibilityService : AccessibilityService() {
                 return
             }
 
-            BlockerOverlayController.hide(
-                context = applicationContext,
-                source = "accessibility_window_state_changed:not_blocked",
+            val reminderPresentation =
+                EnforcementEngine.findReminderPresentation(
+                    context = applicationContext,
+                    packageName = observedPackage,
+                    nowMs = now,
+                    shouldLog = false,
+                )
+
+            if (reminderPresentation == null) {
+                scheduleActiveRestrictedSessionClear("accessibility_unrestricted_foreground")
+                BlockerOverlayController.hide(
+                    context = applicationContext,
+                    source = "accessibility_window_state_changed:not_blocked",
+                )
+                return
+            }
+
+            handleRestrictedForeground(
+                packageName = observedPackage,
+                nowMs = now,
+                presentation = reminderPresentation,
             )
         } catch (error: Exception) {
             AppMonitorCoordinator.recordNonFatal(
@@ -111,6 +153,127 @@ class RevokeAccessibilityService : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         running = false
         return super.onUnbind(intent)
+    }
+
+    private fun handleRestrictedForeground(
+        packageName: String,
+        nowMs: Long,
+        presentation: ReminderPresentation,
+    ) {
+        cancelPendingSessionClear()
+        if (packageName == activeSessionPackage && activeSessionStartedAtMs > 0L) {
+            return
+        }
+
+        BlockerOverlayController.hideReminder(
+            context = applicationContext,
+            source = "accessibility_restricted_session_switch",
+        )
+        activeSessionPackage = packageName
+        activeSessionStartedAtMs = nowMs
+        activeSessionToken += 1
+        interstitialShownForSession = false
+        Log.d("RevokeMonitor", "Session State changed to: $activeSessionPackage")
+        scheduleInterstitialCheck(packageName, activeSessionToken)
+        showSoftReminderForQa(presentation)
+    }
+
+    private fun clearActiveRestrictedSession(source: String) {
+        cancelPendingSessionClear()
+        if (activeSessionPackage.isBlank()) return
+        activeSessionPackage = ""
+        activeSessionStartedAtMs = 0L
+        activeSessionToken += 1
+        interstitialShownForSession = false
+        Log.d("RevokeMonitor", "Session State changed to: $activeSessionPackage")
+        BlockerOverlayController.hideReminder(
+            context = applicationContext,
+            source = source,
+        )
+    }
+
+    private fun scheduleActiveRestrictedSessionClear(source: String) {
+        val packageAtSchedule = activeSessionPackage
+        if (packageAtSchedule.isBlank()) return
+
+        pendingSessionClearToken += 1
+        val token = pendingSessionClearToken
+
+        BlockerOverlayController.hideReminder(
+            context = applicationContext,
+            source = source,
+        )
+
+        mainHandler.postDelayed({
+            if (token != pendingSessionClearToken) return@postDelayed
+            if (packageAtSchedule != activeSessionPackage) return@postDelayed
+            clearActiveRestrictedSession(source)
+        }, SESSION_END_GRACE_MS)
+    }
+
+    private fun cancelPendingSessionClear() {
+        pendingSessionClearToken += 1
+    }
+
+    private fun isTransientIgnoredPackage(packageName: String): Boolean {
+        val normalized = packageName.trim().lowercase()
+        if (normalized == applicationContext.packageName.lowercase()) return true
+        if (normalized == "com.android.systemui" || normalized.contains(".systemui")) return true
+        if (normalized.contains("inputmethod")) return true
+        if (normalized.contains("keyboard")) return true
+        if (normalized.contains("latinime")) return true
+        if (normalized.contains("honeyboard")) return true
+        if (normalized.contains("swiftkey")) return true
+        return false
+    }
+
+    private fun isLauncherPackage(packageName: String): Boolean {
+        val normalized = packageName.trim().lowercase()
+        return normalized.contains("launcher") || normalized.contains("trebuchet")
+    }
+
+    private fun showSoftReminderForQa(presentation: ReminderPresentation) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_SOFT_REMINDER_ENABLED, true)) return
+
+        if (presentation.remainingMs <= 0L) return
+        BlockerOverlayController.showSoftReminder(
+            context = applicationContext,
+            presentation = presentation,
+            source = "accessibility_app_open",
+        )
+    }
+
+    private fun scheduleInterstitialCheck(packageName: String, sessionToken: Long) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val thresholdMs =
+            prefs.getLong(KEY_INTERSTITIAL_THRESHOLD_MS, DEFAULT_INTERSTITIAL_THRESHOLD_MS)
+                .coerceAtLeast(0L)
+        if (thresholdMs <= 0L) return
+
+        mainHandler.postDelayed({
+            if (sessionToken != activeSessionToken) return@postDelayed
+            if (packageName != activeSessionPackage) return@postDelayed
+            if (packageName != currentForegroundPackage) return@postDelayed
+            if (interstitialShownForSession) return@postDelayed
+            if (BlockerOverlayController.isShowing()) return@postDelayed
+
+            val presentation =
+                EnforcementEngine.findReminderPresentation(
+                    context = applicationContext,
+                    packageName = packageName,
+                    nowMs = System.currentTimeMillis(),
+                    shouldLog = false,
+                ) ?: return@postDelayed
+
+            if (presentation.remainingMs <= 0L) return@postDelayed
+            interstitialShownForSession = true
+            BlockerOverlayController.showInterstitialReminder(
+                context = applicationContext,
+                presentation = presentation,
+                source = "accessibility_session_threshold",
+            )
+        }, thresholdMs)
     }
 
     private fun triggerEscapeAndOverlay(presentation: BlockPresentation) {

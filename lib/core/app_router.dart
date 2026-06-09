@@ -9,6 +9,7 @@ import '../features/permissions/permission_screen.dart';
 import '../features/home/focus_score_detail_screen.dart';
 import '../features/plea/plea_compose_screen.dart';
 import '../features/monitor/create_schedule_screen.dart';
+import '../features/insights/insights_screen.dart';
 import '../features/settings/controls_hub_screen.dart';
 import '../features/settings/appearance_screen.dart';
 import '../features/notifications/notifications_screen.dart';
@@ -46,7 +47,9 @@ class AppRouter {
   static bool _hasSessionBootstrap = false;
 
   static bool _isShellLocation(String location) {
-    return location == '/home' || location == '/squad';
+    return location == '/home' ||
+        location == '/squad' ||
+        location == '/insights';
   }
 
   static void clearSessionCaches() {
@@ -272,7 +275,20 @@ class AppRouter {
             path: '/squad',
             builder: (context, state) => const SquadScreen(),
           ),
+          GoRoute(
+            path: '/insights',
+            builder: (context, state) => const InsightsScreen(),
+          ),
         ],
+      ),
+      GoRoute(
+        path: '/insights/app',
+        builder: (context, state) {
+          final packageName =
+              state.uri.queryParameters['packageName']?.trim() ?? '';
+          if (packageName.isEmpty) return const InsightsScreen();
+          return AppInsightsScreen(packageName: packageName);
+        },
       ),
       GoRoute(
         path: '/notifications',

@@ -4,16 +4,20 @@ const {
 } = require("firebase-functions/v2/firestore");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {onTaskDispatched} = require("firebase-functions/v2/tasks");
+const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
+const {getFunctions} = require("firebase-admin/functions");
 
 initializeApp();
 
 const db = getFirestore();
 const messaging = getMessaging();
+const openRouterKey = defineSecret("OPENROUTER_API_KEY");
 const RAP_SHEET_VERSION = 1;
 const RAP_SHEET_MAX_INFRACTIONS = 5;
 const RAP_SHEET_QUERY_LIMIT = 25;
@@ -170,6 +174,91 @@ async function createInAppNotification(uid, payload) {
   }
 }
 
+async function _sendPleaVerdictSideEffects({
+  pleaId,
+  pleaData,
+  requesterId,
+  verdict,
+  acceptVotes = 0,
+  rejectVotes = 0,
+  outcomeSource = "human_tribunal",
+}) {
+  const normalizedPleaId = (pleaId || "").toString().trim();
+  const normalizedRequesterId = (requesterId || "").toString().trim();
+  const normalizedVerdict = (verdict || "").toString().trim().toLowerCase();
+  if (!normalizedPleaId || !normalizedRequesterId) return;
+  if (normalizedVerdict !== "approved" && normalizedVerdict !== "rejected") {
+    return;
+  }
+
+  const squadId = (pleaData?.squadId || "").toString().trim();
+  const requesterName = (pleaData?.userName || "").toString().trim() ||
+    "A Member";
+  const appName = (pleaData?.appName || "access").toString().trim() ||
+    "access";
+  const isApproved = normalizedVerdict === "approved";
+  const outcome = isApproved ? "APPROVED" : "REJECTED";
+  const inAppVerdictTitle = `VERDICT: ${isApproved ? "GRANTED" : "DENIED"}`;
+  const inAppVerdictBody = "The Conclave has decided your fate.";
+  const verdictBody = `Your plea for ${appName} was ${outcome.toLowerCase()}.`;
+
+  try {
+    const userSnap = await db.collection("users").doc(normalizedRequesterId).get();
+    const requesterData = userSnap.data() || {};
+    const avatar = (requesterData.photoUrl || "").toString().trim();
+    const requesterToken = (requesterData.fcmToken || "").toString().trim();
+    const requesterWantsVerdicts = _wantsNotification(requesterData, "verdicts");
+
+    await createInAppNotification(normalizedRequesterId, {
+      title: inAppVerdictTitle,
+      body: inAppVerdictBody,
+      type: "verdict",
+      metadata: {
+        pleaId: String(normalizedPleaId),
+        squadId: String(squadId),
+        verdict: String(normalizedVerdict),
+        outcomeSource: String(outcomeSource),
+      },
+    });
+
+    if (requesterToken && requesterWantsVerdicts) {
+      await _sendUserNotificationBestEffort(
+          requesterToken,
+          `VERDICT: ${outcome}`,
+          verdictBody,
+          {
+            type: "verdict",
+            pleaId: String(normalizedPleaId),
+            squadId: String(squadId),
+            verdict: String(normalizedVerdict),
+            outcomeSource: String(outcomeSource),
+          },
+      );
+    }
+
+    const title = `Verdict: ${normalizedVerdict.toUpperCase()} for ${requesterName}.`;
+    await logSquadEvent(
+        squadId,
+        "verdict",
+        title,
+        {
+          userId: normalizedRequesterId,
+          userName: requesterName,
+          userAvatar: avatar,
+        },
+        {
+          pleaId: String(normalizedPleaId),
+          verdict: normalizedVerdict,
+          acceptVotes,
+          rejectVotes,
+          outcomeSource,
+        },
+    );
+  } catch (_) {
+    // Best-effort only.
+  }
+}
+
 async function _createInAppNotificationsBatch(userIds, payload) {
   const normalizedIds = [...new Set(
       (Array.isArray(userIds) ? userIds : [])
@@ -244,10 +333,81 @@ const MESSAGE_COOLDOWN_MS = 2 * 1000;
 const MESSAGE_MAX_LEN = 400;
 
 const ACTIVE_PLEA_TIMEOUT_MS = 5 * 60 * 1000;
+const AI_FALLBACK_DELAY_SECONDS = 30;
+const AI_FORCE_KILL_DELAY_SECONDS = 5 * 60;
+const AI_FALLBACK_MAX_APPROVAL_MINUTES = 15;
+const OPENROUTER_MODEL = "meta-llama/llama-3-8b-instruct:free";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 const RESOLVED_PLEA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MARKED_FOR_DELETION_TTL_MS = 10 * 60 * 1000;
 const CLEANUP_BATCH_LIMIT = 100;
+
+async function _enqueuePleaFallbackTask(pleaId, requesterUid) {
+  const normalizedPleaId = (pleaId || "").toString().trim();
+  const normalizedRequesterUid = (requesterUid || "").toString().trim();
+  if (!normalizedPleaId || !normalizedRequesterUid) return false;
+
+  try {
+    const queue = getFunctions().taskQueue("evaluatePleaFallback");
+    await queue.enqueue(
+        {
+          pleaId: normalizedPleaId,
+          requesterUid: normalizedRequesterUid,
+        },
+        {
+          scheduleDelaySeconds: AI_FALLBACK_DELAY_SECONDS,
+        },
+    );
+    logger.info("AI fallback task enqueued.", {
+      pleaId: normalizedPleaId,
+      requesterUid: normalizedRequesterUid,
+      delaySeconds: AI_FALLBACK_DELAY_SECONDS,
+    });
+    return true;
+  } catch (error) {
+    logger.error("AI fallback enqueue failed.", {
+      pleaId: normalizedPleaId,
+      requesterUid: normalizedRequesterUid,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+    return false;
+  }
+}
+
+async function _enqueuePleaForceKillTask(pleaId, requesterUid) {
+  const normalizedPleaId = (pleaId || "").toString().trim();
+  const normalizedRequesterUid = (requesterUid || "").toString().trim();
+  if (!normalizedPleaId || !normalizedRequesterUid) return false;
+
+  try {
+    const queue = getFunctions().taskQueue("forceKillStaleTribunal");
+    await queue.enqueue(
+        {
+          pleaId: normalizedPleaId,
+          requesterUid: normalizedRequesterUid,
+        },
+        {
+          scheduleDelaySeconds: AI_FORCE_KILL_DELAY_SECONDS,
+        },
+    );
+    logger.info("Tribunal dead-man task enqueued.", {
+      pleaId: normalizedPleaId,
+      requesterUid: normalizedRequesterUid,
+      delaySeconds: AI_FORCE_KILL_DELAY_SECONDS,
+    });
+    return true;
+  } catch (error) {
+    logger.error("Tribunal dead-man enqueue failed.", {
+      pleaId: normalizedPleaId,
+      requesterUid: normalizedRequesterUid,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+    return false;
+  }
+}
 
 // Vote migration flags.
 // Keep dual-write enabled during migration so existing clients remain stable.
@@ -488,70 +648,15 @@ exports.resolvePleaVerdict = onDocumentWritten({
     await pleaRef.set(updates, {merge: true});
 
     if (updates.status) {
-      try {
-        const squadId = (pleaData.squadId || "").toString().trim();
-        const requesterName = (pleaData.userName || "").toString().trim() || "A Member";
-        let requesterToken = "";
-        let requesterWantsVerdicts = true;
-        let avatar = "";
-        const isApproved = updates.status === "approved";
-        const outcome = isApproved ? "APPROVED" : "REJECTED";
-        const inAppVerdictTitle = `VERDICT: ${isApproved ? "GRANTED" : "DENIED"}`;
-        const inAppVerdictBody = "The Conclave has decided your fate.";
-        const verdictBody = `Your plea for ${pleaData.appName || "access"} was ${outcome.toLowerCase()}.`;
-        if (summary.requesterId) {
-          const userSnap = await db.collection("users").doc(summary.requesterId).get();
-          const requesterData = userSnap.data() || {};
-          avatar = (requesterData.photoUrl || "").toString().trim();
-          requesterToken = (requesterData.fcmToken || "").toString().trim();
-          requesterWantsVerdicts = _wantsNotification(requesterData, "verdicts");
-
-          await createInAppNotification(summary.requesterId, {
-            title: inAppVerdictTitle,
-            body: inAppVerdictBody,
-            type: "verdict",
-            metadata: {
-                pleaId: String(pleaId),
-                squadId: String(squadId),
-                verdict: String(updates.status),
-            },
-          });
-        }
-
-        if (requesterToken && requesterWantsVerdicts) {
-          await _sendUserNotificationBestEffort(
-              requesterToken,
-              `VERDICT: ${outcome}`,
-              verdictBody,
-              {
-                type: "verdict",
-                pleaId: String(pleaId),
-                squadId: String(squadId),
-                verdict: String(updates.status),
-              },
-          );
-        }
-
-        const title = `Verdict: ${updates.status.toUpperCase()} for ${requesterName}.`;
-        await logSquadEvent(
-            squadId,
-            "verdict",
-            title,
-            {
-              userId: summary.requesterId,
-              userName: requesterName,
-              userAvatar: avatar,
-            },
-            {
-              pleaId: String(pleaId),
-              verdict: updates.status,
-              acceptVotes: summary.acceptVotes,
-              rejectVotes: summary.rejectVotes,
-            },
-        );
-      } catch (_) {
-        // Best-effort only.
-      }
+      await _sendPleaVerdictSideEffects({
+        pleaId,
+        pleaData,
+        requesterId: summary.requesterId,
+        verdict: updates.status,
+        acceptVotes: summary.acceptVotes,
+        rejectVotes: summary.rejectVotes,
+        outcomeSource: "human_tribunal",
+      });
     }
 
     logger.info("resolvePleaVerdict processed vote doc update.", {
@@ -631,93 +736,6 @@ exports.recalculateShameLedger = onCall({
       errorStack: error?.stack,
     });
     throw new HttpsError("internal", "Failed to recalculate shame ledger.");
-  }
-});
-
-exports.adminOverridePlea = onCall({
-  region: "us-central1",
-}, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Authentication required.");
-  }
-
-  if (request.auth.token?.admin !== true) {
-    throw new HttpsError("permission-denied", "Admin access required.");
-  }
-
-  const pleaId = (request.data?.pleaId || "").toString().trim();
-  const verdict = (request.data?.verdict || "").toString().trim().toLowerCase();
-  const reason = (request.data?.reason || "").toString().trim();
-
-  if (!pleaId) {
-    throw new HttpsError("invalid-argument", "pleaId is required.");
-  }
-  if (verdict !== "approved" && verdict !== "rejected") {
-    throw new HttpsError(
-        "invalid-argument",
-        "verdict must be 'approved' or 'rejected'.",
-    );
-  }
-
-  const pleaRef = db.collection("pleas").doc(pleaId);
-
-  try {
-    const pleaSnap = await pleaRef.get();
-    if (!pleaSnap.exists) {
-      throw new HttpsError("not-found", "Plea not found.");
-    }
-    const plea = pleaSnap.data() || {};
-    const currentStatus = (plea.status || "active").toString().trim().toLowerCase();
-    if (currentStatus !== "active") {
-      throw new HttpsError(
-          "failed-precondition",
-          "Plea is already resolved.",
-      );
-    }
-
-    await pleaRef.set({
-      status: verdict,
-      resolvedAt: FieldValue.serverTimestamp(),
-      outcomeSource: "admin_override",
-      markedForDeletion: true,
-      deletionMarkedAt: FieldValue.serverTimestamp(),
-      deletionMarkedBy: request.auth.uid,
-    }, {merge: true});
-
-    const architectMessage = `The Architect has intervened. Verdict: ${verdict.toUpperCase()}. Reason: ${reason || "No reason provided."}`;
-    await pleaRef.collection("messages").add({
-      text: architectMessage,
-      senderId: "THE_ARCHITECT",
-      senderName: "The Architect",
-      isSystem: true,
-      timestamp: FieldValue.serverTimestamp(),
-    });
-
-    logger.info("adminOverridePlea applied.", {
-      pleaId,
-      verdict,
-      reasonProvided: Boolean(reason),
-      actorUid: request.auth.uid,
-    });
-
-    return {
-      success: true,
-      pleaId,
-      verdict,
-      outcomeSource: "admin_override",
-    };
-  } catch (error) {
-    if (error instanceof HttpsError) {
-      throw error;
-    }
-
-    logger.error("adminOverridePlea crashed.", {
-      pleaId,
-      verdict,
-      errorMessage: error?.message || String(error),
-      errorStack: error?.stack,
-    });
-    throw new HttpsError("internal", "Failed to override plea.");
   }
 });
 
@@ -1075,7 +1093,13 @@ exports.createPlea = onCall({
           voteCounts: {accept: 0, reject: 0},
           votes: {},
           status: "active",
+          outcomeSource: "human_tribunal",
           eligibleVoterCount: eligibleVoters.length,
+          aiFallbackStatus: "queued",
+          aiFallbackDueAt: Timestamp.fromMillis(
+              nowMs + (AI_FALLBACK_DELAY_SECONDS * 1000),
+          ),
+          aiFallbackModel: OPENROUTER_MODEL,
         });
       }
 
@@ -1108,6 +1132,11 @@ exports.createPlea = onCall({
           source: "system_warden",
         },
       });
+    }
+
+    if (!usedWarden && createdStatus === "active") {
+      await _enqueuePleaFallbackTask(pleaRef.id, requestedUid);
+      await _enqueuePleaForceKillTask(pleaRef.id, requestedUid);
     }
 
     // Best-effort squad log entry (outside transaction).
@@ -1156,6 +1185,183 @@ exports.createPlea = onCall({
   }
 });
 
+exports.evaluatePleaFallback = onTaskDispatched({
+  region: "us-central1",
+  secrets: [openRouterKey],
+  retryConfig: {
+    maxAttempts: 1,
+  },
+  rateLimits: {
+    maxConcurrentDispatches: 10,
+  },
+  timeoutSeconds: 120,
+}, async (request) => {
+  const pleaId = (request.data?.pleaId || "").toString().trim();
+  const requesterUid = (request.data?.requesterUid || "").toString().trim();
+  if (!pleaId) {
+    logger.warn("evaluatePleaFallback skipped missing pleaId.");
+    return;
+  }
+
+  const pleaRef = db.collection("pleas").doc(pleaId);
+
+  try {
+    const claim = await _claimPleaForAiFallback(pleaRef);
+
+    if (claim.skipped) {
+      logger.info("evaluatePleaFallback skipped.", {
+        pleaId,
+        requesterUid,
+        reason: claim.reason,
+        status: claim.status || null,
+      });
+      return;
+    }
+
+    const plea = claim.plea || {};
+    const requesterId = (plea.userId || requesterUid || "").toString().trim();
+    const requesterSnap = requesterId ?
+      await db.collection("users").doc(requesterId).get() :
+      null;
+    const requesterData = requesterSnap?.data() || {};
+    const taperGoal = await _loadActiveTaperGoal(requesterId);
+    const aiContext = _buildAiPleaContext(plea, requesterData, taperGoal);
+
+    let decision = {
+      decision: "reject",
+      minutes: 0,
+      rationale: "AI fallback failed safely.",
+    };
+    try {
+      decision = await _callOpenRouterForPlea(aiContext);
+    } catch (error) {
+      logger.error("OpenRouter fallback call failed.", {
+        pleaId,
+        errorMessage: error?.message || String(error),
+        errorStack: error?.stack,
+      });
+    }
+
+    const result = await _finalizePleaWithAiDecision(pleaRef, pleaId, decision);
+    logger.info("evaluatePleaFallback completed.", {
+      pleaId,
+      requesterUid: requesterId,
+      skipped: result.skipped === true,
+      skipReason: result.reason || null,
+      decision: decision.decision,
+      minutes: decision.minutes,
+      verdict: result.verdict || null,
+    });
+  } catch (error) {
+    logger.error("evaluatePleaFallback crashed.", {
+      pleaId,
+      requesterUid,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+
+    try {
+      await _finalizePleaWithAiDecision(pleaRef, pleaId, {
+        decision: "reject",
+        minutes: 0,
+        rationale: "AI fallback encountered an internal error.",
+      });
+    } catch (fallbackError) {
+      logger.error("Failed to safely reject after AI fallback crash.", {
+        pleaId,
+        errorMessage: fallbackError?.message || String(fallbackError),
+      });
+    }
+  }
+});
+
+exports.forceKillStaleTribunal = onTaskDispatched({
+  region: "us-central1",
+  retryConfig: {
+    maxAttempts: 1,
+  },
+  rateLimits: {
+    maxConcurrentDispatches: 10,
+  },
+  timeoutSeconds: 60,
+}, async (request) => {
+  const pleaId = (request.data?.pleaId || "").toString().trim();
+  const requesterUid = (request.data?.requesterUid || "").toString().trim();
+  if (!pleaId) {
+    logger.warn("forceKillStaleTribunal skipped missing pleaId.");
+    return;
+  }
+
+  const pleaRef = db.collection("pleas").doc(pleaId);
+  const systemText =
+    "The Architect is currently unreachable. Request automatically denied to preserve discipline.";
+
+  try {
+    const result = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(pleaRef);
+      if (!snap.exists) return {skipped: true, reason: "missing"};
+
+      const plea = snap.data() || {};
+      const status = (plea.status || "active").toString().trim().toLowerCase();
+      if (status !== "pending") {
+        return {skipped: true, reason: "not_pending", status};
+      }
+
+      tx.set(pleaRef, {
+        status: "rejected",
+        voteCounts: {accept: 0, reject: 1},
+        resolvedAt: FieldValue.serverTimestamp(),
+        outcomeSource: "ai_deadman",
+        aiFallbackStatus: "force_rejected",
+        aiResolvedAt: FieldValue.serverTimestamp(),
+        aiFallbackDecision: "rejected",
+        aiFallbackMinutes: 0,
+        aiFallbackRationale: systemText,
+      }, {merge: true});
+      tx.set(pleaRef.collection("messages").doc(), {
+        text: systemText,
+        senderId: "AI_ARCHITECT",
+        senderName: "AI Architect",
+        isSystem: true,
+        timestamp: FieldValue.serverTimestamp(),
+      });
+
+      return {
+        skipped: false,
+        plea,
+        requesterId: (plea.userId || requesterUid || "").toString().trim(),
+      };
+    });
+
+    if (!result.skipped) {
+      await _sendPleaVerdictSideEffects({
+        pleaId,
+        pleaData: result.plea,
+        requesterId: result.requesterId,
+        verdict: "rejected",
+        acceptVotes: 0,
+        rejectVotes: 1,
+        outcomeSource: "ai_deadman",
+      });
+    }
+
+    logger.info("forceKillStaleTribunal completed.", {
+      pleaId,
+      requesterUid,
+      skipped: result.skipped === true,
+      reason: result.reason || null,
+      status: result.status || null,
+    });
+  } catch (error) {
+    logger.error("forceKillStaleTribunal crashed.", {
+      pleaId,
+      requesterUid,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+  }
+});
+
 exports.sendPleaMessage = onCall({
   region: "us-central1",
 }, async (request) => {
@@ -1198,7 +1404,7 @@ exports.sendPleaMessage = onCall({
       }
       const plea = pleaSnap.data() || {};
       const status = (plea.status || "active").toString().trim().toLowerCase();
-      if (status !== "active") {
+      if (status !== "active" && status !== "pending") {
         throw new HttpsError("failed-precondition", "Tribunal is closed.");
       }
 
@@ -2113,6 +2319,10 @@ function _resolveScoreEventOccurredAtMs(event) {
 
 exports.__testables = {
   buildRapSheetSnapshot,
+  parseAiDecision: _parseAiDecision,
+  sanitizeReasonText: _sanitizeReasonText,
+  deriveAppCategory: _deriveAppCategory,
+  extractJsonObjectString: _extractJsonObjectString,
 };
 
 exports.updateUserStatus = onCall({
@@ -2724,8 +2934,8 @@ exports.createMockTribunal = onCall({
     const messagesRef = pleaRef.collection("messages");
     const seedMessages = /** @type {Array<{senderId:string,senderName:string,text:string,isSystem:boolean}>} */ ([
       {
-        senderId: "THE_ARCHITECT",
-        senderName: "The Architect",
+        senderId: "SYSTEM",
+        senderName: "System",
         text: "Simulation initialized. Tribunal recording has begun.",
         isSystem: true,
       },
@@ -2859,8 +3069,6 @@ exports.autoFinalizeStalePleas = onSchedule({
         .limit(50)
         .get();
 
-    if (snap.empty) return;
-
     let finalized = 0;
 
     for (const doc of snap.docs) {
@@ -2868,6 +3076,11 @@ exports.autoFinalizeStalePleas = onSchedule({
       const plea = doc.data() || {};
 
       if (plea.isMockSession === true) continue;
+      const aiFallbackStatus = (plea.aiFallbackStatus || "")
+          .toString()
+          .trim()
+          .toLowerCase();
+      if (aiFallbackStatus === "processing") continue;
 
       const summary = await _computePleaVoteSummary(pleaRef, plea);
 
@@ -2881,6 +3094,9 @@ exports.autoFinalizeStalePleas = onSchedule({
         outcomeSource: "timeout",
         timedOutAt: FieldValue.serverTimestamp(),
       };
+      if (aiFallbackStatus === "queued") {
+        timeoutUpdate.aiFallbackStatus = "missed";
+      }
       if (ENABLE_LEGACY_PLEA_VOTE_MAP_SYNC) {
         timeoutUpdate.votes = summary.votes;
       }
@@ -2894,20 +3110,15 @@ exports.autoFinalizeStalePleas = onSchedule({
         timestamp: FieldValue.serverTimestamp(),
       });
 
-      if (summary.requesterId) {
-        const isApproved = verdict === "approved";
-        await createInAppNotification(summary.requesterId, {
-          title: `VERDICT: ${isApproved ? "GRANTED" : "DENIED"}`,
-          body: "The Conclave has decided your fate.",
-          type: "verdict",
-          metadata: {
-            pleaId: doc.id,
-            squadId: (plea.squadId || "").toString().trim(),
-            verdict,
-            outcomeSource: "timeout",
-          },
-        });
-      }
+      await _sendPleaVerdictSideEffects({
+        pleaId: doc.id,
+        pleaData: plea,
+        requesterId: summary.requesterId,
+        verdict,
+        acceptVotes: summary.acceptVotes,
+        rejectVotes: summary.rejectVotes,
+        outcomeSource: "timeout",
+      });
 
       finalized += 1;
       logger.info("autoFinalizeStalePleas resolved plea.", {
@@ -2919,6 +3130,32 @@ exports.autoFinalizeStalePleas = onSchedule({
         acceptVotes: summary.acceptVotes,
         rejectVotes: summary.rejectVotes,
         verdict,
+      });
+    }
+
+    const pendingSnap = await db
+        .collection("pleas")
+        .where("status", "==", "pending")
+        .where("createdAt", "<=", cutoff)
+        .orderBy("createdAt", "asc")
+        .limit(50)
+        .get();
+
+    for (const doc of pendingSnap.docs) {
+      const plea = doc.data() || {};
+      if (plea.isMockSession === true) continue;
+
+      const result = await _finalizePleaWithAiDecision(doc.ref, doc.id, {
+        decision: "reject",
+        minutes: 0,
+        rationale: "AI fallback safety timeout.",
+      });
+      if (result.skipped) continue;
+      finalized += 1;
+      logger.info("autoFinalizeStalePleas resolved pending AI plea.", {
+        pleaId: doc.id,
+        requesterId: result.requesterId,
+        verdict: result.verdict,
       });
     }
 
@@ -3133,6 +3370,382 @@ async function _deletePleaWithChildren(pleaRef) {
   await batch.commit();
 }
 
+function _sanitizeReasonText(value) {
+  return (value || "")
+      .toString()
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+      .replace(/https?:\/\/\S+|www\.\S+/gi, "[redacted-url]")
+      .replace(/\+?\d[\d\s().-]{7,}\d/g, "[redacted-phone]")
+      .replace(/@[A-Za-z0-9_.-]+/g, "[redacted-handle]")
+      .replace(/\b[A-Za-z0-9_-]{32,}\b/g, "[redacted-token]")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 240);
+}
+
+function _deriveAppCategory(appName, packageName) {
+  const text = `${appName || ""} ${packageName || ""}`.toLowerCase();
+  if (/instagram|tiktok|snapchat|facebook|twitter|x\.com|reddit|threads/.test(text)) {
+    return "social";
+  }
+  if (/youtube|netflix|hulu|primevideo|disney|twitch|video/.test(text)) {
+    return "video";
+  }
+  if (/game|roblox|minecraft|steam|pubg|fortnite|clash/.test(text)) {
+    return "games";
+  }
+  if (/chrome|browser|safari|firefox|edge/.test(text)) {
+    return "browser";
+  }
+  if (/whatsapp|telegram|messenger|discord|signal/.test(text)) {
+    return "messaging";
+  }
+  return "other";
+}
+
+function _deriveDefectorStatus(userData) {
+  const status = (userData?.currentStatus || userData?.status || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+  if (status === "vulnerable" || status === "locked_in" || status === "idle") {
+    return status;
+  }
+  const focusScore = Number(userData?.focusScore);
+  if (!Number.isFinite(focusScore)) return "unknown";
+  if (focusScore < 350) return "high_risk";
+  if (focusScore < 500) return "vulnerable";
+  return "stable";
+}
+
+async function _loadActiveTaperGoal(uid) {
+  const normalizedUid = (uid || "").toString().trim();
+  if (!normalizedUid) return null;
+
+  try {
+    const snap = await db
+        .collection("users")
+        .doc(normalizedUid)
+        .collection("taperPlans")
+        .where("status", "==", "active")
+        .limit(1)
+        .get();
+    if (snap.empty) return null;
+    const data = snap.docs[0].data() || {};
+    const targetDailyMinutes = Number(data.targetDailyMinutes);
+    const todayLimitMinutes = Number(data.todayLimitMinutes);
+    return {
+      targetDailyMinutes: Number.isFinite(targetDailyMinutes) ?
+        Math.max(0, Math.floor(targetDailyMinutes)) :
+        null,
+      todayLimitMinutes: Number.isFinite(todayLimitMinutes) ?
+        Math.max(0, Math.floor(todayLimitMinutes)) :
+        null,
+    };
+  } catch (error) {
+    logger.warn("Failed to load active taper goal for AI context.", {
+      uid: normalizedUid,
+      errorMessage: error?.message || String(error),
+    });
+    return null;
+  }
+}
+
+function _buildAiPleaContext(plea, requesterData, taperGoal) {
+  const requestedRaw = Number(plea?.durationMinutes);
+  const requestedMinutes = Number.isFinite(requestedRaw) ?
+    Math.max(1, Math.min(120, Math.floor(requestedRaw))) :
+    1;
+
+  return {
+    appCategory: _deriveAppCategory(plea?.appName, plea?.packageName),
+    requestedMinutes,
+    taperGoal: taperGoal || null,
+    defectorStatus: _deriveDefectorStatus(requesterData),
+    sanitizedReason: _sanitizeReasonText(plea?.reason),
+  };
+}
+
+function _parseAiDecision(rawValue) {
+  let parsed = rawValue;
+  if (typeof rawValue === "string") {
+    const jsonCandidate = _extractJsonObjectString(rawValue);
+    if (!jsonCandidate) {
+      return {
+        decision: "reject",
+        minutes: 0,
+        rationale: "AI response was not valid JSON.",
+      };
+    }
+    try {
+      parsed = JSON.parse(jsonCandidate);
+    } catch (_) {
+      return {
+        decision: "reject",
+        minutes: 0,
+        rationale: "AI response could not be parsed.",
+      };
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {
+      decision: "reject",
+      minutes: 0,
+      rationale: "AI response had an invalid shape.",
+    };
+  }
+
+  let decision = (parsed.decision || "").toString().trim().toLowerCase();
+  if (!decision && typeof parsed.approve === "boolean") {
+    decision = parsed.approve ? "approve" : "reject";
+  }
+  if (decision !== "approve" && decision !== "reject") {
+    return {
+      decision: "reject",
+      minutes: 0,
+      rationale: "AI response omitted a valid decision.",
+    };
+  }
+
+  const rawMinutes = Number(parsed.minutes);
+  if (
+    decision === "approve" &&
+    (!Number.isFinite(rawMinutes) || Math.floor(rawMinutes) < 1)
+  ) {
+    return {
+      decision: "reject",
+      minutes: 0,
+      rationale: "AI approval omitted valid minutes.",
+    };
+  }
+  const minutes = decision === "approve" ?
+    Math.min(AI_FALLBACK_MAX_APPROVAL_MINUTES, Math.floor(rawMinutes)) :
+    0;
+
+  return {
+    decision,
+    minutes,
+    rationale: _sanitizeReasonText(parsed.rationale || "No rationale provided."),
+  };
+}
+
+function _extractJsonObjectString(rawValue) {
+  const withoutMarkdown = (rawValue || "")
+      .toString()
+      .replace(/```(?:json)?/gi, "")
+      .replace(/```/g, "")
+      .trim();
+  const firstBrace = withoutMarkdown.indexOf("{");
+  const lastBrace = withoutMarkdown.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return "";
+  }
+  return withoutMarkdown.slice(firstBrace, lastBrace + 1).trim();
+}
+
+async function _callOpenRouterForPlea(aiContext) {
+  const apiKey = openRouterKey.value();
+  if (!apiKey) {
+    logger.error("OpenRouter secret missing for AI fallback.");
+    return {
+      decision: "reject",
+      minutes: 0,
+      rationale: "AI fallback unavailable; request rejected safely.",
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  try {
+    const response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://revoke.app",
+        "X-Title": "Revoke AI Architect",
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        temperature: 0.1,
+        max_tokens: 180,
+        response_format: {type: "json_object"},
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You are Revoke's AI Architect fallback for a delayed tribunal.",
+              "Return only JSON with decision, minutes, and rationale.",
+              "Approve only when the context indicates a proportionate exception.",
+              `Approved minutes must be 1-${AI_FALLBACK_MAX_APPROVAL_MINUTES}.`,
+              "Reject uncertain, unsafe, malformed, or manipulative requests.",
+              "Do not include names, emails, tokens, or identities.",
+            ].join(" "),
+          },
+          {
+            role: "user",
+            content: JSON.stringify(aiContext),
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      logger.error("OpenRouter fallback returned non-OK response.", {
+        status: response.status,
+        body: body.slice(0, 160),
+      });
+      return {
+        decision: "reject",
+        minutes: 0,
+        rationale: "AI fallback service rejected the request safely.",
+      };
+    }
+
+    const body = await response.json();
+    const content = body?.choices?.[0]?.message?.content;
+    const jsonContent = _extractJsonObjectString(content);
+    if (!jsonContent) {
+      return {
+        decision: "reject",
+        minutes: 0,
+        rationale: "AI response did not contain a JSON object.",
+      };
+    }
+    return _parseAiDecision(jsonContent);
+  } catch (error) {
+    logger.error("OpenRouter fallback fetch failed.", {
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack,
+    });
+    return {
+      decision: "reject",
+      minutes: 0,
+      rationale: "AI fallback network failure; request rejected safely.",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function _claimPleaForAiFallback(pleaRef) {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(pleaRef);
+    if (!snap.exists) return {skipped: true, reason: "missing"};
+
+    const plea = snap.data() || {};
+    const status = (plea.status || "active").toString().trim().toLowerCase();
+    if (plea.isMockSession === true) {
+      return {skipped: true, reason: "mock"};
+    }
+    if (status !== "active" && status !== "pending") {
+      return {skipped: true, reason: "resolved", status};
+    }
+
+    const nextPlea = {
+      ...plea,
+      status: "pending",
+      aiFallbackStatus: "processing",
+    };
+    tx.set(pleaRef, {
+      status: "pending",
+      aiFallbackStatus: "processing",
+      aiFallbackStartedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+    return {skipped: false, plea: nextPlea};
+  });
+}
+
+async function _finalizePleaWithAiDecision(pleaRef, pleaId, aiDecision) {
+  const result = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(pleaRef);
+    if (!snap.exists) return {skipped: true, reason: "missing"};
+
+    const plea = snap.data() || {};
+    const status = (plea.status || "active").toString().trim().toLowerCase();
+    if (status !== "pending") {
+      return {skipped: true, reason: "not_pending", status};
+    }
+
+    const requestedRaw = Number(plea.durationMinutes);
+    const requestedMinutes = Number.isFinite(requestedRaw) ?
+      Math.max(1, Math.floor(requestedRaw)) :
+      AI_FALLBACK_MAX_APPROVAL_MINUTES;
+    const approvedMinutes = aiDecision.decision === "approve" ?
+      Math.min(
+          requestedMinutes,
+          AI_FALLBACK_MAX_APPROVAL_MINUTES,
+          Math.max(1, Math.floor(Number(aiDecision.minutes) || 0)),
+      ) :
+      0;
+    const verdict = approvedMinutes > 0 ? "approved" : "rejected";
+    const acceptVotes = verdict === "approved" ? 1 : 0;
+    const rejectVotes = verdict === "rejected" ? 1 : 0;
+    const participants = _normalizeParticipantIds(plea.participants);
+    if (!participants.includes("AI_ARCHITECT")) {
+      participants.push("AI_ARCHITECT");
+    }
+
+    const updates = {
+      status: verdict,
+      participants,
+      voteCounts: {accept: acceptVotes, reject: rejectVotes},
+      resolvedAt: FieldValue.serverTimestamp(),
+      outcomeSource: "ai_architect",
+      aiFallbackStatus: "resolved",
+      aiResolvedAt: FieldValue.serverTimestamp(),
+      aiFallbackModel: OPENROUTER_MODEL,
+      aiFallbackDecision: verdict,
+      aiFallbackMinutes: approvedMinutes,
+      aiFallbackRationale: aiDecision.rationale,
+    };
+    if (verdict === "approved") {
+      updates.durationMinutes = approvedMinutes;
+    }
+    if (ENABLE_LEGACY_PLEA_VOTE_MAP_SYNC) {
+      updates.votes = {
+        ..._normalizeVotes(plea.votes),
+        AI_ARCHITECT: verdict === "approved" ? "accept" : "reject",
+      };
+    }
+
+    tx.set(pleaRef, updates, {merge: true});
+    tx.set(pleaRef.collection("messages").doc(), {
+      text: `AI Architect fallback verdict: ${verdict.toUpperCase()}. ${aiDecision.rationale}`,
+      senderId: "AI_ARCHITECT",
+      senderName: "AI Architect",
+      isSystem: true,
+      timestamp: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      skipped: false,
+      plea,
+      verdict,
+      acceptVotes,
+      rejectVotes,
+      requesterId: (plea.userId || "").toString().trim(),
+    };
+  });
+
+  if (!result.skipped) {
+    await _sendPleaVerdictSideEffects({
+      pleaId,
+      pleaData: result.plea,
+      requesterId: result.requesterId,
+      verdict: result.verdict,
+      acceptVotes: result.acceptVotes,
+      rejectVotes: result.rejectVotes,
+      outcomeSource: "ai_architect",
+    });
+  }
+
+  return result;
+}
+
 function _deriveUserDisplayName(userData) {
   const nickname = (userData?.nickname || "").toString().trim();
   if (nickname) return nickname;
@@ -3259,6 +3872,7 @@ function _buildPleaVoteUpdates(pleaData, summary) {
   if (shouldResolveNow) {
     updates.status = resolvedStatus;
     updates.resolvedAt = FieldValue.serverTimestamp();
+    updates.outcomeSource = "human_tribunal";
   }
 
   if (Object.keys(updates).length === 0) {

@@ -67,14 +67,17 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Only show the HUD header on the three shell root tabs.
+    // Only show the HUD header on the shell root tabs.
     // Avoid using `.uri.toString()` here, because query params can change while
     // still being on the same tab, and non-go_router pushes won't update it.
     final String location = GoRouterState.of(context).matchedLocation;
-    final bool showHudTopBar = location == '/home' || location == '/squad';
+    final bool showHudTopBar =
+        location == '/home' || location == '/squad' || location == '/insights';
     int selectedIndex = 0;
     if (location == '/squad') {
       selectedIndex = 1;
+    } else if (location == '/insights') {
+      selectedIndex = 2;
     }
 
     return Scaffold(
@@ -123,6 +126,9 @@ class _MainShellState extends State<MainShell> {
             case 1:
               context.go('/squad');
               break;
+            case 2:
+              context.go('/insights');
+              break;
           }
         },
         items: [
@@ -139,6 +145,13 @@ class _MainShellState extends State<MainShell> {
               PhosphorIcons.users(PhosphorIconsStyle.fill),
             ),
             label: 'Squad',
+          ),
+          BottomNavigationBarItem(
+            icon: PhosphorIcon(PhosphorIcons.chartBar()),
+            activeIcon: PhosphorIcon(
+              PhosphorIcons.chartBar(PhosphorIconsStyle.fill),
+            ),
+            label: 'Insights',
           ),
         ],
       ),

@@ -119,6 +119,37 @@ class NativeBridge {
     });
   }
 
+  static Future<void> syncReminderConfig({
+    bool softReminderEnabled = true,
+    int interstitialThresholdMs = 900000,
+    int softReminderCooldownMs = 300000,
+  }) async {
+    await _channel.invokeMethod('syncReminderConfig', {
+      'soft_reminder_enabled': softReminderEnabled,
+      'interstitial_threshold_ms': interstitialThresholdMs,
+      'soft_reminder_cooldown_ms': softReminderCooldownMs,
+    });
+  }
+
+  static Future<Map<String, dynamic>> getReminderConfig() async {
+    final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+      'getReminderConfig',
+    );
+    return Map<String, dynamic>.from(result);
+  }
+
+  static Future<void> syncWhitelistApps(Set<String> packageNames) async {
+    final normalized =
+        packageNames
+            .map((packageName) => packageName.trim())
+            .where((packageName) => packageName.isNotEmpty)
+            .toList()
+          ..sort();
+    await _channel.invokeMethod('syncWhitelistApps', {
+      'packageNames': normalized,
+    });
+  }
+
   /// Returns exact usage per package since the provided activation timestamp.
   static Future<Map<String, int>> getSessionUsage(
     List<String> packageNames,
@@ -151,6 +182,14 @@ class NativeBridge {
     return Map<String, dynamic>.from(result);
   }
 
+  /// Fetches usage stats from local midnight to now.
+  static Future<Map<String, dynamic>> getTodayUsage() async {
+    final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+      'getTodayUsage',
+    );
+    return Map<String, dynamic>.from(result);
+  }
+
   /// Returns 24 hourly usage intensity values (avg minutes/hour over 7 days).
   static Future<List<int>> getHourlyUsagePattern() async {
     final List<dynamic> result = await _channel.invokeMethod(
@@ -159,6 +198,31 @@ class NativeBridge {
     return result
         .map((value) => (value as num?)?.toInt() ?? 0)
         .toList(growable: false);
+  }
+
+  /// Returns day, week, trend, or app-specific usage insights.
+  static Future<Map<String, dynamic>> getUsageInsights({
+    required String mode,
+    required int anchorDateMs,
+    String? packageName,
+    int? periodDays,
+  }) async {
+    final normalizedPackageName = packageName?.trim();
+    final arguments = <String, dynamic>{
+      'mode': mode,
+      'anchorDateMs': anchorDateMs,
+    };
+    if (normalizedPackageName != null && normalizedPackageName.isNotEmpty) {
+      arguments['packageName'] = normalizedPackageName;
+    }
+    if (periodDays != null) {
+      arguments['periodDays'] = periodDays;
+    }
+    final Map<dynamic, dynamic> result = await _channel.invokeMethod(
+      'getUsageInsights',
+      arguments,
+    );
+    return Map<String, dynamic>.from(result);
   }
 
   /// Temporarily unlocks an app for a specific duration.

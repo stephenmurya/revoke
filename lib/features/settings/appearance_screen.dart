@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../core/services/settings_sync_service.dart';
 import '../../core/services/theme_service.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -29,12 +32,12 @@ class AppearanceScreen extends StatelessWidget {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          padding: const EdgeInsets.fromLTRB(8, 12, 8, 24),
           children: [
             _PreviewCard(scheme: scheme),
             const SizedBox(height: 16),
             _Section(
-              title: 'Regime Mode',
+              title: 'Schedule Mode',
               subtitle: 'Day Shift vs Night Shift. Or obey the system.',
               child: _ThemeModePicker(scheme: scheme),
             ),
@@ -160,6 +163,15 @@ class _ThemeModePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final svc = ThemeService.instance;
 
+    void setMode(ThemeMode mode) {
+      unawaited(svc.setThemeMode(mode));
+      unawaited(
+        SettingsSyncService.syncThemeToCloud(
+          themeMode: mode,
+        ).catchError((_) {}),
+      );
+    }
+
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: svc.themeMode,
       builder: (context, mode, _) {
@@ -171,7 +183,7 @@ class _ThemeModePicker extends StatelessWidget {
               subtitle: 'Obey device settings.',
               icon: PhosphorIcons.slidersHorizontal(),
               selected: mode == ThemeMode.system,
-              onTap: () => svc.setThemeMode(ThemeMode.system),
+              onTap: () => setMode(ThemeMode.system),
             ),
             const SizedBox(height: 10),
             _ModeCard(
@@ -180,7 +192,7 @@ class _ThemeModePicker extends StatelessWidget {
               subtitle: 'Light mode.',
               icon: PhosphorIcons.sun(),
               selected: mode == ThemeMode.light,
-              onTap: () => svc.setThemeMode(ThemeMode.light),
+              onTap: () => setMode(ThemeMode.light),
             ),
             const SizedBox(height: 10),
             _ModeCard(
@@ -189,7 +201,7 @@ class _ThemeModePicker extends StatelessWidget {
               subtitle: 'Dark mode.',
               icon: PhosphorIcons.moonStars(),
               selected: mode == ThemeMode.dark,
-              onTap: () => svc.setThemeMode(ThemeMode.dark),
+              onTap: () => setMode(ThemeMode.dark),
             ),
           ],
         );
@@ -299,6 +311,15 @@ class _AccentPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final svc = ThemeService.instance;
 
+    void setAccent(Color color) {
+      unawaited(svc.setAccentColor(color));
+      unawaited(
+        SettingsSyncService.syncThemeToCloud(
+          accentColor: color,
+        ).catchError((_) {}),
+      );
+    }
+
     return ValueListenableBuilder<Color>(
       valueListenable: svc.accentColor,
       builder: (context, selectedAccent, _) {
@@ -313,7 +334,7 @@ class _AccentPicker extends StatelessWidget {
                 selected: color.toARGB32() == selectedAccent.toARGB32(),
                 label:
                     AppearanceScreen._accentNames[color.toARGB32()] ?? 'Accent',
-                onTap: () => svc.setAccentColor(color),
+                onTap: () => setAccent(color),
               ),
           ],
         );

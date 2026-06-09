@@ -35,7 +35,7 @@ class ThemeService {
     final prefs = await SharedPreferences.getInstance();
 
     final modeRaw = prefs.getString(_kThemeMode);
-    themeMode.value = _parseThemeMode(modeRaw) ?? ThemeMode.system;
+    themeMode.value = parseThemeMode(modeRaw) ?? ThemeMode.system;
 
     final accentRaw = prefs.getInt(_kAccentColor);
     if (accentRaw != null) {
@@ -46,7 +46,7 @@ class ThemeService {
   Future<void> setThemeMode(ThemeMode mode) async {
     themeMode.value = mode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kThemeMode, _encodeThemeMode(mode));
+    await prefs.setString(_kThemeMode, encodeThemeMode(mode));
   }
 
   Future<void> setAccentColor(Color color) async {
@@ -55,7 +55,7 @@ class ThemeService {
     await prefs.setInt(_kAccentColor, color.toARGB32());
   }
 
-  static String _encodeThemeMode(ThemeMode mode) {
+  static String encodeThemeMode(ThemeMode mode) {
     switch (mode) {
       case ThemeMode.system:
         return 'system';
@@ -66,7 +66,7 @@ class ThemeService {
     }
   }
 
-  static ThemeMode? _parseThemeMode(String? raw) {
+  static ThemeMode? parseThemeMode(String? raw) {
     switch (raw) {
       case 'system':
         return ThemeMode.system;

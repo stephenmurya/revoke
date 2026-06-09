@@ -8,23 +8,29 @@ import android.os.Build
 import android.os.Process
 
 object UsageEventsSessionCalculator {
+    private const val SESSION_LOOKBACK_MS = 24L * 60L * 60L * 1000L
+
     fun getSessionUsage(
         context: Context,
         packageNames: Collection<String>,
         activationTimestamp: Long,
         nowMs: Long = System.currentTimeMillis(),
     ): Map<String, Long> {
-        val normalizedPackages =
+        val requestedPackages =
             packageNames
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .toSet()
-        val usageByPackage = normalizedPackages.associateWith { 0L }.toMutableMap()
-        if (normalizedPackages.isEmpty()) return usageByPackage
+        val trackedPackages =
+            requestedPackages
+                .filterNot { EnforcementEngine.isWhitelistedPackage(context, it) }
+                .toSet()
+        val usageByPackage = requestedPackages.associateWith { 0L }.toMutableMap()
+        if (trackedPackages.isEmpty()) return usageByPackage
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return usageByPackage
         if (!hasUsageStatsPermission(context)) return usageByPackage
 
-        val startMs = activationTimestamp.coerceAtLeast(0L)
+        val startMs = effectiveDailyStartMs(activationTimestamp, nowMs)
         if (startMs <= 0L || nowMs <= startMs) return usageByPackage
 
         val usageStatsManager =
@@ -32,14 +38,15 @@ object UsageEventsSessionCalculator {
                 ?: return usageByPackage
 
         return try {
-            val events = usageStatsManager.queryEvents(startMs, nowMs)
+            val queryStartMs = (startMs - SESSION_LOOKBACK_MS).coerceAtLeast(0L)
+            val events = usageStatsManager.queryEvents(queryStartMs, nowMs)
             val event = UsageEvents.Event()
             val lastForegroundTime = mutableMapOf<String, Long>()
 
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 val packageName = event.packageName?.trim().orEmpty()
-                if (!normalizedPackages.contains(packageName)) continue
+                if (!trackedPackages.contains(packageName)) continue
 
                 when (event.eventType) {
                     UsageEvents.Event.MOVE_TO_FOREGROUND,
@@ -82,5 +89,21 @@ object UsageEventsSessionCalculator {
                 context.packageName,
             )
         return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    fun effectiveDailyStartMs(
+        activationTimestamp: Long,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Long {
+        val todayStart =
+            java.util.Calendar.getInstance().apply {
+                timeInMillis = nowMs
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        val safeActivation = activationTimestamp.coerceAtLeast(0L)
+        return maxOf(safeActivation, todayStart)
     }
 }

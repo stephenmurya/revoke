@@ -28,3 +28,13 @@ data class BlockPresentation(
     val attemptsToday: Int = 0,
     val stats: List<BlockStatChip> = emptyList(),
 )
+
+data class ReminderPresentation(
+    val appName: String,
+    val packageName: String,
+    val appIcon: Drawable?,
+    val regimeName: String,
+    val usedMs: Long,
+    val limitMs: Long,
+    val remainingMs: Long,
+)

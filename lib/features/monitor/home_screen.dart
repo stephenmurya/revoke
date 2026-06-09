@@ -6,11 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/models/schedule_model.dart';
+import '../../core/models/taper_plan_model.dart';
 import '../../core/native_bridge.dart';
 import '../../core/services/app_discovery_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/schedule_service.dart';
 import '../../core/services/squad_service.dart';
+import '../../core/services/taper_plan_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/schedule_block_validator.dart';
 import '../../core/utils/theme_extensions.dart';
@@ -39,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Timer? _usageLimitRefreshTimer;
   Map<String, _UsageLimitStatus> _usageLimitStatuses =
       const <String, _UsageLimitStatus>{};
+  TaperPlanModel? _activeTaperPlan;
 
   @override
   void initState() {
@@ -48,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _refreshTemporaryApprovals();
     _schedules = widget.schedules;
     _isLoading = false;
+    unawaited(_loadTaperPlan());
     unawaited(_refreshUsageLimitStatuses());
     AuthService.validateSession();
 
@@ -81,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _checkPermissions();
       _refreshTemporaryApprovals();
       _loadSchedules();
+      unawaited(_loadTaperPlan());
       unawaited(_refreshUsageLimitStatuses());
     }
   }
@@ -175,6 +180,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _schedules = const [];
         _isLoading = false;
         _usageLimitStatuses = const <String, _UsageLimitStatus>{};
+      });
+    }
+  }
+
+  Future<void> _loadTaperPlan() async {
+    try {
+      final plan = await TaperPlanService.getActivePlan();
+      if (!mounted) return;
+      setState(() {
+        _activeTaperPlan = plan;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _activeTaperPlan = null;
       });
     }
   }
@@ -288,148 +308,117 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   String _permissionAlertTitle() {
     if (_isAccessibilityMissing) {
-      return 'Accessibility is turned off';
+      return 'Enable Accessibility for instant blocking';
     }
     if (_isUsageStatsMissing) {
-      return 'Usage Access is missing';
+      return 'Enable Usage Access for accurate limits';
     }
     if (_isOverlayMissing) {
-      return 'Overlay permission is missing';
+      return 'Enable overlay for blocking screens';
     }
     if (_isExactAlarmMissing) {
-      return 'Exact Alarms are missing';
+      return 'Enable alarms for scheduled blocks';
     }
-    return 'Permissions need attention';
+    return 'Finish setup for reliable blocking';
   }
 
   String _permissionAlertBody() {
-    if (_isAccessibilityMissing) {
-      return 'Revoke loses its instant fast path without Accessibility. Turn it back on to keep blocking sharp and immediate.';
-    }
-    if (_isUsageStatsMissing) {
-      return 'Revoke cannot reliably detect blocked apps or calculate usage limits until Usage Access is restored.';
-    }
-    if (_isOverlayMissing) {
-      return 'Revoke can detect distractions, but it cannot cover them with the blocker until overlay access is back.';
-    }
-    if (_isExactAlarmMissing) {
-      return 'Scheduled regimes may start late unless Exact Alarms is enabled again.';
-    }
-    return 'Revoke is missing a required Android permission. Open the permissions flow to restore enforcement.';
+    return _permissionAlertTitle();
   }
 
   Widget _buildPermissionAlertCard() {
-    final alertColor = _isUsageStatsMissing || _isAccessibilityMissing
-        ? context.colors.danger
-        : context.colors.warning;
+    final alertColor = context.colors.warning;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () async {
-            await context.push('/permissions');
-            if (!mounted) return;
-            _checkPermissions();
-          },
-          child: Ink(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: context.scheme.surface,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: alertColor.withValues(alpha: 0.45),
-                width: 1.4,
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          await context.push('/permissions');
+          if (!mounted) return;
+          _checkPermissions();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: alertColor.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: alertColor.withValues(alpha: 0.28)),
+          ),
+          child: Row(
+            children: [
+              Icon(PhosphorIcons.warningCircle(), size: 18, color: alertColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _permissionAlertBody(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.smMedium.copyWith(
+                    color: context.scheme.onSurface,
+                  ),
+                ),
               ),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  alertColor.withValues(alpha: 0.16),
-                  context.scheme.surface,
+              const SizedBox(width: 8),
+              Text(
+                'Enable',
+                style: AppTheme.xsBold.copyWith(color: context.scheme.primary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaperCtaCard() {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: _showTaperSetupSheet,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: context.scheme.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: context.scheme.primary.withValues(alpha: 0.22),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: context.scheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                PhosphorIcons.trendDown(),
+                color: context.scheme.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Build Daily Goal Plan', style: AppTheme.baseMedium),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Create a daily limit schedule from your 7-day average.',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.smRegular.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
                 ],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: alertColor.withValues(alpha: 0.10),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: alertColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    PhosphorIcons.warningCircle(),
-                    color: alertColor,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: alertColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'ACTION REQUIRED',
-                          style: AppTheme.xsBold.copyWith(color: alertColor),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _permissionAlertTitle(),
-                        style: AppTheme.lgBold.copyWith(
-                          color: context.scheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _permissionAlertBody(),
-                        style: AppTheme.baseRegular.copyWith(
-                          color: context.colors.textSecondary,
-                          height: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Text(
-                            'Fix permissions',
-                            style: AppTheme.smBold.copyWith(color: alertColor),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(
-                            PhosphorIcons.caretRight(),
-                            size: 16,
-                            color: alertColor,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+            Icon(PhosphorIcons.caretRight(), color: context.scheme.primary),
+          ],
         ),
       ),
     );
@@ -444,7 +433,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: CircularProgressIndicator(color: context.scheme.primary),
               )
             : RefreshIndicator(
-                onRefresh: _loadSchedules,
+                onRefresh: () async {
+                  await _loadSchedules();
+                  await _loadTaperPlan();
+                },
                 color: context.scheme.primary,
                 child: CustomScrollView(
                   slivers: [
@@ -455,19 +447,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         children: [
                           const FocusScoreCard(),
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildSectionHeader('CURRENTLY RESTRICTED'),
-                                const SizedBox(height: 16),
+                                if (_activeTaperPlan == null) ...[
+                                  _buildTaperCtaCard(),
+                                  const SizedBox(height: 10),
+                                ],
+                                const SizedBox(height: 18),
+                                _buildSectionHeader('SCHEDULES & APPS'),
+                                const SizedBox(height: 10),
                                 _buildHitlistSection(),
-                                const SizedBox(height: 32),
+                                const SizedBox(height: 18),
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    _buildSectionHeader('ACTIVE REGIMES'),
+                                    _buildSectionHeader('ACTIVE SCHEDULES'),
                                     Text(
                                       '${_schedules.where((s) => s.isActive).length}/${_schedules.length}',
                                       style: AppTheme.smMedium.copyWith(
@@ -518,6 +515,210 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       title,
       style: AppTheme.smBold.copyWith(color: context.scheme.primary),
     );
+  }
+
+  String _formatMinutes(int minutes) {
+    final safe = minutes.clamp(0, 1440 * 7).toInt();
+    final hours = safe ~/ 60;
+    final mins = safe % 60;
+    if (hours > 0 && mins > 0) return '${hours}h ${mins}m';
+    if (hours > 0) return '${hours}h';
+    return '${mins}m';
+  }
+
+  int _deriveTaperBaselineMinutes({
+    required Map<String, dynamic> reality,
+    required Set<String> targetPackages,
+  }) {
+    final rawTopApps = (reality['topApps'] as List?) ?? const [];
+    var targetUsageMs = 0.0;
+    for (final raw in rawTopApps) {
+      if (raw is! Map) continue;
+      final packageName = (raw['packageName'] as String?)?.trim() ?? '';
+      if (!targetPackages.contains(packageName)) continue;
+      targetUsageMs += ((raw['usageMs'] as num?) ?? 0).toDouble();
+    }
+    if (targetUsageMs > 0) {
+      return (targetUsageMs / 7 / 60000).round().clamp(1, 1440).toInt();
+    }
+    final totalAvgDailyHours = ((reality['totalAvgDailyHours'] as num?) ?? 0)
+        .toDouble();
+    return (totalAvgDailyHours * 60).round().clamp(0, 1440).toInt();
+  }
+
+  Future<void> _showTaperSetupSheet() async {
+    final targetPackages = _activeHitlist;
+    if (targetPackages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Create a schedule before starting a plan.'),
+        ),
+      );
+      return;
+    }
+
+    Map<String, dynamic> reality;
+    List<int> hourly;
+    try {
+      reality = await NativeBridge.getRealityCheck();
+      hourly = await NativeBridge.getHourlyUsagePattern();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not read usage data: $e')));
+      return;
+    }
+
+    final rawTopApps = (reality['topApps'] as List?) ?? const [];
+    final baselineMinutes = _deriveTaperBaselineMinutes(
+      reality: reality,
+      targetPackages: targetPackages,
+    );
+    final hasSevenDaySignal =
+        baselineMinutes >= 5 &&
+        rawTopApps.isNotEmpty &&
+        hourly.fold<int>(0, (sum, value) => sum + value) > 0;
+    if (!hasSevenDaySignal) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Need 7 days of usage data before creating a plan.'),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    var targetMinutes = (baselineMinutes * 0.55)
+        .round()
+        .clamp(5, baselineMinutes)
+        .toInt();
+    var durationDays = 14;
+
+    final accepted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final sliderMax = baselineMinutes.clamp(5, 1440).toDouble();
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 20,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Daily Goal Plan', style: AppTheme.h3),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Baseline ${_formatMinutes(baselineMinutes)} per day across ${targetPackages.length} restricted apps.',
+                      style: AppTheme.smRegular.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Daily goal: ${_formatMinutes(targetMinutes)}',
+                      style: AppTheme.baseMedium,
+                    ),
+                    Slider(
+                      value: targetMinutes.toDouble(),
+                      min: 5,
+                      max: sliderMax,
+                      divisions: (baselineMinutes - 5).clamp(1, 80).toInt(),
+                      label: _formatMinutes(targetMinutes),
+                      onChanged: (value) {
+                        setSheetState(() {
+                          targetMinutes = value
+                              .round()
+                              .clamp(5, baselineMinutes)
+                              .toInt();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Duration', style: AppTheme.baseMedium),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: <int>[7, 14, 21, 30]
+                          .map(
+                            (days) => ChoiceChip(
+                              label: Text('$days days'),
+                              selected: durationDays == days,
+                              onSelected: (_) {
+                                setSheetState(() => durationDays = days);
+                              },
+                            ),
+                          )
+                          .toList(growable: false),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(sheetContext, false),
+                            style: AppTheme.secondaryButtonStyle,
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(sheetContext, true),
+                            style: AppTheme.primaryButtonStyle,
+                            child: const Text('Accept plan'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (accepted != true) return;
+
+    final plan = TaperPlanService.buildLinearPlan(
+      targetApps: targetPackages.toList(),
+      baselineDailyMinutes: baselineMinutes,
+      targetDailyMinutes: targetMinutes,
+      durationDays: durationDays,
+    );
+    try {
+      await TaperPlanService.savePlanLocalFirst(plan);
+      if (!mounted) return;
+      setState(() {
+        _activeTaperPlan = plan;
+      });
+      await _loadSchedules();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Plan saved on this device.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save plan: $e')));
+    }
   }
 
   bool _isMinuteInsideBlock(ScheduleBlock block, int minuteOfDay) {
@@ -706,9 +907,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       await _loadSchedules();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Regime enforcement synced now.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Schedule synced now.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -736,7 +937,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Regime duplicated.')));
+      ).showSnackBar(const SnackBar(content: Text('Schedule duplicated.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -776,15 +977,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 children: [
                   Text(
                     deleteMode
-                        ? 'Delete regime via tribunal'
+                        ? 'Delete schedule via tribunal'
                         : 'Beg for a break',
                     style: AppTheme.h3,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     deleteMode
-                        ? 'Explain why this regime should be removed.'
-                        : 'Request temporary relief from this regime.',
+                        ? 'Explain why this schedule should be removed.'
+                        : 'Request temporary relief from this schedule.',
                     style: AppTheme.smRegular.copyWith(
                       color: context.colors.textSecondary,
                     ),
@@ -816,7 +1017,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     decoration: AppTheme.defaultInputDecoration(
                       labelText: 'Reason',
                       hintText: deleteMode
-                          ? 'Why should this regime be deleted?'
+                          ? 'Why should this schedule be deleted?'
                           : 'Why do you need a break?',
                     ),
                   ),
@@ -1039,7 +1240,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _loadSchedules();
       },
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
         decoration: BoxDecoration(
           color: context.scheme.surface,
@@ -1155,7 +1356,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    '$dayLabel • $blockCount',
+                    '$dayLabel - $blockCount',
                     style: AppTheme.xsMedium.copyWith(
                       color: context.colors.textSecondary,
                     ),
@@ -1218,7 +1419,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       child: Text(
                         packageSummary.isEmpty
                             ? AppInfo.ghostAppName
-                            : '${AppInfo.ghostAppName} • $packageSummary',
+                            : '${AppInfo.ghostAppName} - $packageSummary',
                         style: AppTheme.xsMedium.copyWith(
                           color: context.colors.textSecondary,
                           fontStyle: FontStyle.italic,
@@ -1316,7 +1517,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildEmptyState() {
     return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(8.0),
       child: Center(
         child: Text(
           'TAP + TO START THE GRIND',

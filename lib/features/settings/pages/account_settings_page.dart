@@ -15,7 +15,7 @@ class AccountSettingsPage extends StatelessWidget {
         title: Text('Account & Profile', style: context.text.titleLarge),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        padding: const EdgeInsets.fromLTRB(8, 12, 8, 28),
         children: [
           SettingsOptionTile(
             title: 'Profile Details',

@@ -212,7 +212,6 @@ class AppCategorizer {
     'doctor',
     'clinic',
     'hospital',
-    'therapy',
     'mental',
     'fasting',
     'diet',

@@ -109,6 +109,11 @@ service cloud.firestore {
         allow write: if isAdmin() || isSelf(userId);
       }
 
+      // Local-first taper plans sync only to the owning user's namespace.
+      match /taperPlans/{planId} {
+        allow read, write: if isAdmin() || isSelf(userId);
+      }
+
       // Denormalized squad-visible rap sheet summary (server-written).
       match /rapSheet/{docId} {
         allow read: if isAdmin() ||
@@ -169,9 +174,8 @@ service cloud.firestore {
           (canAccessPleaData(get(/databases/$(database)/documents/pleas/$(pleaId)).data) ||
             isMockPlea(get(/databases/$(database)/documents/pleas/$(pleaId)).data)));
 
-        // Client message writes are disabled; normal users must send via callable.
-        // Admin clients may still write system messages directly if needed.
-        allow create: if isAdmin();
+        // Client message writes are disabled; users and admins must use callables.
+        allow create: if false;
         allow update, delete: if false;
       }
 

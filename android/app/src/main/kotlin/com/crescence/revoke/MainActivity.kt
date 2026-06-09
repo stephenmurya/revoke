@@ -161,6 +161,21 @@ class MainActivity : FlutterActivity() {
                         call.argument<Number>("nextWakeupMs")?.toLong() ?: 0L
                     result.success(syncSchedulesToNative(schedulesJson, nextWakeupMs))
                 }
+                "syncReminderConfig" -> {
+                    result.success(syncReminderConfigToNative(call.arguments as? Map<*, *>))
+                }
+                "syncWhitelistApps" -> {
+                    val rawPackages = call.argument<List<*>>("packageNames") ?: emptyList<Any?>()
+                    val packageNames =
+                        rawPackages
+                            .mapNotNull { it?.toString()?.trim() }
+                            .filter { it.isNotEmpty() }
+                            .toSet()
+                    result.success(syncWhitelistAppsToNative(packageNames))
+                }
+                "getReminderConfig" -> {
+                    result.success(getReminderConfigFromNative())
+                }
                 "getSessionUsage" -> {
                     val rawPackages = call.argument<List<*>>("packageNames") ?: emptyList<Any?>()
                     val packageNames =
@@ -269,11 +284,43 @@ class MainActivity : FlutterActivity() {
                         }
                     }.start()
                 }
+                "getTodayUsage" -> {
+                    Thread {
+                        val usageData = getTodayUsage()
+                        runOnUiThread {
+                            result.success(usageData)
+                        }
+                    }.start()
+                }
                 "getHourlyUsagePattern" -> {
                     Thread {
                         val pattern = getHourlyUsagePattern()
                         runOnUiThread {
                             result.success(pattern)
+                        }
+                    }.start()
+                }
+                "getUsageInsights" -> {
+                    val args = call.arguments as? Map<*, *>
+                    val mode = args?.get("mode")?.toString() ?: "day"
+                    val anchorDateMs =
+                        (args?.get("anchorDateMs") as? Number)?.toLong()
+                            ?: System.currentTimeMillis()
+                    val insightPackageName =
+                        args?.get("packageName")?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                    val periodDays =
+                        (args?.get("periodDays") as? Number)?.toInt() ?: 14
+                    Thread {
+                        val insights =
+                            UsageInsightsCalculator.getUsageInsights(
+                                context = this,
+                                mode = mode,
+                                anchorDateMs = anchorDateMs,
+                                packageName = insightPackageName,
+                                periodDays = periodDays,
+                            )
+                        runOnUiThread {
+                            result.success(insights)
                         }
                     }.start()
                 }
@@ -401,6 +448,53 @@ class MainActivity : FlutterActivity() {
         } else {
             true
         }
+    }
+
+    private fun syncReminderConfigToNative(args: Map<*, *>?): Map<String, Any> {
+        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+        val softReminderEnabled =
+            (args?.get("soft_reminder_enabled") as? Boolean)
+                ?: prefs.getBoolean("soft_reminder_enabled", true)
+        val interstitialThresholdMs =
+            (args?.get("interstitial_threshold_ms") as? Number)?.toLong()
+                ?: prefs.getLong("interstitial_threshold_ms", 900_000L)
+        val softReminderCooldownMs =
+            (args?.get("soft_reminder_cooldown_ms") as? Number)?.toLong()
+                ?: prefs.getLong("soft_reminder_cooldown_ms", 300_000L)
+
+        prefs.edit()
+            .putBoolean("soft_reminder_enabled", softReminderEnabled)
+            .putLong("interstitial_threshold_ms", interstitialThresholdMs.coerceAtLeast(0L))
+            .putLong("soft_reminder_cooldown_ms", softReminderCooldownMs.coerceAtLeast(0L))
+            .apply()
+
+        return getReminderConfigFromNative()
+    }
+
+    private fun getReminderConfigFromNative(): Map<String, Any> {
+        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+        return mapOf(
+            "soft_reminder_enabled" to prefs.getBoolean("soft_reminder_enabled", true),
+            "interstitial_threshold_ms" to prefs.getLong("interstitial_threshold_ms", 900_000L),
+            "soft_reminder_cooldown_ms" to prefs.getLong("soft_reminder_cooldown_ms", 300_000L),
+        )
+    }
+
+    private fun syncWhitelistAppsToNative(packageNames: Set<String>): Map<String, Any> {
+        val normalized =
+            packageNames
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+        getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+            .edit()
+            .putStringSet("whitelist_packages", normalized)
+            .apply()
+        EnforcementEngine.reloadIgnoredPackages(this)
+        return mapOf(
+            "packageNames" to normalized.toList().sorted(),
+            "count" to normalized.size,
+        )
     }
 
     private fun dispatchScheduleSyncToRunningService(intent: Intent) {
@@ -576,8 +670,7 @@ class MainActivity : FlutterActivity() {
 
         for ((pkg, usage) in stats) {
             val timeInForeground = usage.totalTimeInForeground
-            // Exclude common system apps and Revoke itself
-            if (timeInForeground > 30000 && pkg != packageName && !pkg.contains("launcher") && !pkg.contains("systemui")) {
+            if (timeInForeground > 30000 && !_shouldExcludeUsagePackage(pkg)) {
                 totalTimeMs += timeInForeground
                 appUsageList.add(mapOf(
                     "packageName" to pkg,
@@ -594,6 +687,99 @@ class MainActivity : FlutterActivity() {
             "totalAvgDailyHours" to (totalTimeMs / (1000 * 60 * 60 * 7.0)),
             "topApps" to topApps
         )
+    }
+
+    private fun getTodayUsage(): Map<String, Any> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return mapOf(
+                "dayStartMs" to startOfTodayMs(),
+                "generatedAtMs" to System.currentTimeMillis(),
+                "totalUsageMs" to 0L,
+                "totalMinutes" to 0,
+                "topApps" to emptyList<Map<String, Any>>()
+            )
+        }
+
+        val endMs = System.currentTimeMillis()
+        val startMs = startOfTodayMs()
+        val usageByPackage = calculateUsageByPackage(startMs, endMs)
+        val appUsageList =
+            usageByPackage
+                .filter { (_, usageMs) -> usageMs > 30_000L }
+                .map { (pkg, usageMs) ->
+                    mapOf(
+                        "packageName" to pkg,
+                        "usageMs" to usageMs
+                    )
+                }
+                .sortedByDescending { it["usageMs"] as Long }
+
+        val totalUsageMs = appUsageList.sumOf { it["usageMs"] as Long }
+        return mapOf(
+            "dayStartMs" to startMs,
+            "generatedAtMs" to endMs,
+            "totalUsageMs" to totalUsageMs,
+            "totalMinutes" to ((totalUsageMs + 59_999L) / 60_000L).toInt().coerceIn(0, 1440),
+            "topApps" to appUsageList.take(10)
+        )
+    }
+
+    private fun startOfTodayMs(): Long =
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+    private fun calculateUsageByPackage(startMs: Long, endMs: Long): Map<String, Long> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return emptyMap()
+        if (endMs <= startMs) return emptyMap()
+
+        val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val queryStartMs = (startMs - 24L * 60L * 60L * 1000L).coerceAtLeast(0L)
+        val events = usageStatsManager.queryEvents(queryStartMs, endMs)
+        val event = UsageEvents.Event()
+        val usageByPackage = mutableMapOf<String, Long>()
+        var activePackage: String? = null
+        var activeStartMs = -1L
+
+        fun closeActive(endTimeMs: Long) {
+            val pkg = activePackage
+            if (!pkg.isNullOrBlank() && activeStartMs >= startMs && endTimeMs > activeStartMs) {
+                usageByPackage[pkg] = (usageByPackage[pkg] ?: 0L) + (endTimeMs - activeStartMs)
+            }
+            activePackage = null
+            activeStartMs = -1L
+        }
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val pkg = event.packageName?.trim().orEmpty()
+            if (pkg.isEmpty() || _shouldExcludeUsagePackage(pkg)) continue
+            val eventTime = event.timeStamp.coerceIn(startMs, endMs)
+
+            when (event.eventType) {
+                UsageEvents.Event.MOVE_TO_FOREGROUND,
+                UsageEvents.Event.ACTIVITY_RESUMED -> {
+                    if (activePackage != pkg || activeStartMs <= 0L) {
+                        closeActive(eventTime)
+                        activePackage = pkg
+                        activeStartMs = eventTime
+                    }
+                }
+                UsageEvents.Event.MOVE_TO_BACKGROUND,
+                UsageEvents.Event.ACTIVITY_PAUSED,
+                UsageEvents.Event.ACTIVITY_STOPPED -> {
+                    if (activePackage == pkg) {
+                        closeActive(eventTime)
+                    }
+                }
+            }
+        }
+
+        closeActive(endMs)
+        return usageByPackage
     }
 
     private fun getHourlyUsagePattern(): List<Int> {
@@ -702,6 +888,7 @@ class MainActivity : FlutterActivity() {
         val normalized = packageName.trim().lowercase()
         if (normalized.isEmpty()) return true
         if (normalized == this.packageName.lowercase()) return true
+        if (EnforcementEngine.isWhitelistedPackage(this, packageName.trim())) return true
         if (normalized.contains("launcher")) return true
         if (normalized.contains("systemui")) return true
         return false

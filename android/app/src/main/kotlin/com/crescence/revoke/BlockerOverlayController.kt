@@ -52,6 +52,12 @@ object BlockerOverlayController {
     private var overlayView: View? = null
 
     @Volatile
+    private var reminderView: View? = null
+
+    @Volatile
+    private var currentReminderKey: String? = null
+
+    @Volatile
     private var currentBlockedPackage: String? = null
 
     @Volatile
@@ -84,6 +90,7 @@ object BlockerOverlayController {
                     appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
                         ?: return@post
 
+                removeReminderView(windowManager)
                 pulseAnimator?.cancel()
                 pulseAnimator = null
 
@@ -175,6 +182,134 @@ object BlockerOverlayController {
         }
     }
 
+    fun showSoftReminder(context: Context, presentation: ReminderPresentation, source: String) {
+        if (overlayView != null) return
+        val appContext = context.applicationContext
+        val key = "soft:${presentation.packageName}"
+        if (reminderView != null && currentReminderKey == key) return
+
+        handler.post {
+            try {
+                val windowManager =
+                    appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                        ?: return@post
+                removeReminderView(windowManager)
+                val root = buildSoftReminderView(appContext, presentation)
+                val params =
+                    WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        } else {
+                            WindowManager.LayoutParams.TYPE_PHONE
+                        },
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                        PixelFormat.TRANSLUCENT,
+                    )
+                params.gravity = Gravity.TOP or Gravity.START
+                windowManager.addView(root, params)
+                reminderView = root
+                currentReminderKey = key
+                root.alpha = 0f
+                root.animate().alpha(1f).setDuration(120L).start()
+                android.util.Log.d("RevokeOverlay", "Showing soft reminder from $source")
+            } catch (error: Exception) {
+                AppMonitorCoordinator.recordNonFatal(
+                    context = appContext,
+                    source = "BlockerOverlayController",
+                    message = "Failed to render soft reminder.",
+                    error = error,
+                    extraKeys = mapOf("trigger" to source, "packageName" to presentation.packageName),
+                )
+            }
+        }
+    }
+
+    fun showInterstitialReminder(context: Context, presentation: ReminderPresentation, source: String) {
+        if (overlayView != null) return
+        val appContext = context.applicationContext
+        val key = "interstitial:${presentation.packageName}"
+        if (reminderView != null && currentReminderKey == key) return
+
+        handler.post {
+            try {
+                val windowManager =
+                    appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                        ?: return@post
+                removeReminderView(windowManager)
+                val root = buildInterstitialReminderView(appContext, presentation)
+                val params =
+                    WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        } else {
+                            WindowManager.LayoutParams.TYPE_PHONE
+                        },
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                        PixelFormat.TRANSLUCENT,
+                    )
+                params.gravity = Gravity.TOP or Gravity.START
+                windowManager.addView(root, params)
+                reminderView = root
+                currentReminderKey = key
+                root.alpha = 0f
+                root.animate().alpha(1f).setDuration(140L).start()
+                android.util.Log.d("RevokeOverlay", "Showing interstitial reminder from $source")
+            } catch (error: Exception) {
+                AppMonitorCoordinator.recordNonFatal(
+                    context = appContext,
+                    source = "BlockerOverlayController",
+                    message = "Failed to render interstitial reminder.",
+                    error = error,
+                    extraKeys = mapOf("trigger" to source, "packageName" to presentation.packageName),
+                )
+            }
+        }
+    }
+
+    fun hideReminder(context: Context, source: String) {
+        val appContext = context.applicationContext
+        if (reminderView == null) return
+        handler.post {
+            try {
+                val windowManager =
+                    appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                        ?: return@post
+                removeReminderView(windowManager)
+                android.util.Log.d("RevokeOverlay", "Hiding reminder overlay from $source")
+            } catch (error: Exception) {
+                AppMonitorCoordinator.recordNonFatal(
+                    context = appContext,
+                    source = "BlockerOverlayController",
+                    message = "Failed to remove reminder overlay.",
+                    error = error,
+                    extraKeys = mapOf("trigger" to source),
+                )
+            }
+        }
+    }
+
+    private fun removeReminderView(windowManager: WindowManager) {
+        try {
+            if (reminderView?.parent != null) {
+                windowManager.removeView(reminderView)
+            }
+        } catch (_: Exception) {
+        }
+        reminderView = null
+        currentReminderKey = null
+    }
+
     private fun emitBlockedAttempt(context: Context, appName: String, packageName: String): Int {
         val now = System.currentTimeMillis()
         val isDuplicate =
@@ -226,6 +361,186 @@ object BlockerOverlayController {
             .apply()
         return nextCount
     }
+
+    private fun buildSoftReminderView(context: Context, presentation: ReminderPresentation): View {
+        val reminderFrequency = readSoftReminderFrequencyLabel(context)
+        val root =
+            FrameLayout(context).apply {
+                setBackgroundColor(Color.parseColor("#E906070A"))
+                setPadding(dp(context, 24), dp(context, 32), dp(context, 24), dp(context, 32))
+            }
+        val card =
+            LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                background =
+                    roundedRect(
+                        context = context,
+                        fill = Color.parseColor(COLOR_SURFACE),
+                        stroke = Color.parseColor(COLOR_STROKE),
+                        radiusDp = 24,
+                    )
+                elevation = dp(context, 8).toFloat()
+                setPadding(dp(context, 22), dp(context, 24), dp(context, 22), dp(context, 22))
+            }
+        card.addView(buildReminderIcon(context, presentation, 78))
+        card.addView(space(context, 18, false))
+        card.addView(
+            buildText(context, "BE MINDFUL", 12f, COLOR_ORANGE_SOFT, true).apply {
+                gravity = Gravity.CENTER
+                letterSpacing = 0.18f
+            },
+        )
+        card.addView(
+            buildText(context, "${presentation.appName} is open", 26f, COLOR_TEXT_PRIMARY, true).apply {
+                gravity = Gravity.CENTER
+                maxLines = 2
+                setPadding(0, dp(context, 8), 0, 0)
+            },
+        )
+        card.addView(
+            buildText(
+                context,
+                "You committed to ${formatReminderMinutes(presentation.limitMs)} today for ${presentation.regimeName}.",
+                15f,
+                COLOR_TEXT_PRIMARY,
+                false,
+            ).apply {
+                gravity = Gravity.CENTER
+                alpha = 0.9f
+                maxLines = 3
+                setPadding(0, dp(context, 16), 0, 0)
+            },
+        )
+        card.addView(
+            buildText(
+                context,
+                "${formatReminderMinutes(presentation.remainingMs)} remains. This reminder will reappear in $reminderFrequency.",
+                14f,
+                COLOR_TEXT_SECONDARY,
+                false,
+            ).apply {
+                gravity = Gravity.CENTER
+                maxLines = 3
+                setPadding(0, dp(context, 10), 0, 0)
+            },
+        )
+        card.addView(space(context, 24, false))
+        card.addView(
+            buildPrimaryButton(context, "I AM MINDFUL") {
+                hideReminder(context, "soft_reminder_dismissed")
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(context, 56),
+            ),
+        )
+        root.addView(
+            card,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER,
+            ),
+        )
+        return root
+    }
+
+    private fun buildInterstitialReminderView(context: Context, presentation: ReminderPresentation): View {
+        val root =
+            FrameLayout(context).apply {
+                setBackgroundColor(Color.parseColor("#D906070A"))
+                setPadding(dp(context, 24), dp(context, 32), dp(context, 24), dp(context, 32))
+            }
+        val card =
+            LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                background =
+                    roundedRect(
+                        context = context,
+                        fill = Color.parseColor(COLOR_SURFACE),
+                        stroke = Color.parseColor(COLOR_STROKE),
+                        radiusDp = 24,
+                    )
+                setPadding(dp(context, 22), dp(context, 24), dp(context, 22), dp(context, 22))
+            }
+        card.addView(buildReminderIcon(context, presentation, 72))
+        card.addView(space(context, 18, false))
+        card.addView(
+            buildText(context, "CHECK YOUR GOAL", 11f, COLOR_ORANGE_SOFT, true).apply {
+                gravity = Gravity.CENTER
+                letterSpacing = 0.18f
+            },
+        )
+        card.addView(
+            buildText(context, "${presentation.appName} is still inside budget", 24f, COLOR_TEXT_PRIMARY, true).apply {
+                gravity = Gravity.CENTER
+                maxLines = 2
+                setPadding(0, dp(context, 8), 0, 0)
+            },
+        )
+        card.addView(
+            buildText(
+                context,
+                "You have used ${formatReminderMinutes(presentation.usedMs)} of ${formatReminderMinutes(presentation.limitMs)}.",
+                15f,
+                COLOR_TEXT_SECONDARY,
+                false,
+            ).apply {
+                gravity = Gravity.CENTER
+                maxLines = 2
+                setPadding(0, dp(context, 14), 0, 0)
+            },
+        )
+        card.addView(space(context, 22, false))
+        card.addView(
+            buildPrimaryButton(context, "ACKNOWLEDGE") {
+                hideReminder(context, "interstitial_acknowledged")
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(context, 54),
+            ),
+        )
+        root.addView(
+            card,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER,
+            ),
+        )
+        return root
+    }
+
+    private fun buildReminderIcon(
+        context: Context,
+        presentation: ReminderPresentation,
+        sizeDp: Int,
+    ): View =
+        FrameLayout(context).apply {
+            background =
+                roundedRect(
+                    context = context,
+                    fill = Color.parseColor(COLOR_SURFACE_ALT),
+                    stroke = Color.parseColor(COLOR_STROKE),
+                    radiusDp = sizeDp / 3,
+                )
+            addView(
+                ImageView(context).apply {
+                    presentation.appIcon?.let(::setImageDrawable)
+                        ?: setImageResource(R.mipmap.ic_launcher)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                },
+                FrameLayout.LayoutParams(
+                    dp(context, (sizeDp * 0.64f).toInt()),
+                    dp(context, (sizeDp * 0.64f).toInt()),
+                    Gravity.CENTER,
+                ),
+            )
+            layoutParams = LinearLayout.LayoutParams(dp(context, sizeDp), dp(context, sizeDp))
+        }
 
     private fun buildOverlayViews(
         context: Context,
@@ -761,6 +1076,28 @@ object BlockerOverlayController {
         val formatter = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
         formatter.timeZone = java.util.TimeZone.getDefault()
         return formatter.format(java.util.Date(now))
+    }
+
+    private fun formatReminderMinutes(ms: Long): String {
+        val totalMinutes = ((ms.coerceAtLeast(0L) + 59_999L) / 60_000L).toInt()
+        val hours = totalMinutes / 60
+        val minutes = totalMinutes % 60
+        return when {
+            hours > 0 && minutes > 0 -> "${hours}h ${minutes}m"
+            hours > 0 -> "${hours}h"
+            else -> "${minutes}m"
+        }
+    }
+
+    private fun readSoftReminderFrequencyLabel(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val cooldownMs = prefs.getLong("soft_reminder_cooldown_ms", 300_000L).coerceAtLeast(0L)
+        val minutes = ((cooldownMs + 59_999L) / 60_000L).toInt()
+        return if (minutes <= 0) {
+            "every app open"
+        } else {
+            "$minutes min"
+        }
     }
 
     private fun startEntryMotion(views: OverlayViews) {

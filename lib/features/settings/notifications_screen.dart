@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../core/models/user_model.dart';
+import '../../core/native_bridge.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/persistence_service.dart';
+import '../../core/services/settings_sync_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/theme_extensions.dart';
 
@@ -15,8 +20,61 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
+  static const List<int> _reminderFrequencyOptions = <int>[
+    0,
+    1,
+    3,
+    5,
+    10,
+    15,
+    30,
+  ];
+
   final Map<String, bool> _pendingValues = <String, bool>{};
   final Set<String> _savingKeys = <String>{};
+  bool _softReminderEnabled = true;
+  int _softReminderFrequencyMinutes = 5;
+  bool _loadingReminderFrequency = true;
+  bool _savingSoftReminderEnabled = false;
+  bool _savingReminderFrequency = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReminderSettings();
+  }
+
+  Future<void> _loadReminderSettings() async {
+    final enabled = await PersistenceService.getSoftReminderEnabled();
+    final minutes = await PersistenceService.getSoftReminderFrequencyMinutes();
+    if (!mounted) return;
+    setState(() {
+      _softReminderEnabled = enabled;
+      _softReminderFrequencyMinutes = minutes;
+      _loadingReminderFrequency = false;
+    });
+    unawaited(
+      NativeBridge.syncReminderConfig(
+        softReminderEnabled: enabled,
+        softReminderCooldownMs: minutes * 60000,
+      ).catchError((_) {}),
+    );
+    unawaited(_refreshReminderSettingsFromCloud());
+  }
+
+  Future<void> _refreshReminderSettingsFromCloud() async {
+    try {
+      await SettingsSyncService.hydrateLocalPreferencesFromCloud();
+      final enabled = await PersistenceService.getSoftReminderEnabled();
+      final minutes =
+          await PersistenceService.getSoftReminderFrequencyMinutes();
+      if (!mounted) return;
+      setState(() {
+        _softReminderEnabled = enabled;
+        _softReminderFrequencyMinutes = minutes;
+      });
+    } catch (_) {}
+  }
 
   Future<void> _updatePref(String key, bool value) async {
     setState(() {
@@ -43,6 +101,65 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   bool _resolveValue({required String key, required bool fallback}) {
     return _pendingValues[key] ?? fallback;
+  }
+
+  Future<void> _updateSoftReminderEnabled(bool enabled) async {
+    setState(() {
+      _softReminderEnabled = enabled;
+      _savingSoftReminderEnabled = true;
+    });
+
+    try {
+      await PersistenceService.saveSoftReminderEnabled(enabled);
+      await NativeBridge.syncReminderConfig(
+        softReminderEnabled: enabled,
+        softReminderCooldownMs: _softReminderFrequencyMinutes * 60000,
+      );
+      unawaited(
+        SettingsSyncService.syncSoftReminderEnabledToCloud(
+          enabled,
+        ).catchError((_) {}),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to update reminder setting.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingSoftReminderEnabled = false);
+      }
+    }
+  }
+
+  Future<void> _updateReminderFrequency(int minutes) async {
+    final normalized = minutes.clamp(0, 120).toInt();
+    setState(() {
+      _softReminderFrequencyMinutes = normalized;
+      _savingReminderFrequency = true;
+    });
+
+    try {
+      await PersistenceService.saveSoftReminderFrequencyMinutes(normalized);
+      await NativeBridge.syncReminderConfig(
+        softReminderEnabled: _softReminderEnabled,
+        softReminderCooldownMs: normalized * 60000,
+      );
+      unawaited(
+        SettingsSyncService.syncSoftReminderFrequencyMinutesToCloud(
+          normalized,
+        ).catchError((_) {}),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to update reminder setting.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingReminderFrequency = false);
+      }
+    }
   }
 
   @override
@@ -97,7 +214,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               );
 
               return ListView(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+                padding: const EdgeInsets.fromLTRB(8, 14, 8, 28),
                 children: [
                   _NotificationToggleRow(
                     icon: PhosphorIcons.warningCircle(),
@@ -126,11 +243,112 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     isSaving: _savingKeys.contains('verdicts'),
                     onChanged: (value) => _updatePref('verdicts', value),
                   ),
+                  const SizedBox(height: 14),
+                  _NotificationToggleRow(
+                    icon: PhosphorIcons.bell(),
+                    title: 'Soft Reminders',
+                    subtitle:
+                        'Show a mindful reminder when a limited app opens.',
+                    value: _softReminderEnabled,
+                    activeColor: context.colors.accent,
+                    isSaving: _savingSoftReminderEnabled,
+                    onChanged:
+                        _loadingReminderFrequency || _savingSoftReminderEnabled
+                        ? null
+                        : _updateSoftReminderEnabled,
+                  ),
+                  _ReminderFrequencyRow(
+                    value: _softReminderFrequencyMinutes,
+                    options: _reminderFrequencyOptions,
+                    isLoading: _loadingReminderFrequency,
+                    isSaving: _savingReminderFrequency,
+                    onChanged: _updateReminderFrequency,
+                  ),
                 ],
               );
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _ReminderFrequencyRow extends StatelessWidget {
+  final int value;
+  final List<int> options;
+  final bool isLoading;
+  final bool isSaving;
+  final ValueChanged<int> onChanged;
+
+  const _ReminderFrequencyRow({
+    required this.value,
+    required this.options,
+    required this.isLoading,
+    required this.isSaving,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedValue = options.contains(value) ? value : 5;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            PhosphorIcons.timer(),
+            size: 20,
+            color: context.colors.textPrimary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Soft Reminder Frequency', style: AppTheme.baseMedium),
+                const SizedBox(height: 2),
+                Text(
+                  'How often mindful reminders can reappear.',
+                  style: AppTheme.smRegular.copyWith(
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isLoading || isSaving) ...[
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: context.colors.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          DropdownButton<int>(
+            value: selectedValue,
+            underline: const SizedBox.shrink(),
+            items: options
+                .map(
+                  (minutes) => DropdownMenuItem<int>(
+                    value: minutes,
+                    child: Text(minutes <= 0 ? 'Every open' : '$minutes min'),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: isLoading || isSaving
+                ? null
+                : (minutes) {
+                    if (minutes == null) return;
+                    onChanged(minutes);
+                  },
+          ),
+        ],
       ),
     );
   }

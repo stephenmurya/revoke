@@ -15,6 +15,7 @@ object EnforcementEngine {
     private const val KEY_TEMP_UNLOCKS = "temp_unlocks"
     private const val KEY_AMNESTY_EXPIRY = "amnesty_expiry"
     private const val KEY_OVERLAY_HAS_SQUAD = "overlay_has_squad"
+    private const val KEY_WHITELIST_PACKAGES = "whitelist_packages"
     private const val TAG = "RevokeEngine"
     private const val MILLIS_PER_MINUTE = 60_000L
     private const val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L
@@ -41,6 +42,15 @@ object EnforcementEngine {
         val activationTimestamp: Long?,
     )
 
+    private data class UsageBudgetMatch(
+        val appName: String,
+        val packageName: String,
+        val regimeName: String,
+        val usedMs: Long,
+        val limitMs: Long,
+        val remainingMs: Long,
+    )
+
     private val cacheLock = Any()
     private val copySelectionLock = Any()
 
@@ -52,6 +62,9 @@ object EnforcementEngine {
 
     @Volatile
     private var blockedAppsIndex: Set<String> = emptySet()
+
+    @Volatile
+    private var whitelistedPackages: Set<String> = emptySet()
 
     @Volatile
     private var lastObservedPackage: String = ""
@@ -67,6 +80,23 @@ object EnforcementEngine {
     fun ensureLoaded(context: Context) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         updateCacheIfNeeded(prefs.getString(KEY_SCHEDULES, "[]").orEmpty())
+        reloadIgnoredPackages(context)
+    }
+
+    fun reloadIgnoredPackages(context: Context) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        whitelistedPackages =
+            (prefs.getStringSet(KEY_WHITELIST_PACKAGES, emptySet()) ?: emptySet())
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+    }
+
+    fun isWhitelistedPackage(context: Context, packageName: String): Boolean {
+        val normalized = packageName.trim()
+        if (normalized.isEmpty()) return false
+        reloadIgnoredPackages(context)
+        return whitelistedPackages.contains(normalized)
     }
 
     fun syncSchedules(context: Context, schedulesJson: String): Int {
@@ -236,6 +266,33 @@ object EnforcementEngine {
         return toBlockPresentation(appContext, match)
     }
 
+    fun findReminderPresentation(
+        context: Context,
+        packageName: String,
+        nowMs: Long = System.currentTimeMillis(),
+        shouldLog: Boolean = false,
+    ): ReminderPresentation? {
+        val appContext = context.applicationContext
+        val normalizedPackage = packageName.trim()
+        if (normalizedPackage.isEmpty()) return null
+        val budget =
+            findUsageBudgetMatch(
+                context = appContext,
+                packageName = normalizedPackage,
+                nowMs = nowMs,
+                shouldLog = shouldLog,
+            ) ?: return null
+        return ReminderPresentation(
+            appName = budget.appName,
+            packageName = budget.packageName,
+            appIcon = resolvePackageIcon(appContext, budget.packageName),
+            regimeName = budget.regimeName,
+            usedMs = budget.usedMs,
+            limitMs = budget.limitMs,
+            remainingMs = budget.remainingMs,
+        )
+    }
+
     fun enrichBlockPresentation(
         presentation: BlockPresentation,
         attemptsToday: Int,
@@ -275,6 +332,8 @@ object EnforcementEngine {
     fun shouldIgnorePackage(context: Context, packageName: String): Boolean {
         val normalized = packageName.trim()
         if (normalized.isEmpty()) return true
+        reloadIgnoredPackages(context)
+        if (whitelistedPackages.contains(normalized)) return true
         if (normalized == context.packageName) return true
         val lowercase = normalized.lowercase()
         if (lowercase == "com.android.systemui") return true
@@ -331,6 +390,82 @@ object EnforcementEngine {
                 context = context,
                 source = "EnforcementEngine",
                 message = "Failed to evaluate package.",
+                error = error,
+                extraKeys = mapOf("packageName" to packageName),
+            )
+            null
+        }
+    }
+
+    private fun findUsageBudgetMatch(
+        context: Context,
+        packageName: String,
+        nowMs: Long,
+        shouldLog: Boolean,
+    ): UsageBudgetMatch? {
+        return try {
+            if (isAmnestyActive(context, nowMs)) {
+                if (shouldLog) android.util.Log.d(TAG, "Amnesty active. Skipping reminder $packageName")
+                return null
+            }
+            if (isPackageTemporarilyUnlocked(context, packageName, nowMs)) {
+                if (shouldLog) android.util.Log.d(TAG, "Temp unlock active. Skipping reminder $packageName")
+                return null
+            }
+
+            ensureLoaded(context)
+            if (!blockedAppsIndex.contains(packageName)) return null
+
+            val calendar = Calendar.getInstance().apply { timeInMillis = nowMs }
+            val modelDay = modelDayFromCalendar(calendar)
+            val currentTotalMin =
+                calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+
+            for (schedule in cachedSchedules) {
+                if (!schedule.optBoolean("isActive", true)) continue
+                if (schedule.optInt("type", 0) != 1) continue
+                if (!scheduleMatchesDay(schedule, modelDay)) continue
+                if (!scheduleTargetsPackage(schedule, packageName)) continue
+
+                val windows = extractTimeWindows(schedule)
+                if (windows.isNotEmpty() && !windows.any { isMinuteWithinWindow(it, currentTotalMin) }) {
+                    continue
+                }
+
+                val limitMinutes = resolveLimitMinutes(schedule)
+                if (limitMinutes <= 0) continue
+
+                val targetPackages = extractTargetPackages(schedule)
+                if (targetPackages.isEmpty()) continue
+
+                val activationTimestamp = resolveActivationTimestamp(schedule, nowMs)
+                val usageByPackage =
+                    UsageEventsSessionCalculator.getSessionUsage(
+                        context = context,
+                        packageNames = targetPackages,
+                        activationTimestamp = activationTimestamp,
+                        nowMs = nowMs,
+                    )
+                val usedMs = targetPackages.sumOf { usageByPackage[it] ?: 0L }
+                val limitMs = limitMinutes.toLong() * MILLIS_PER_MINUTE
+                if (usedMs >= limitMs) continue
+
+                return UsageBudgetMatch(
+                    appName = resolvePackageLabel(context, packageName),
+                    packageName = packageName,
+                    regimeName = resolveRegimeName(schedule),
+                    usedMs = usedMs,
+                    limitMs = limitMs,
+                    remainingMs = limitMs - usedMs,
+                )
+            }
+
+            null
+        } catch (error: Exception) {
+            AppMonitorCoordinator.recordNonFatal(
+                context = context,
+                source = "EnforcementEngine",
+                message = "Failed to evaluate reminder budget.",
                 error = error,
                 extraKeys = mapOf("packageName" to packageName),
             )
@@ -914,12 +1049,17 @@ object EnforcementEngine {
                 schedule.has("activatedAtMs") && !schedule.isNull("activatedAtMs") ->
                     schedule.optLong("activatedAtMs", 0L)
                 else -> 0L
-            }
-        return when {
-            rawTimestamp <= 0L -> nowMs
-            rawTimestamp > nowMs -> nowMs
-            else -> rawTimestamp
         }
+        val boundedTimestamp =
+            when {
+                rawTimestamp <= 0L -> nowMs
+                rawTimestamp > nowMs -> nowMs
+                else -> rawTimestamp
+            }
+        return UsageEventsSessionCalculator.effectiveDailyStartMs(
+            activationTimestamp = boundedTimestamp,
+            nowMs = nowMs,
+        )
     }
 
     private fun resolvePackageLabel(context: Context, packageName: String): String =

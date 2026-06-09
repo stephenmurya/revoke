@@ -12,6 +12,7 @@ import 'core/services/auth_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/schedule_service.dart';
 import 'core/services/scoring_service.dart';
+import 'core/services/settings_sync_service.dart';
 import 'core/services/squad_service.dart';
 import 'core/services/theme_service.dart';
 import 'core/theme/app_theme.dart';
@@ -161,6 +162,14 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
               unawaited(_handleApprovedPleas(nextUid, pleas));
             });
       }
+    }
+
+    if (nextUid != null && nextUid.isNotEmpty) {
+      unawaited(
+        SettingsSyncService.hydrateLocalPreferencesFromCloud().catchError(
+          (_) {},
+        ),
+      );
     }
 
     unawaited(_syncNativeUserOverlayContext());

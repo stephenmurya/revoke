@@ -124,87 +124,56 @@ class _FocusScoreCardState extends State<FocusScoreCard>
         context.push('/focus-score');
       },
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        padding: const EdgeInsets.all(24),
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: context.scheme.surface,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: _rankColorFor(context).withValues(alpha: 0.3),
-            width: 2,
+            color: context.scheme.outlineVariant.withValues(alpha: 0.7),
+            width: 1,
           ),
-          boxShadow: _score >= 900
-              ? [
-                  BoxShadow(
-                    color: context.scheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                  ),
-                ]
-              : [],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'FOCUS SCORE',
-                    style: AppTheme.smBold.copyWith(
-                      color: context.scheme.primary,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ),
-                Icon(
-                  PhosphorIcons.caretRight(),
-                  size: 18,
-                  color: context.colors.textSecondary.withValues(alpha: 0.9),
-                ),
-              ],
+            Text(
+              'Score',
+              style: AppTheme.smBold.copyWith(
+                color: context.colors.textSecondary,
+              ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                AnimatedBuilder(
-                  animation: _animation,
-                  builder: (context, child) {
-                    final rankColor = _rankColorFor(context);
-                    return Text(
-                      '${_animation.value}',
-                      style: AppTheme.size5xlBold.copyWith(
-                        color: rankColor,
-                        height: 1,
-                      ),
-                    );
-                  },
+            const SizedBox(width: 10),
+            AnimatedBuilder(
+              animation: _animation,
+              builder: (context, child) {
+                return Text(
+                  '${_animation.value}',
+                  style: AppTheme.xlBold.copyWith(
+                    color: _rankColorFor(context),
+                    height: 1,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '$_rankTitle - $_trendLabel',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.smRegular.copyWith(
+                  color: _trendPositive
+                      ? context.colors.success
+                      : _trendNegative
+                      ? context.colors.danger
+                      : context.colors.textSecondary,
                 ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _rankTitle,
-                      style: AppTheme.lgBold.copyWith(
-                        color: _rankColorFor(context),
-                      ),
-                    ),
-                    Text(
-                      _trendLabel,
-                      style: AppTheme.smRegular.copyWith(
-                        color: _trendPositive
-                            ? context.colors.success
-                            : _trendNegative
-                            ? context.colors.danger
-                            : context.colors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
+            ),
+            Icon(
+              PhosphorIcons.caretRight(),
+              size: 16,
+              color: context.colors.textSecondary.withValues(alpha: 0.75),
             ),
           ],
         ),
