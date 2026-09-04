@@ -1,0 +1,67 @@
+# Revoke 2.0 Product Specification
+
+Status: Canonical product direction; not all items are implemented. See ../engineering/status.md before treating any item as current behavior.
+
+## 1. Product model
+
+Revoke 2.0 is a behavioral commitment and rehabilitation system. The primary object is the Commitment, not a schedule or regime.
+
+The product loop is:
+
+Observe -> Commit -> Plan -> Enforce -> Override -> Learn -> Adapt
+
+Commitments are either:
+
+- Reduce: lower usage from a measured baseline to a target through explicit stages;
+- Protect: maintain a hard period or usage boundary.
+
+Schedules and native restrictions are generated mechanisms. Initial enforcement primitives are Time Block and Usage Limit. Launch Count is outside v2.
+
+## 2. Intervention model
+
+The conceptual intervention stages are:
+
+1. Notice: awareness without blocking;
+2. Resist: friction before continued use;
+3. Revoke: access blocked when the Commitment boundary is crossed.
+
+Existing soft reminder, interstitial, and hard-block behavior should map to these stages without a terminology-only rewrite.
+
+## 3. Commitment creation and activation
+
+Users select apps/behavior and define the outcome, baseline, target, dates, enforcement, override policy, optional Circle permissions, optional Credit backing, grace, and verification requirements. The user reviews the complete contract before activation.
+
+Activation creates an immutable server-authoritative lease/snapshot with server UTC boundaries, rule revision, Credit hold if present, proof policy, grace policy, and unique identity. Native schedules are materialized only after required permissions, Premium entitlement, and any Credit purchase/lock requirements are valid and synchronization is acknowledged.
+
+## 4. Evidence and outcomes
+
+Evidence resolution supports:
+
+- SUCCESS_VERIFIED;
+- FAILURE_VERIFIED;
+- UNVERIFIABLE;
+- CANCELLED_PRE_START.
+
+Credit settlement is separate from evidence. Only verified failure after applicable grace may cause Credit forfeiture. Unverifiable behavior never forfeits Credits and never consumes grace. Force-close/uninstall/monitoring loss cannot automatically mean failure; positive violation evidence recorded before monitoring loss remains failure evidence.
+
+See ../architecture/commitment-verification.md.
+
+## 5. Overrides and Circles
+
+Overrides are bounded and policy-controlled. AI Warden evaluates approved context but cannot change an active contract. Accountability Circles are optional, least-privilege, and granular. Membership never grants broad user-profile access or billing authority.
+
+## 6. Home and learning
+
+Home exposes direct interpretable cards: active Commitment progress, adherence, override behavior, slips/recovery, grace, verification health, and Credit wallet state where relevant. Focus Score is retired and must not be reintroduced as a replacement composite score.
+
+## 7. Premium and Credits
+
+Premium is a prepaid Google Play subscription capability. Commitment Credits are optional, purchased only through Google Play Billing, and usable only inside Revoke. Credits may be locked behind a Commitment, released on verified success, released on unverifiable/cancelled outcomes, forfeited only after verified failure and exhausted grace, or redeemed for Premium access time.
+
+The v2 conversion is fixed at 100 Credits = 30 Premium days. This is a design decision, not a policy approval. Final Google Play and legal validation is a pre-release gate.
+
+See monetization.md and ../architecture/credit-ledger-and-billing.md.
+
+## 8. Explicit initial revival boundary
+
+Keep non-financial Time Block and Usage Limit enforcement, local-first operation, basic Insights, optional Circles, and the bounded override flow. Defer Credit implementation, Premium billing, advanced analytics, community regimes, and other financial infrastructure until verification, policy, and ledger prerequisites are complete.
