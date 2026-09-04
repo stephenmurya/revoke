@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/models/plea_model.dart';
 import '../../../core/services/squad_service.dart';
@@ -58,7 +58,7 @@ class _PleaJudgmentCardState extends State<PleaJudgmentCard> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                PhosphorIcons.gavel(),
+                PhosphorIcons.gavel,
                 color: context.scheme.primary,
                 size: 28,
               ),

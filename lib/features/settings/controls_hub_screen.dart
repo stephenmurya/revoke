@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/utils/theme_extensions.dart';
 import 'appearance_screen.dart';
@@ -61,7 +61,7 @@ class _ControlsHubScreenState extends State<ControlsHubScreen> {
                 prefixIcon: Padding(
                   padding: const EdgeInsets.only(left: 12, right: 8),
                   child: PhosphorIcon(
-                    PhosphorIcons.magnifyingGlass(),
+                    PhosphorIcons.magnifyingGlass,
                     size: 18,
                     color: context.colors.textSecondary,
                   ),
@@ -124,25 +124,25 @@ final List<_ControlsSection> _controlsSections = [
   _ControlsSection(
     title: 'Account & Profile',
     subtitle: 'Identity and account controls for squad presence.',
-    icon: PhosphorIcons.user(),
+    icon: PhosphorIcons.user,
     destination: AccountSettingsPage(),
   ),
   _ControlsSection(
     title: 'Notifications',
     subtitle: 'Alert preferences for shame, pleas, and verdicts.',
-    icon: PhosphorIcons.bell(),
+    icon: PhosphorIcons.bell,
     destination: NotificationsScreen(),
   ),
   _ControlsSection(
     title: 'Whitelist Apps',
     subtitle: 'Ignore maps, music, dialer, and other utility apps.',
-    icon: PhosphorIcons.listChecks(),
+    icon: PhosphorIcons.listChecks,
     destination: WhitelistAppsScreen(),
   ),
   _ControlsSection(
     title: 'Appearance & Experience',
     subtitle: 'Theme, feedback, and presentation preferences.',
-    icon: PhosphorIcons.palette(),
+    icon: PhosphorIcons.palette,
     destination: AppearanceScreen(),
   ),
 ];

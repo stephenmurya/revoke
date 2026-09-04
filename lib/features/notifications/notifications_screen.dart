@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/models/app_notification_model.dart';
 import '../../core/services/auth_service.dart';
@@ -110,7 +110,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           color: context.colors.accent,
                         ),
                       )
-                    : PhosphorIcon(PhosphorIcons.checks()),
+                    : PhosphorIcon(PhosphorIcons.checks),
               ),
             ],
           ),
@@ -264,7 +264,7 @@ class _EmptyNotificationsState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             PhosphorIcon(
-              PhosphorIcons.terminalWindow(),
+              PhosphorIcons.terminalWindow,
               size: 72,
               color: context.colors.textSecondary.withValues(alpha: 0.24),
             ),
@@ -388,17 +388,17 @@ class _NotificationTile extends StatelessWidget {
   IconData _iconForType(String type) {
     switch (type.toLowerCase()) {
       case 'plea':
-        return PhosphorIcons.handsPraying();
+        return PhosphorIcons.handsPraying;
       case 'verdict':
-        return PhosphorIcons.gavel();
+        return PhosphorIcons.gavel;
       case 'shame':
-        return PhosphorIcons.warning();
+        return PhosphorIcons.warning;
       case 'support':
-        return PhosphorIcons.handshake();
+        return PhosphorIcons.handshake;
       case 'system':
-        return PhosphorIcons.info();
+        return PhosphorIcons.info;
       default:
-        return PhosphorIcons.bell();
+        return PhosphorIcons.bell;
     }
   }
 

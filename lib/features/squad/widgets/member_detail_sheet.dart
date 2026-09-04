@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../../core/models/member_rap_sheet_snapshot.dart';
 import '../../../core/models/user_model.dart';
@@ -67,7 +67,7 @@ class _MemberDetailSheetState extends State<MemberDetailSheet> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: Icon(PhosphorIcons.x()),
+                    icon: Icon(PhosphorIcons.x),
                   ),
                 ],
               ),

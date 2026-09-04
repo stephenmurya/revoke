@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
@@ -347,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           child: Row(
             children: [
-              Icon(PhosphorIcons.warningCircle(), size: 18, color: alertColor),
+              Icon(PhosphorIcons.warningCircle, size: 18, color: alertColor),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -395,7 +395,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
-                PhosphorIcons.trendDown(),
+                PhosphorIcons.trendDown,
                 color: context.scheme.primary,
               ),
             ),
@@ -417,7 +417,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            Icon(PhosphorIcons.caretRight(), color: context.scheme.primary),
+            Icon(PhosphorIcons.caretRight, color: context.scheme.primary),
           ],
         ),
       ),
@@ -502,7 +502,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         },
         backgroundColor: context.scheme.primary,
         child: Icon(
-          PhosphorIcons.plus(),
+          PhosphorIcons.plus,
           color: context.scheme.onPrimary,
           size: 40,
         ),
@@ -856,8 +856,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   IconData _blockTypeIcon(ScheduleType type) {
     return type == ScheduleType.timeBlock
-        ? PhosphorIcons.clock()
-        : PhosphorIcons.hourglassLow();
+        ? PhosphorIcons.clock
+        : PhosphorIcons.hourglassLow;
   }
 
   String _blockTypeLabel(ScheduleType type) {
@@ -1138,7 +1138,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               children: [
                 ListTile(
                   leading: Icon(
-                    PhosphorIcons.lockSimple(),
+                    PhosphorIcons.lockSimple,
                     color: context.scheme.primary,
                   ),
                   title: Text('Block now', style: AppTheme.baseMedium),
@@ -1149,7 +1149,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 ListTile(
                   leading: Icon(
-                    PhosphorIcons.hourglassHigh(),
+                    PhosphorIcons.hourglassHigh,
                     color: context.scheme.primary,
                   ),
                   title: Text('Beg for a break', style: AppTheme.baseMedium),
@@ -1163,7 +1163,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 ListTile(
                   leading: Icon(
-                    PhosphorIcons.copy(),
+                    PhosphorIcons.copy,
                     color: context.scheme.primary,
                   ),
                   title: Text('Duplicate', style: AppTheme.baseMedium),
@@ -1174,7 +1174,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 ListTile(
                   leading: Icon(
-                    PhosphorIcons.trash(),
+                    PhosphorIcons.trash,
                     color: context.colors.danger,
                   ),
                   title: Text(
@@ -1293,7 +1293,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   icon: Icon(
-                    PhosphorIcons.dotsThree(),
+                    PhosphorIcons.dotsThree,
                     color: context.colors.textSecondary,
                   ),
                   onPressed: () => _showScheduleActionSheet(schedule),
@@ -1410,7 +1410,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 Row(
                   children: [
                     Icon(
-                      PhosphorIcons.ghost(),
+                      PhosphorIcons.ghost,
                       size: 14,
                       color: context.colors.textSecondary,
                     ),

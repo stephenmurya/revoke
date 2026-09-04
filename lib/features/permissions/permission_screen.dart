@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/app_router.dart';
 import '../../core/native_bridge.dart';
@@ -44,7 +44,7 @@ class _PermissionScreenState extends State<PermissionScreen>
       key: _PermissionKey.accessibility,
       title: 'Grant Accessibility Access',
       shortTitle: 'Accessibility',
-      icon: PhosphorIcons.lightning(),
+      icon: PhosphorIcons.lightning,
       whyNeeded:
           'Without this permission, Revoke loses its instant fast path and may react later to app launches.',
       prominentDisclosure:
@@ -54,7 +54,7 @@ class _PermissionScreenState extends State<PermissionScreen>
       key: _PermissionKey.usageAccess,
       title: 'Grant Usage Access',
       shortTitle: 'Usage Access',
-      icon: PhosphorIcons.chartBar(),
+      icon: PhosphorIcons.chartBar,
       whyNeeded:
           'Without this permission, Revoke cannot tell when a restricted app is on screen.',
       prominentDisclosure:
@@ -64,7 +64,7 @@ class _PermissionScreenState extends State<PermissionScreen>
       key: _PermissionKey.overlay,
       title: 'Allow Display Over Other Apps',
       shortTitle: 'Display Over Apps',
-      icon: PhosphorIcons.appWindow(),
+      icon: PhosphorIcons.appWindow,
       whyNeeded:
           'Without this permission, Revoke can detect a distraction but cannot cover it with the blocker.',
       prominentDisclosure:
@@ -74,7 +74,7 @@ class _PermissionScreenState extends State<PermissionScreen>
       key: _PermissionKey.exactAlarm,
       title: 'Allow Exact Alarms',
       shortTitle: 'Exact Alarms',
-      icon: PhosphorIcons.alarm(),
+      icon: PhosphorIcons.alarm,
       whyNeeded:
           'Without this permission, a regime may start late instead of at the exact scheduled minute.',
       prominentDisclosure:
@@ -284,8 +284,8 @@ class _PermissionScreenState extends State<PermissionScreen>
             const Spacer(),
             Icon(
               stageGranted
-                  ? PhosphorIcons.checkCircle()
-                  : PhosphorIcons.dotsThree(),
+                  ? PhosphorIcons.checkCircle
+                  : PhosphorIcons.dotsThree,
               size: 20,
               color: stageGranted
                   ? context.colors.success
@@ -435,7 +435,7 @@ class _PermissionScreenState extends State<PermissionScreen>
         borderRadius: BorderRadius.circular(16),
       ),
       child: Icon(
-        isGranted ? PhosphorIcons.checkCircle() : disclosure.icon,
+        isGranted ? PhosphorIcons.checkCircle : disclosure.icon,
         color: isGranted ? context.colors.success : context.scheme.primary,
         size: 28,
       ),

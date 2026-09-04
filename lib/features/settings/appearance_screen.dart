@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/services/settings_sync_service.dart';
 import '../../core/services/theme_service.dart';
@@ -131,7 +131,7 @@ class _PreviewCard extends StatelessWidget {
                     color: scheme.primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(PhosphorIcons.shield(), color: scheme.onPrimary),
+                  child: Icon(PhosphorIcons.shield, color: scheme.onPrimary),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -181,7 +181,7 @@ class _ThemeModePicker extends StatelessWidget {
               scheme: scheme,
               title: 'System',
               subtitle: 'Obey device settings.',
-              icon: PhosphorIcons.slidersHorizontal(),
+              icon: PhosphorIcons.slidersHorizontal,
               selected: mode == ThemeMode.system,
               onTap: () => setMode(ThemeMode.system),
             ),
@@ -190,7 +190,7 @@ class _ThemeModePicker extends StatelessWidget {
               scheme: scheme,
               title: 'Day Shift',
               subtitle: 'Light mode.',
-              icon: PhosphorIcons.sun(),
+              icon: PhosphorIcons.sun,
               selected: mode == ThemeMode.light,
               onTap: () => setMode(ThemeMode.light),
             ),
@@ -199,7 +199,7 @@ class _ThemeModePicker extends StatelessWidget {
               scheme: scheme,
               title: 'Night Shift',
               subtitle: 'Dark mode.',
-              icon: PhosphorIcons.moonStars(),
+              icon: PhosphorIcons.moonStars,
               selected: mode == ThemeMode.dark,
               onTap: () => setMode(ThemeMode.dark),
             ),
@@ -283,14 +283,10 @@ class _ModeCard extends StatelessWidget {
                 ),
               ),
               if (selected)
-                Icon(
-                  PhosphorIcons.checkCircle(),
-                  color: scheme.primary,
-                  size: 20,
-                )
+                Icon(PhosphorIcons.checkCircle, color: scheme.primary, size: 20)
               else
                 Icon(
-                  PhosphorIcons.circle(),
+                  PhosphorIcons.circle,
                   color: scheme.onSurface.withValues(alpha: 0.45),
                   size: 20,
                 ),
@@ -404,7 +400,7 @@ class _AccentSwatch extends StatelessWidget {
                       : null,
                 ),
                 child: selected
-                    ? Icon(PhosphorIcons.check(), color: checkColor, size: 24)
+                    ? Icon(PhosphorIcons.check, color: checkColor, size: 24)
                     : null,
               ),
             ),

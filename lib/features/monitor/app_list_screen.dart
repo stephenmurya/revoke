@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/app_discovery_service.dart';
 import '../../core/utils/app_categorizer.dart';
@@ -91,7 +91,7 @@ class _AppListScreenState extends State<AppListScreen> {
                     decoration: AppTheme.defaultInputDecoration(
                       hintText: 'Search for apps...',
                       prefixIcon: Icon(
-                        PhosphorIcons.magnifyingGlass(),
+                        PhosphorIcons.magnifyingGlass,
                         color: context.scheme.primary,
                       ),
                     ),
@@ -136,7 +136,7 @@ class _AppListScreenState extends State<AppListScreen> {
                                 )
                               else
                                 Icon(
-                                  PhosphorIcons.androidLogo(),
+                                  PhosphorIcons.androidLogo,
                                   size: 24,
                                   color: context.colors.textSecondary,
                                 ),
@@ -155,7 +155,7 @@ class _AppListScreenState extends State<AppListScreen> {
                                   });
                                 },
                                 child: Icon(
-                                  PhosphorIcons.x(),
+                                  PhosphorIcons.x,
                                   size: 16,
                                   color: context.colors.textSecondary,
                                 ),
@@ -238,7 +238,7 @@ class _AppListScreenState extends State<AppListScreen> {
                           height: 32,
                         )
                       : Icon(
-                          PhosphorIcons.androidLogo(),
+                          PhosphorIcons.androidLogo,
                           color: context.colors.textSecondary,
                         ),
                   activeColor: context.scheme.primary,

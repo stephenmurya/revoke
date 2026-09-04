@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../../core/utils/theme_extensions.dart';
 
@@ -37,19 +37,15 @@ class SettingsOptionTile extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: (context.text.titleMedium ?? const TextStyle()).copyWith(
-                    color: context.scheme.onSurface,
-                  ),
+                  style: (context.text.titleMedium ?? const TextStyle())
+                      .copyWith(color: context.scheme.onSurface),
                 ),
                 if (hasSubtitle) ...[
                   const SizedBox(height: 4),
                   Text(
                     subtitleText,
-                    style:
-                        (context.text.bodySmall ?? const TextStyle()).copyWith(
-                      color: neutral,
-                      height: 1.35,
-                    ),
+                    style: (context.text.bodySmall ?? const TextStyle())
+                        .copyWith(color: neutral, height: 1.35),
                   ),
                 ],
               ],
@@ -58,7 +54,7 @@ class SettingsOptionTile extends StatelessWidget {
           const SizedBox(width: 10),
           trailing ??
               PhosphorIcon(
-                PhosphorIcons.caretRight(),
+                PhosphorIcons.caretRight,
                 size: 18,
                 color: neutral.withValues(alpha: 0.7),
               ),

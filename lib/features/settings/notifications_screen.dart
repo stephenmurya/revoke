@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/models/user_model.dart';
 import '../../core/native_bridge.dart';
@@ -217,7 +217,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 padding: const EdgeInsets.fromLTRB(8, 14, 8, 28),
                 children: [
                   _NotificationToggleRow(
-                    icon: PhosphorIcons.warningCircle(),
+                    icon: PhosphorIcons.warningCircle,
                     title: 'Shame Alerts',
                     subtitle: 'When someone shames you.',
                     value: wantsShameAlerts,
@@ -226,7 +226,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     onChanged: (value) => _updatePref('shameAlerts', value),
                   ),
                   _NotificationToggleRow(
-                    icon: PhosphorIcons.handsPraying(),
+                    icon: PhosphorIcons.handsPraying,
                     title: 'Begging Requests',
                     subtitle: 'When a squad mate begs for time.',
                     value: wantsPleaRequests,
@@ -235,7 +235,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     onChanged: (value) => _updatePref('pleaRequests', value),
                   ),
                   _NotificationToggleRow(
-                    icon: PhosphorIcons.gavel(),
+                    icon: PhosphorIcons.gavel,
                     title: 'Conclave Verdicts',
                     subtitle: 'Whether time was granted or denied.',
                     value: wantsVerdicts,
@@ -245,7 +245,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   const SizedBox(height: 14),
                   _NotificationToggleRow(
-                    icon: PhosphorIcons.bell(),
+                    icon: PhosphorIcons.bell,
                     title: 'Soft Reminders',
                     subtitle:
                         'Show a mindful reminder when a limited app opens.',
@@ -298,7 +298,7 @@ class _ReminderFrequencyRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
-            PhosphorIcons.timer(),
+            PhosphorIcons.timer,
             size: 20,
             color: context.colors.textPrimary,
           ),

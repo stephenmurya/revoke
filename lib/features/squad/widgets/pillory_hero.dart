@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/models/user_model.dart';
@@ -128,7 +128,7 @@ class PilloryHero extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => _castStone(context),
-                  icon: Icon(PhosphorIcons.gavel(), size: 16),
+                  icon: Icon(PhosphorIcons.gavel, size: 16),
                   label: const Text(
                     'Stone',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
@@ -149,7 +149,7 @@ class PilloryHero extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => _prayFor(context),
-                  icon: Icon(PhosphorIcons.flowerLotus(), size: 16),
+                  icon: Icon(PhosphorIcons.flowerLotus, size: 16),
                   label: const Text(
                     'Pray',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
@@ -170,7 +170,7 @@ class PilloryHero extends StatelessWidget {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () => _postBail(context, displayHandle),
-                  icon: Icon(PhosphorIcons.lockOpen(), size: 16),
+                  icon: Icon(PhosphorIcons.lockOpen, size: 16),
                   label: const Text(
                     'Bail',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -269,7 +269,7 @@ class _FocusScoreDetailScreenState extends State<FocusScoreDetailScreen> {
                 message:
                     'These are the exact point drivers currently implemented.',
                 child: Icon(
-                  PhosphorIcons.info(),
+                  PhosphorIcons.info,
                   size: 18,
                   color: context.colors.textSecondary,
                 ),

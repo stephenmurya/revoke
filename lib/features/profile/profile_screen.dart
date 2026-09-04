@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/services/auth_service.dart';
@@ -74,7 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(
-            PhosphorIcons.arrowLeft(),
+            PhosphorIcons.arrowLeft,
             color: context.colors.textPrimary,
           ),
           onPressed: () => context.pop(),
@@ -168,7 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () => context.push('/god-mode'),
                       style: AppTheme.primaryButtonStyle,
-                      icon: Icon(PhosphorIcons.eye()),
+                      icon: Icon(PhosphorIcons.eye),
                       label: const Text('Admin Dashboard'),
                     ),
                   ),
@@ -271,7 +271,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(width: 8),
                   Icon(
-                    PhosphorIcons.pencilSimple(),
+                    PhosphorIcons.pencilSimple,
                     color: context.colors.accent,
                   ),
                 ],
@@ -376,7 +376,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  PhosphorIcons.warning(),
+                  PhosphorIcons.warning,
                   color: context.colors.danger,
                   size: 64,
                 ),

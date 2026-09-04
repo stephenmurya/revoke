@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -29,7 +29,7 @@ class SquadScreen extends StatelessWidget {
         onPressed: () => _openBegForTimePicker(context),
         backgroundColor: context.scheme.primary,
         foregroundColor: context.scheme.onPrimary,
-        icon: Icon(PhosphorIcons.gavel()),
+        icon: Icon(PhosphorIcons.gavel),
         label: const Text('BEG FOR TIME'),
       ),
       body: SafeArea(
@@ -276,7 +276,7 @@ class SquadScreen extends StatelessWidget {
                         ),
                         decoration: AppTheme.defaultInputDecoration(
                           hintText: 'Search apps...',
-                          prefixIcon: Icon(PhosphorIcons.magnifyingGlass()),
+                          prefixIcon: Icon(PhosphorIcons.magnifyingGlass),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -339,7 +339,7 @@ class SquadScreen extends StatelessWidget {
                                       color: sheetContext.colors.textSecondary,
                                     ),
                                   ),
-                                  trailing: Icon(PhosphorIcons.caretRight()),
+                                  trailing: Icon(PhosphorIcons.caretRight),
                                   onTap: () {
                                     Navigator.of(sheetContext).pop();
                                     context.push(
@@ -450,7 +450,7 @@ class _BarracksHeader extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Icon(
-                        PhosphorIcons.copy(),
+                        PhosphorIcons.copy,
                         size: 16,
                         color: context.scheme.primary.withValues(alpha: 0.85),
                       ),
@@ -465,7 +465,7 @@ class _BarracksHeader extends StatelessWidget {
                           );
                         },
                         child: Icon(
-                          PhosphorIcons.shareNetwork(),
+                          PhosphorIcons.shareNetwork,
                           size: 16,
                           color: context.scheme.primary.withValues(alpha: 0.85),
                         ),
@@ -547,7 +547,7 @@ class _LiveTribunalBanner extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    PhosphorIcons.gavel(),
+                    PhosphorIcons.gavel,
                     color: context.colors.danger.withValues(alpha: 0.90),
                     size: 18,
                   ),
@@ -561,7 +561,7 @@ class _LiveTribunalBanner extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Icon(PhosphorIcons.caretRight(), size: 18),
+                  Icon(PhosphorIcons.caretRight, size: 18),
                 ],
               ),
             ),
@@ -589,7 +589,7 @@ class _AppIcon extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: context.scheme.outlineVariant),
         ),
-        child: Icon(PhosphorIcons.squaresFour(), color: context.scheme.primary),
+        child: Icon(PhosphorIcons.squaresFour, color: context.scheme.primary),
       );
     }
 
@@ -628,7 +628,7 @@ class _EmptyBarracks extends StatelessWidget {
                 border: Border.all(color: context.scheme.outlineVariant),
               ),
               child: Icon(
-                PhosphorIcons.usersThree(),
+                PhosphorIcons.usersThree,
                 size: 42,
                 color: context.scheme.primary,
               ),

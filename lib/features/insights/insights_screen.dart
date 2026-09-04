@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/models/schedule_model.dart';
 import '../../core/models/usage_insights_model.dart';
@@ -364,7 +364,7 @@ class _InsightsBodyState extends State<_InsightsBody> {
                     _shiftWeek(-1);
                   }
                 },
-          icon: Icon(PhosphorIcons.caretLeft()),
+          icon: Icon(PhosphorIcons.caretLeft),
         ),
         Expanded(
           child: Text(
@@ -388,7 +388,7 @@ class _InsightsBodyState extends State<_InsightsBody> {
                     _shiftWeek(1);
                   }
                 },
-          icon: Icon(PhosphorIcons.caretRight()),
+          icon: Icon(PhosphorIcons.caretRight),
         ),
       ],
     );
@@ -939,7 +939,7 @@ class _AppUsageListRow extends StatelessWidget {
             Text(_formatMinutes(app.minutes), style: AppTheme.baseBold),
             const SizedBox(width: 8),
             Icon(
-              PhosphorIcons.caretRight(),
+              PhosphorIcons.caretRight,
               size: 16,
               color: context.colors.textSecondary,
             ),

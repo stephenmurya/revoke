@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../../core/models/squad_log_model.dart';
 import '../../../core/theme/app_theme.dart';
@@ -171,15 +171,15 @@ class _TimelineRow extends StatelessWidget {
     final type = (typeRaw).trim().toLowerCase();
     switch (type) {
       case 'plea_request':
-        return PhosphorIcons.megaphone();
+        return PhosphorIcons.megaphone;
       case 'verdict':
-        return PhosphorIcons.gavel();
+        return PhosphorIcons.gavel;
       case 'violation':
-        return PhosphorIcons.warning();
+        return PhosphorIcons.warning;
       case 'regime_adopt':
-        return PhosphorIcons.flag();
+        return PhosphorIcons.flag;
       default:
-        return PhosphorIcons.receipt();
+        return PhosphorIcons.receipt;
     }
   }
 

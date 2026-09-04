@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -336,7 +336,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
             ),
           ),
           Icon(
-            approved ? PhosphorIcons.check() : PhosphorIcons.x(),
+            approved ? PhosphorIcons.check : PhosphorIcons.x,
             size: 14,
             color: approved ? context.colors.success : context.colors.danger,
           ),
@@ -565,7 +565,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                   child: Row(
                     children: [
                       Icon(
-                        PhosphorIcons.x(),
+                        PhosphorIcons.x,
                         size: 14,
                         color: context.colors.danger,
                       ),
@@ -599,7 +599,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                   child: Row(
                     children: [
                       Icon(
-                        PhosphorIcons.check(),
+                        PhosphorIcons.check,
                         size: 14,
                         color: context.colors.success,
                       ),
@@ -869,7 +869,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                                     child: Row(
                                       children: [
                                         Icon(
-                                          PhosphorIcons.arrowBendUpLeft(),
+                                          PhosphorIcons.arrowBendUpLeft,
                                           size: 16,
                                           color: context.colors.success,
                                         ),
@@ -908,7 +908,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                                         IconButton(
                                           onPressed: _clearReplyTarget,
                                           icon: Icon(
-                                            PhosphorIcons.x(),
+                                            PhosphorIcons.x,
                                             color: context.colors.textSecondary,
                                             size: 18,
                                           ),
@@ -971,7 +971,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
                                                     ),
                                               ),
                                           child: Icon(
-                                            PhosphorIcons.paperPlaneRight(),
+                                            PhosphorIcons.paperPlaneRight,
                                           ),
                                         ),
                                       ),

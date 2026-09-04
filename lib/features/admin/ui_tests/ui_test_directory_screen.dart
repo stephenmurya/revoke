@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/theme_extensions.dart';
@@ -16,7 +16,7 @@ class UITestDirectoryScreen extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
       children: [
         ListTile(
-          leading: Icon(PhosphorIcons.flask(), color: context.scheme.primary),
+          leading: Icon(PhosphorIcons.flask, color: context.scheme.primary),
           title: Text('Squad HUD 2.0 (The Barracks)', style: AppTheme.baseBold),
           subtitle: Text(
             'Testing ground for the new Pillory and Squad Logs.',
@@ -25,7 +25,7 @@ class UITestDirectoryScreen extends StatelessWidget {
             ),
           ),
           trailing: Icon(
-            PhosphorIcons.caretRight(),
+            PhosphorIcons.caretRight,
             color: context.colors.textSecondary,
           ),
           onTap: () => Navigator.of(context).push(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../../core/utils/theme_extensions.dart';
 import '../../profile/profile_screen.dart';
@@ -20,7 +20,7 @@ class AccountSettingsPage extends StatelessWidget {
           SettingsOptionTile(
             title: 'Profile Details',
             subtitle: 'Photo, nickname, and account actions.',
-            icon: PhosphorIcons.userCircle(),
+            icon: PhosphorIcons.userCircle,
             onTap: () {
               Navigator.of(
                 context,

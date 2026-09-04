@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
@@ -598,7 +598,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: Row(
                 children: [
                   Icon(
-                    PhosphorIcons.squaresFour(),
+                    PhosphorIcons.squaresFour,
                     color: context.scheme.primary,
                     size: 20,
                   ),
@@ -752,7 +752,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         ),
                       );
                     },
-              icon: PhosphorIcons.shareNetwork(),
+              icon: PhosphorIcons.shareNetwork,
               label: "Share Invite Code",
             ),
             const SizedBox(height: 16),
@@ -902,7 +902,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 420;
           final action = isGranted
-              ? Icon(PhosphorIcons.checkCircle(), color: context.colors.success)
+              ? Icon(PhosphorIcons.checkCircle, color: context.colors.success)
               : ElevatedButton(
                   onPressed: onTap,
                   style: AppTheme.secondaryButtonStyle.copyWith(

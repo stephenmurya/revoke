@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/native_bridge.dart';
 import '../../core/theme/app_theme.dart';
@@ -75,7 +75,7 @@ class _AccessibilityDisclosureScreenState
               shape: BoxShape.circle,
             ),
             child: Icon(
-              PhosphorIcons.warningCircle(),
+              PhosphorIcons.warningCircle,
               size: 44,
               color: context.scheme.primary,
             ),

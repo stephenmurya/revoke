@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/native_bridge.dart';
@@ -140,7 +140,7 @@ class _BegForTimeScreenState extends State<BegForTimeScreen> {
                       child: iconBytes != null
                           ? Image.memory(iconBytes, fit: BoxFit.cover)
                           : Icon(
-                              PhosphorIcons.squaresFour(),
+                              PhosphorIcons.squaresFour,
                               size: 56,
                               color: context.scheme.primary,
                             ),

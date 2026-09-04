@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/services/auth_service.dart';
 import '../../core/utils/theme_extensions.dart';
@@ -106,7 +106,7 @@ class _MainShellState extends State<MainShell> {
                   const Spacer(),
                   IconButton(
                     onPressed: () => context.push('/notifications'),
-                    icon: PhosphorIcon(PhosphorIcons.notification()),
+                    icon: PhosphorIcon(PhosphorIcons.notification),
                     color: context.scheme.onSurface.withValues(alpha: 0.72),
                     tooltip: 'Notifications',
                   ),
@@ -133,24 +133,18 @@ class _MainShellState extends State<MainShell> {
         },
         items: [
           BottomNavigationBarItem(
-            icon: PhosphorIcon(PhosphorIcons.monitor()),
-            activeIcon: PhosphorIcon(
-              PhosphorIcons.monitor(PhosphorIconsStyle.fill),
-            ),
+            icon: PhosphorIcon(PhosphorIcons.monitor),
+            activeIcon: PhosphorIcon(PhosphorIcons.monitorFill),
             label: 'Regimes',
           ),
           BottomNavigationBarItem(
-            icon: PhosphorIcon(PhosphorIcons.users()),
-            activeIcon: PhosphorIcon(
-              PhosphorIcons.users(PhosphorIconsStyle.fill),
-            ),
+            icon: PhosphorIcon(PhosphorIcons.users),
+            activeIcon: PhosphorIcon(PhosphorIcons.usersFill),
             label: 'Squad',
           ),
           BottomNavigationBarItem(
-            icon: PhosphorIcon(PhosphorIcons.chartBar()),
-            activeIcon: PhosphorIcon(
-              PhosphorIcons.chartBar(PhosphorIconsStyle.fill),
-            ),
+            icon: PhosphorIcon(PhosphorIcons.chartBar),
+            activeIcon: PhosphorIcon(PhosphorIcons.chartBarFill),
             label: 'Insights',
           ),
         ],

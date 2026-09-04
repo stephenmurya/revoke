@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/models/schedule_model.dart';
@@ -751,7 +751,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                         Row(
                           children: [
                             Icon(
-                              PhosphorIcons.ghost(),
+                              PhosphorIcons.ghost,
                               size: 16,
                               color: context.colors.textSecondary,
                             ),
@@ -785,7 +785,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                                     ? null
                                     : () => _replaceGhostPackage(packageName),
                                 icon: Icon(
-                                  PhosphorIcons.arrowsClockwise(),
+                                  PhosphorIcons.arrowsClockwise,
                                   size: 16,
                                 ),
                                 label: const Text('Replace'),
@@ -806,7 +806,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                                 onPressed: packageName.isEmpty
                                     ? null
                                     : () => _removeTargetPackage(packageName),
-                                icon: Icon(PhosphorIcons.trash(), size: 16),
+                                icon: Icon(PhosphorIcons.trash, size: 16),
                                 label: const Text('Remove'),
                                 style: TextButton.styleFrom(
                                   foregroundColor: context.colors.danger,
@@ -831,8 +831,8 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         ? 'Time block'
         : 'Usage limit';
     final typeIcon = _selectedType == ScheduleType.timeBlock
-        ? PhosphorIcons.clock()
-        : PhosphorIcons.hourglassLow();
+        ? PhosphorIcons.clock
+        : PhosphorIcons.hourglassLow;
 
     return Container(
       width: double.infinity,
@@ -956,7 +956,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(PhosphorIcons.arrowLeft()),
+          icon: Icon(PhosphorIcons.arrowLeft),
           onPressed: _goBack,
         ),
       ),
@@ -1032,7 +1032,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         const SizedBox(height: 16),
         _buildTypeOptionCard(
           type: ScheduleType.timeBlock,
-          icon: PhosphorIcons.clock(),
+          icon: PhosphorIcons.clock,
           title: 'Time Block',
           description:
               'Great for blocking during set hours or days. e.g. 8:00-6:00 on weekdays.',
@@ -1040,7 +1040,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         const SizedBox(height: 12),
         _buildTypeOptionCard(
           type: ScheduleType.usageLimit,
-          icon: PhosphorIcons.hourglassLow(),
+          icon: PhosphorIcons.hourglassLow,
           title: 'Usage Limit',
           description:
               'Helps control daily limit for time spent in apps. e.g. 30 mins for social media.',
@@ -1137,7 +1137,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         const SizedBox(height: 12),
         if (peakHour != null)
           _buildTipChip(
-            icon: PhosphorIcons.lightning(),
+            icon: PhosphorIcons.lightning,
             label:
                 'Most usage occurs at ${_hourRangeText(peakHour)}. Add this block?',
             onTap: () => _applyPeakSuggestion(_BlockGroup.timeBlock),
@@ -1145,7 +1145,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         if (longestMinutes >= 180) ...[
           const SizedBox(height: 8),
           _buildTipChip(
-            icon: PhosphorIcons.personSimpleTaiChi(),
+            icon: PhosphorIcons.personSimpleTaiChi,
             label:
                 'Long block detected. Suggest a ${longestMinutes >= 300 ? 30 : 15} minute recovery break.',
             onTap: () => _applyBreakSuggestion(_BlockGroup.timeBlock),
@@ -1259,7 +1259,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
           if (peakHour != null) ...[
             const SizedBox(height: 12),
             _buildTipChip(
-              icon: PhosphorIcons.lightning(),
+              icon: PhosphorIcons.lightning,
               label:
                   'High usage at ${_hourRangeText(peakHour)}. Add as an allowed window?',
               onTap: () => _applyPeakSuggestion(_BlockGroup.usageWindow),
@@ -1272,13 +1272,13 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
         const SizedBox(height: 24),
         _buildSectionTitle('Tips'),
         _buildTipChip(
-          icon: PhosphorIcons.lightbulb(),
+          icon: PhosphorIcons.lightbulb,
           label: 'Start with realistic limits and tighten over time.',
           onTap: () {},
         ),
         const SizedBox(height: 8),
         _buildTipChip(
-          icon: PhosphorIcons.brain(),
+          icon: PhosphorIcons.brain,
           label:
               'Combine usage limits with time windows for stronger guardrails.',
           onTap: () {},
@@ -1325,7 +1325,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                       // ),
                     ),
                     child: Icon(
-                      PhosphorIcons.pencilSimple(),
+                      PhosphorIcons.pencilSimple,
                       size: 16,
                       color: context.colors.accent,
                     ),
@@ -1363,10 +1363,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
               _selectedPackages = result;
             });
           },
-          icon: Icon(
-            PhosphorIcons.squaresFour(),
-            color: context.scheme.primary,
-          ),
+          icon: Icon(PhosphorIcons.squaresFour, color: context.scheme.primary),
           label: Text(
             _selectedPackages.isEmpty
                 ? 'Select target apps'
@@ -1438,7 +1435,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      PhosphorIcons.clock(),
+                      PhosphorIcons.clock,
                       size: 18,
                       color: context.scheme.primary,
                     ),
@@ -1451,7 +1448,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                     ),
                     IconButton(
                       icon: Icon(
-                        PhosphorIcons.pencilSimple(),
+                        PhosphorIcons.pencilSimple,
                         color: context.scheme.primary,
                         size: 18,
                       ),
@@ -1460,7 +1457,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
                     if (showDelete)
                       IconButton(
                         icon: Icon(
-                          PhosphorIcons.trash(),
+                          PhosphorIcons.trash,
                           color: context.colors.danger,
                           size: 18,
                         ),
@@ -1491,7 +1488,7 @@ class _CreateScheduleScreenState extends State<CreateScheduleScreen> {
       // alignment: Alignment.centerLeft,
       child: TextButton.icon(
         onPressed: () => _addTimeBlock(group),
-        icon: Icon(PhosphorIcons.plusCircle(), color: context.scheme.primary),
+        icon: Icon(PhosphorIcons.plusCircle, color: context.scheme.primary),
         label: Text(
           'Add block',
           style: AppTheme.baseMedium.copyWith(color: context.scheme.primary),

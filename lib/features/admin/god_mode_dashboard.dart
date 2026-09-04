@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import 'sub_screens/admin_ledger_screen.dart';
@@ -180,37 +180,37 @@ class _GodModeDashboardState extends State<GodModeDashboard> {
 
     final actions = <_DashboardAction>[
       _DashboardAction(
-        icon: PhosphorIcons.bellRinging(),
+        icon: PhosphorIcons.bellRinging,
         label: 'Broadcast',
         onTap: () => _openScreen(const BroadcastMandateScreen()),
       ),
       _DashboardAction(
-        icon: PhosphorIcons.slidersHorizontal(),
+        icon: PhosphorIcons.slidersHorizontal,
         label: 'Focus Score',
         onTap: () => _openScreen(const AdjustScoreScreen()),
       ),
       _DashboardAction(
-        icon: PhosphorIcons.lockOpen(),
+        icon: PhosphorIcons.lockOpen,
         label: 'Grant Amnesty',
         onTap: () => _openScreen(const GrantAmnestyScreen()),
       ),
       _DashboardAction(
-        icon: PhosphorIcons.listBullets(),
+        icon: PhosphorIcons.listBullets,
         label: 'Shame Ledger',
         onTap: () => _openScreen(const AdminLedgerScreen()),
       ),
       _DashboardAction(
-        icon: PhosphorIcons.gavel(),
+        icon: PhosphorIcons.gavel,
         label: 'Active Trials',
         onTap: () => _openScreen(const _ActiveTribunalsScreen()),
       ),
       _DashboardAction(
-        icon: PhosphorIcons.flask(),
+        icon: PhosphorIcons.flask,
         label: _runningSimulation ? 'Running...' : 'Simulation',
         onTap: _runSimulation,
       ),
       _DashboardAction(
-        icon: PhosphorIcons.paintBrush(),
+        icon: PhosphorIcons.paintBrush,
         label: 'UI Tests',
         onTap: () => _openScreen(const UITestDirectoryScreen()),
       ),
@@ -225,7 +225,7 @@ class _GodModeDashboardState extends State<GodModeDashboard> {
         actions: [
           IconButton(
             onPressed: _refreshStats,
-            icon: Icon(PhosphorIcons.arrowClockwise()),
+            icon: Icon(PhosphorIcons.arrowClockwise),
           ),
         ],
       ),
@@ -362,7 +362,7 @@ class _ActiveTribunalsScreen extends StatelessWidget {
                     '$accept Approve / $reject Reject',
                   ),
                   isThreeLine: true,
-                  trailing: Icon(PhosphorIcons.caretRight()),
+                  trailing: Icon(PhosphorIcons.caretRight),
                 ),
               );
             },
