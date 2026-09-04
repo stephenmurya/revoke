@@ -278,10 +278,22 @@ class RegimeService {
   static Future<void> saveRegime(ScheduleModel schedule) async {
     await migrateLegacyLocalDataIfNeeded();
     final uid = await _requireUid();
-    await _regimesRef(uid).doc(schedule.id).set({
-      ..._toFirestore(schedule),
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final docRef = _regimesRef(uid).doc(schedule.id);
+    final payload = {..._toFirestore(schedule)};
+
+    // Timestamp semantics: createdAt is written only when the document does
+    // not exist yet (or carries no createdAt). Rewriting it on every save
+    // re-stamped existing regimes on each edit and caused Firestore's
+    // latency-compensated snapshots to emit extra emissions downstream.
+    // updatedAt always reflects the latest write.
+    final doc = await docRef.get();
+    final isNewOrLegacy = !doc.exists || doc.data()?['createdAt'] == null;
+    payload['createdAt'] = isNewOrLegacy
+        ? FieldValue.serverTimestamp()
+        : doc.data()!['createdAt'];
+    payload['updatedAt'] = FieldValue.serverTimestamp();
+
+    await docRef.set(payload, SetOptions(merge: true));
     await syncEnabledRegimesWithNative();
   }
 

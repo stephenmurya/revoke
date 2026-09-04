@@ -279,10 +279,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
 
       if (!mounted) return;
+      // Only rebuild when UI-visible status data actually changed. The timer
+      // fires every minute regardless of activity; usage numbers are usually
+      // identical between ticks, and an unconditional setState here was the
+      // source of the visible once-per-minute homepage "reload".
+      final nextStatuses = Map<String, _UsageLimitStatus>.fromEntries(entries);
+      if (_sameUsageLimitStatuses(_usageLimitStatuses, nextStatuses)) {
+        return;
+      }
       setState(() {
-        _usageLimitStatuses = Map<String, _UsageLimitStatus>.fromEntries(
-          entries,
-        );
+        _usageLimitStatuses = nextStatuses;
       });
     } catch (_) {
       if (!mounted) return;
@@ -1571,4 +1577,26 @@ class _UsageLimitStatus {
 
   bool get limitReached =>
       !missingUsageAccess && !pendingActivation && remainingMillis <= 0;
+}
+
+/// Value-equality over the per-schedule usage-status map. Field-for-field on
+/// every entry plus identical key sets; any difference means the UI should
+/// rebuild. Used to suppress no-op timer refreshes in [_refreshUsageLimitStatuses].
+bool _sameUsageLimitStatuses(
+  Map<String, _UsageLimitStatus> a,
+  Map<String, _UsageLimitStatus> b,
+) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (final entry in a.entries) {
+    final other = b[entry.key];
+    if (other == null) return false;
+    if (entry.value.usedMillis != other.usedMillis ||
+        entry.value.remainingMillis != other.remainingMillis ||
+        entry.value.missingUsageAccess != other.missingUsageAccess ||
+        entry.value.pendingActivation != other.pendingActivation) {
+      return false;
+    }
+  }
+  return true;
 }

@@ -4,30 +4,36 @@ import '../../core/services/schedule_service.dart';
 import '../../core/models/schedule_model.dart';
 import '../monitor/home_screen.dart';
 
-class RegimesScreen extends StatelessWidget {
+class RegimesScreen extends StatefulWidget {
   const RegimesScreen({super.key});
 
-  String _buildRegimeKey(List<ScheduleModel> regimes) {
-    return regimes
-        .map(
-          (r) =>
-              '${r.id}:${r.isActive ? 1 : 0}:${r.name}:${r.targetApps.length}',
-        )
-        .join('|');
+  @override
+  State<RegimesScreen> createState() => _RegimesScreenState();
+}
+
+class _RegimesScreenState extends State<RegimesScreen> {
+  // Created once per State lifetime. A new stream object must never be
+  // constructed inside build(): StreamBuilder treats a changed stream
+  // identity as a reset (waiting/null data) and re-subscribes from scratch.
+  late final Stream<List<ScheduleModel>> _schedulesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedulesStream = ScheduleService.watchSchedules();
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<ScheduleModel>>(
-      stream: ScheduleService.watchSchedules(),
+      stream: _schedulesStream,
       builder: (context, snapshot) {
         final regimes = snapshot.data ?? const <ScheduleModel>[];
-        final refreshKey = _buildRegimeKey(regimes);
-        // Rebuild the existing dashboard when regime data changes.
-        return KeyedSubtree(
-          key: ValueKey(refreshKey),
-          child: HomeScreen(schedules: regimes),
-        );
+        // Deliberately no KeyedSubtree/ValueKey here: keying HomeScreen by
+        // data content destroyed its State on every emission (scroll reset,
+        // animation replays, timers re-armed). HomeScreen.didUpdateWidget
+        // already diffs schedule changes and updates itself in place.
+        return HomeScreen(schedules: regimes);
       },
     );
   }
