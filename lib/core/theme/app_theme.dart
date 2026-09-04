@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/theme_service.dart';
 import 'app_colors_extension.dart';
+import 'revoke_tokens.dart';
 
 class AppTheme {
   static const String fontFamily = 'NeueMontreal';
@@ -58,7 +59,9 @@ class AppTheme {
   }
 
   static Color _resolveEffectiveAccent() {
-    return ThemeService.instance.accentColor.value;
+    return ThemeService.normalizeAccent(
+      ThemeService.instance.accentColor.value,
+    );
   }
 
   static InputDecoration defaultInputDecoration({
@@ -69,7 +72,7 @@ class AppTheme {
     final brightness = _resolveEffectiveBrightness();
     final accent = _resolveEffectiveAccent();
     final isDark = brightness == Brightness.dark;
-    final surface = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFFFFFFF);
+    final surface = isDark ? const Color(0xFF10131A) : const Color(0xFFFFFFFF);
     final onSurface = isDark
         ? const Color(0xFFFFFFFF)
         : const Color(0xFF000000);
@@ -81,18 +84,21 @@ class AppTheme {
       prefixIcon: prefixIcon,
       filled: true,
       fillColor: surface,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: RevokeSpacing.lg,
+        vertical: RevokeSpacing.lg,
+      ),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: RevokeRadii.controlRadius,
         borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: RevokeRadii.controlRadius,
         borderSide: BorderSide(color: onSurface.withValues(alpha: 0.10)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: accent, width: 2),
+        borderRadius: RevokeRadii.controlRadius,
+        borderSide: BorderSide(color: accent, width: RevokeBorders.emphasis),
       ),
       labelStyle: bodyMedium.copyWith(
         color: muted,
@@ -117,14 +123,21 @@ class AppTheme {
     required Color accent,
   }) {
     final bool isDark = brightness == Brightness.dark;
+    final Color safeAccent = ThemeService.normalizeAccent(accent);
 
     // Fixed neutral surfaces. Avoid Material seed tinting.
     final Color background = isDark
         ? const Color(0xFF000000)
         : const Color(0xFFF2F2F7);
     final Color surface = isDark
-        ? const Color(0xFF1C1C1E)
+        ? const Color(0xFF10131A)
         : const Color(0xFFFFFFFF);
+    final Color surfaceElevated = isDark
+        ? const Color(0xFF141923)
+        : const Color(0xFFFFFFFF);
+    final Color surfaceSubtle = isDark
+        ? const Color(0xFF0D1117)
+        : const Color(0xFFF2F2F7);
     final Color onSurface = isDark
         ? const Color(0xFFFFFFFF)
         : const Color(0xFF000000);
@@ -134,28 +147,45 @@ class AppTheme {
     final Color danger = const Color(0xFFFF3B30);
     final Color success = const Color(0xFF34C759);
     final Color warning = const Color(0xFFFFCC00);
+    final Color enforcement = isDark
+        ? const Color(0xFFFF915A)
+        : const Color(0xFFC2410C);
+    final Color textMuted = isDark
+        ? const Color(0xFF6E7888)
+        : onSurface.withValues(alpha: 0.55);
+    final Color borderSubtle = isDark
+        ? const Color(0xFF273142)
+        : onSurface.withValues(alpha: 0.10);
+    final Color disabled = onSurface.withValues(alpha: 0.38);
 
     final ColorScheme seedScheme = ColorScheme.fromSeed(
-      seedColor: accent,
+      seedColor: safeAccent,
       brightness: brightness,
     );
 
     final ColorScheme scheme = seedScheme.copyWith(
-      primary: accent,
+      primary: safeAccent,
       surface: surface,
       onSurface: onSurface,
       error: danger,
     );
 
     final appColors = AppColorsExtension(
-      accent: accent,
+      accent: safeAccent,
+      accentSoft: safeAccent.withValues(alpha: 0.12),
       danger: danger,
       success: success,
       warning: warning,
       surface: surface,
+      surfaceElevated: surfaceElevated,
+      surfaceSubtle: surfaceSubtle,
       background: background,
       textPrimary: onSurface,
       textSecondary: textSecondary,
+      textMuted: textMuted,
+      borderSubtle: borderSubtle,
+      disabled: disabled,
+      enforcement: enforcement,
     );
 
     final TextTheme baseTextTheme = TextTheme(
@@ -177,20 +207,33 @@ class AppTheme {
     ).apply(bodyColor: onSurface, displayColor: onSurface);
 
     final ButtonStyle primary = ElevatedButton.styleFrom(
-      backgroundColor: accent,
+      backgroundColor: safeAccent,
       foregroundColor: scheme.onPrimary,
       textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: RevokeRadii.controlRadius,
+      ),
+      padding: const EdgeInsets.symmetric(
+        vertical: RevokeSpacing.lg,
+        horizontal: RevokeSpacing.xl,
+      ),
+      elevation: RevokeElevation.none,
     );
 
     final ButtonStyle outlined = OutlinedButton.styleFrom(
-      foregroundColor: accent,
+      foregroundColor: safeAccent,
       textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      side: BorderSide(color: accent.withValues(alpha: 0.45), width: 1.5),
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+      shape: const RoundedRectangleBorder(
+        borderRadius: RevokeRadii.controlRadius,
+      ),
+      side: BorderSide(
+        color: safeAccent.withValues(alpha: 0.45),
+        width: RevokeBorders.subtle,
+      ),
+      padding: const EdgeInsets.symmetric(
+        vertical: RevokeSpacing.lg,
+        horizontal: RevokeSpacing.xl,
+      ),
     );
 
     return ThemeData(
@@ -207,8 +250,8 @@ class AppTheme {
       appBarTheme: AppBarTheme(
         backgroundColor: background,
         foregroundColor: onSurface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
+        elevation: RevokeElevation.none,
+        scrolledUnderElevation: RevokeElevation.none,
         surfaceTintColor: Colors.transparent,
         titleTextStyle: h2.copyWith(color: onSurface),
         iconTheme: IconThemeData(color: onSurface),
@@ -223,20 +266,23 @@ class AppTheme {
         filled: true,
         fillColor: surface,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
+          horizontal: RevokeSpacing.lg,
+          vertical: RevokeSpacing.lg,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: RevokeRadii.controlRadius,
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: onSurface.withValues(alpha: 0.10)),
+          borderRadius: RevokeRadii.controlRadius,
+          borderSide: BorderSide(color: borderSubtle),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: accent, width: 2),
+          borderRadius: RevokeRadii.controlRadius,
+          borderSide: BorderSide(
+            color: safeAccent,
+            width: RevokeBorders.emphasis,
+          ),
         ),
         labelStyle: bodyMedium.copyWith(
           color: textSecondary,
@@ -244,7 +290,7 @@ class AppTheme {
           fontWeight: FontWeight.w500,
         ),
         floatingLabelStyle: bodyMedium.copyWith(
-          color: accent,
+          color: safeAccent,
           letterSpacing: 1.1,
           fontWeight: FontWeight.w700,
         ),
@@ -258,11 +304,40 @@ class AppTheme {
       // Bottom Navigation Bar
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: surface,
-        selectedItemColor: accent,
+        selectedItemColor: safeAccent,
         unselectedItemColor: textSecondary,
         showSelectedLabels: true,
         showUnselectedLabels: true,
         type: BottomNavigationBarType.fixed,
+      ),
+
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: RevokeElevation.none,
+        height: 72,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        indicatorColor: safeAccent.withValues(alpha: 0.14),
+        indicatorShape: const RoundedRectangleBorder(
+          borderRadius: RevokeRadii.controlRadius,
+        ),
+        iconTheme: WidgetStateProperty.resolveWith<IconThemeData?>(
+          (states) => IconThemeData(
+            size: RevokeIconSizes.emphasis,
+            color: states.contains(WidgetState.selected)
+                ? safeAccent
+                : textSecondary,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith<TextStyle?>(
+          (states) =>
+              (states.contains(WidgetState.selected) ? smMedium : smRegular)
+                  .copyWith(
+                    color: states.contains(WidgetState.selected)
+                        ? safeAccent
+                        : textSecondary,
+                  ),
+        ),
       ),
     );
   }
@@ -445,6 +520,20 @@ class AppTheme {
   // labelSmall: compact labels (chips, tiny headers, status labels).
   static final TextStyle labelSmall = xsBold.copyWith(letterSpacing: 0.6);
 
+  // Revoke 2.0 semantic roles. Feature code should prefer these names over
+  // selecting a numeric size directly.
+  static final TextStyle display = size4xlBold;
+  static final TextStyle numericDisplay = size3xlBold;
+  static final TextStyle pageTitle = xxlMedium;
+  static final TextStyle sectionTitle = xlMedium;
+  static final TextStyle cardTitle = lgMedium;
+  static final TextStyle body = lgRegular;
+  static final TextStyle bodySecondary = baseRegular;
+  static final TextStyle label = smMedium;
+  static final TextStyle caption = xsRegular;
+  static final TextStyle numericStat = size3xlMedium;
+  static final TextStyle button = baseMedium;
+
   static final SliderThemeData vowSliderTheme = SliderThemeData(
     activeTrackColor: _resolveEffectiveAccent(),
     inactiveTrackColor: _resolveEffectiveBrightness() == Brightness.dark
@@ -469,9 +558,14 @@ class AppTheme {
       backgroundColor: accent,
       foregroundColor: scheme.onPrimary,
       textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: RevokeRadii.controlRadius,
+      ),
+      padding: const EdgeInsets.symmetric(
+        vertical: RevokeSpacing.lg,
+        horizontal: RevokeSpacing.xl,
+      ),
+      elevation: RevokeElevation.none,
     );
   }
 
@@ -488,11 +582,14 @@ class AppTheme {
       foregroundColor: onSurface,
       textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: RevokeRadii.controlRadius,
         side: BorderSide(color: onSurface.withValues(alpha: 0.10), width: 1),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-      elevation: 0,
+      padding: const EdgeInsets.symmetric(
+        vertical: RevokeSpacing.lg,
+        horizontal: RevokeSpacing.xl,
+      ),
+      elevation: RevokeElevation.none,
     );
   }
 
@@ -507,11 +604,14 @@ class AppTheme {
       foregroundColor: danger,
       textStyle: bodyMedium.copyWith(fontWeight: FontWeight.w500),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: RevokeRadii.controlRadius,
         side: const BorderSide(color: danger, width: 2),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-      elevation: 0,
+      padding: const EdgeInsets.symmetric(
+        vertical: RevokeSpacing.lg,
+        horizontal: RevokeSpacing.xl,
+      ),
+      elevation: RevokeElevation.none,
     );
   }
 

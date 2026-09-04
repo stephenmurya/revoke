@@ -23,12 +23,12 @@ Review date: 2026-09-04
 | Weekly Premium is outside initial v2 scope | ACCEPTED | decisions/005; product/monetization.md | No | No |
 | Lifetime Premium is outside initial v2 scope | ACCEPTED | decisions/005; product/monetization.md | No | No |
 | 100 Credits = 30 Premium days; 25,920 seconds/Credit | ACCEPTED | decisions/009; monetization.md | No | Yes |
-| Target bottom navigation is Today / Commitments / Circle / Insights | ACCEPTED | decisions/012; design/information-architecture.md | Current shell is Home/Regimes/Squad/Insights | Yes |
+| Target bottom navigation is Today / Commitments / Circle / Insights | ACCEPTED | decisions/012; design/information-architecture.md | Implemented; Today is dedicated, other destinations retain their scoped legacy content | Yes |
 | Settings lives under Profile/account, not primary navigation | ACCEPTED | decisions/012; design/information-architecture.md | Current controls/profile routes are separate | Yes |
-| Global app bar includes Credits pill, Notifications, and Profile where appropriate | ACCEPTED | decisions/012; design/information-architecture.md | No Credits pill | Yes |
-| Credits are visually subordinate and Today has no large wallet balance card | ACCEPTED | decisions/012; design/information-architecture.md | No v2 Credit UI | Yes |
-| Revoke 2.0 uses a calm, precise, authoritative, refined, premium visual direction | ACCEPTED | decisions/012; design/overview.md | Current visual language is mixed | Yes |
-| A governed design system is required before broad v2 UI implementation | ACCEPTED | decisions/012; design/design-system.md | No centralized component contract | Yes |
+| Global app bar includes Credits pill, Notifications, and Profile where appropriate | ACCEPTED | decisions/012; design/information-architecture.md | Phase 1 compact zero-valued Credits placeholder, Notifications, and Profile are implemented; no Credit source exists | Yes |
+| Credits are visually subordinate and Today has no large wallet balance card | ACCEPTED | decisions/012; design/information-architecture.md | Compact zero-valued app-bar placeholder; no wallet card or Credit backend | Yes |
+| Revoke 2.0 uses a calm, precise, authoritative, refined, premium visual direction | ACCEPTED | decisions/012; design/overview.md | Phase 2 Today follows the direction; remaining feature screens remain mixed | Yes |
+| A governed design system is required before broad v2 UI implementation | ACCEPTED | decisions/012; design/design-system.md | Phase 1 semantic tokens/primitives/shell are implemented; broad migration remains | Yes |
 | Google Play policy compatibility is not assumed | ACCEPTED | monetization.md; credit-ledger-and-billing.md | External validation only | Release gate |
 | Default grace, eligibility, caps, device policy, Circle quorum, and free tier | OPEN | product/open-questions.md | No | Product decision required |
 | Social Regimes/community marketplace | DEFERRED | product-spec.md; engineering/status.md | No integrated path | No unless later revived |

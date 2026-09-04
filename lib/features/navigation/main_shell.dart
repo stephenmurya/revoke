@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/services/auth_service.dart';
+import '../../core/theme/revoke_tokens.dart';
 import '../../core/utils/theme_extensions.dart';
-import '../../core/widgets/revoke_logo.dart';
+import '../../core/widgets/revoke_components.dart';
+import '../../core/widgets/revoke_credits_pill.dart';
 
 class MainShell extends StatefulWidget {
   final Widget child;
@@ -27,7 +29,7 @@ class _MainShellState extends State<MainShell> {
 
   Widget _buildProfileAvatar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.only(right: RevokeSpacing.sm),
       child: FutureBuilder<Map<String, dynamic>?>(
         future: _userDataFuture,
         builder: (context, snapshot) {
@@ -39,25 +41,30 @@ class _MainShellState extends State<MainShell> {
               'U';
           final initial = displayName.isNotEmpty ? displayName[0] : 'U';
 
-          return InkWell(
-            borderRadius: BorderRadius.circular(999),
-            onTap: () => context.push('/controls'),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: context.scheme.surface,
-              backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
-                  ? CachedNetworkImageProvider(photoUrl)
-                  : null,
-              child: (photoUrl == null || photoUrl.isEmpty)
-                  ? Text(
-                      initial.toUpperCase(),
-                      style:
-                          (context.text.labelMedium ??
-                                  Theme.of(context).textTheme.labelMedium ??
-                                  const TextStyle())
-                              .copyWith(color: context.scheme.primary),
-                    )
-                  : null,
+          return SizedBox(
+            width: RevokeTouchTargets.minimum,
+            height: RevokeTouchTargets.minimum,
+            child: IconButton(
+              tooltip: 'Profile',
+              padding: const EdgeInsets.all(RevokeSpacing.xs),
+              onPressed: () => context.push('/profile'),
+              icon: CircleAvatar(
+                radius: RevokeIconSizes.account / 2,
+                backgroundColor: context.colors.accentSoft,
+                backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
+                    ? CachedNetworkImageProvider(photoUrl)
+                    : null,
+                child: (photoUrl == null || photoUrl.isEmpty)
+                    ? Text(
+                        initial.toUpperCase(),
+                        style:
+                            (context.text.labelMedium ??
+                                    Theme.of(context).textTheme.labelMedium ??
+                                    const TextStyle())
+                                .copyWith(color: context.colors.accent),
+                      )
+                    : null,
+              ),
             ),
           );
         },
@@ -71,13 +78,14 @@ class _MainShellState extends State<MainShell> {
     // Avoid using `.uri.toString()` here, because query params can change while
     // still being on the same tab, and non-go_router pushes won't update it.
     final String location = GoRouterState.of(context).matchedLocation;
-    final bool showHudTopBar =
-        location == '/home' || location == '/squad' || location == '/insights';
+    final bool showHudTopBar = _isShellRootLocation(location);
     int selectedIndex = 0;
-    if (location == '/squad') {
+    if (location == '/commitments') {
       selectedIndex = 1;
-    } else if (location == '/insights') {
+    } else if (location == '/squad') {
       selectedIndex = 2;
+    } else if (location == '/insights') {
+      selectedIndex = 3;
     }
 
     return Scaffold(
@@ -86,69 +94,87 @@ class _MainShellState extends State<MainShell> {
           ? AppBar(
               backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               surfaceTintColor: Colors.transparent,
-              elevation: 0,
+              elevation: RevokeElevation.none,
               automaticallyImplyLeading: false,
-              titleSpacing: 16,
-              title: Row(
-                children: [
-                  const RevokeLogo(size: 30),
-                  const SizedBox(width: 10),
-                  Text(
-                    'REVOKE',
-                    style: (context.text.titleMedium ?? const TextStyle())
-                        .copyWith(
-                          color: context.scheme.onSurface.withValues(
-                            alpha: 0.78,
-                          ),
-                          letterSpacing: -0.5,
-                        ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => context.push('/notifications'),
-                    icon: PhosphorIcon(PhosphorIcons.notification),
-                    color: context.scheme.onSurface.withValues(alpha: 0.72),
-                    tooltip: 'Notifications',
-                  ),
-                  _buildProfileAvatar(context),
-                ],
-              ),
+              title: Text(_pageTitle(location)),
+              actions: [
+                RevokeCreditsPill(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Credits are not available yet.'),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: RevokeSpacing.xs),
+                RevokeIconButton(
+                  tooltip: 'Notifications',
+                  icon: PhosphorIcons.notification,
+                  onPressed: () => context.push('/notifications'),
+                ),
+                _buildProfileAvatar(context),
+              ],
             )
           : null,
       body: widget.child,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: selectedIndex,
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              context.go('/home');
-              break;
-            case 1:
-              context.go('/squad');
-              break;
-            case 2:
-              context.go('/insights');
-              break;
-          }
-        },
-        items: [
-          BottomNavigationBarItem(
-            icon: PhosphorIcon(PhosphorIcons.monitor),
-            activeIcon: PhosphorIcon(PhosphorIcons.monitorFill),
-            label: 'Regimes',
-          ),
-          BottomNavigationBarItem(
-            icon: PhosphorIcon(PhosphorIcons.users),
-            activeIcon: PhosphorIcon(PhosphorIcons.usersFill),
-            label: 'Squad',
-          ),
-          BottomNavigationBarItem(
-            icon: PhosphorIcon(PhosphorIcons.chartBar),
-            activeIcon: PhosphorIcon(PhosphorIcons.chartBarFill),
-            label: 'Insights',
-          ),
-        ],
-      ),
+      bottomNavigationBar: showHudTopBar
+          ? NavigationBar(
+              selectedIndex: selectedIndex,
+              onDestinationSelected: (index) {
+                const destinations = [
+                  '/home',
+                  '/commitments',
+                  '/squad',
+                  '/insights',
+                ];
+                context.go(destinations[index]);
+              },
+              destinations: [
+                NavigationDestination(
+                  icon: PhosphorIcon(PhosphorIcons.monitor),
+                  selectedIcon: PhosphorIcon(PhosphorIcons.monitorFill),
+                  label: 'Today',
+                ),
+                NavigationDestination(
+                  icon: PhosphorIcon(PhosphorIcons.checkCircle),
+                  selectedIcon: PhosphorIcon(PhosphorIcons.checkCircleFill),
+                  label: 'Commitments',
+                ),
+                NavigationDestination(
+                  icon: PhosphorIcon(PhosphorIcons.users),
+                  selectedIcon: PhosphorIcon(PhosphorIcons.usersFill),
+                  label: 'Circle',
+                ),
+                NavigationDestination(
+                  icon: PhosphorIcon(PhosphorIcons.chartBar),
+                  selectedIcon: PhosphorIcon(PhosphorIcons.chartBarFill),
+                  label: 'Insights',
+                ),
+              ],
+            )
+          : null,
     );
+  }
+
+  bool _isShellRootLocation(String location) {
+    return location == '/home' ||
+        location == '/commitments' ||
+        location == '/squad' ||
+        location == '/insights';
+  }
+
+  String _pageTitle(String location) {
+    switch (location) {
+      case '/commitments':
+        return 'Commitments';
+      case '/squad':
+        return 'Circle';
+      case '/insights':
+        return 'Insights';
+      case '/home':
+      default:
+        return 'Today';
+    }
   }
 }

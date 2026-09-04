@@ -1,10 +1,14 @@
-# Metrics and Home Cards
+# Metrics and Today Cards
 
 ## Focus Score retirement
 
 Focus Score is retired from Revoke 2.0. Legacy storage/UI may remain temporarily for migration, but no opaque composite score should replace it or drive the v2 information architecture.
 
-## Home goal
+## Phase 2 Today implementation
+
+The current Today surface uses only existing truthful proxies: native daily usage-limit status, current schedule-block timing, local taper-plan state, native monitoring permissions, temporary-approval package state, and the existing native week usage snapshot. It does not present adherence, recovery, grace, override counts, or any replacement score because the current implementation cannot establish those v2 metrics reliably.
+
+## Today goal
 
 Home answers: “Am I keeping the Commitments I made, and where am I struggling?” Cards should be direct and understandable.
 
@@ -47,4 +51,3 @@ Show available, locked, and total Credits, with Commitment association for locke
 ### Danger Zones
 
 Future analysis may show periods correlated with overruns or overrides, but must not imply causal certainty.
-

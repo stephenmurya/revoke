@@ -2,7 +2,7 @@
 
 Review date: 2026-09-04
 
-This directory is a review artifact for the documentation-only Revoke 2.0 update. It is not canonical product documentation. Canonical sources live under ../.. and are indexed by ../../README.md.
+This directory is a review artifact for the Revoke 2.0 documentation audit and Phase 1 mobile implementation. It is not canonical product documentation. Canonical sources live under ../.. and are indexed by ../../README.md.
 
 The Markdown files in this directory are the current review packet. The retained `docs.zip` is a prior generated export and was not regenerated during this pass; it is not an authority over the Markdown packet.
 
@@ -17,6 +17,8 @@ The Markdown files in this directory are the current review packet. The retained
 - [Documentation Quality Checklist](documentation-quality-checklist.md): final structural and scope checks.
 - [Terminology Scan](terminology-scan.md): required case-insensitive search results and classification of every remaining match.
 - [Design-System Audit Summary](design-system-audit-summary.md): review-facing summary of the current Flutter/native UI audit and implementation readiness.
+- [Phase 1 Implementation](phase-1-implementation.md): source implementation review for the design-system foundation and global mobile shell.
+- [Phase 2 Today Implementation](phase-2-today-implementation.md): source implementation review for the Today experience and its data provenance.
 
 ## Authority reminder
 

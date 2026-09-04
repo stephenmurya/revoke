@@ -62,7 +62,7 @@ Accountability Circles are optional and use granular permissions. Commitment Cre
 ### Design
 
 - `design/overview.md`: accepted Revoke 2.0 mobile visual direction and design governance.
-- `design/design-system.md`: proposed semantic token, component, native-mapping, accent, motion, and accessibility contract.
+- `design/design-system.md`: semantic token, component, native-mapping, accent, motion, and accessibility contract; the Phase 1 Flutter foundation is now implemented.
 - `design/information-architecture.md`: accepted Today/Commitments/Circle/Insights mobile IA and global app-bar rules.
 
 ### Decisions
@@ -73,6 +73,8 @@ Accountability Circles are optional and use granular permissions. Commitment Cre
 
 - `audits/2026-09-04-revival-audit.md`: source-verified reconstruction of the repository as of 2026-09-04.
 - `audits/2026-09-04-design-system-audit.md`: source-verified current Flutter/native UI and design-system audit.
+
+The Phase 1 implementation review is [review/docs/phase-1-implementation.md](review/docs/phase-1-implementation.md). It records the implemented shell/foundation boundary and the UI intentionally deferred to later phases.
 
 ### Archive
 

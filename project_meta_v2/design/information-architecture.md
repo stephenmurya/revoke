@@ -1,6 +1,6 @@
 # Revoke 2.0 Mobile Information Architecture
 
-Status: Accepted target mobile information architecture. This is not implemented by this pass.
+Status: Accepted target mobile information architecture. Phase 1 implements the global labels and shell destinations while retaining legacy content and compatibility routes beneath them.
 
 ## Primary navigation
 
@@ -26,6 +26,14 @@ flowchart LR
 ```
 
 Current `/home` and `RegimesScreen` are migration locations, not the target product vocabulary. Schedules remain enforcement mechanisms beneath Commitments. Current `/squad` is the migration location for Circle. Current `/insights` maps naturally to Insights but must lose Focus Score framing.
+
+## Phase 1 implementation status
+
+`MainShell` now presents Today, Commitments, Circle, and Insights through `NavigationBar`. `/home` remains the Today-compatible entry point, `/commitments` points to the existing `RegimesScreen`, `/squad` remains the Circle-compatible entry point, and `/insights` remains the existing Insights entry point. The app bar now exposes a zero-valued Credits placeholder, Notifications, and Profile. The placeholder does not imply a Credit backend or purchase implementation.
+
+## Phase 2 Today implementation status
+
+`/home` now renders the dedicated `TodayScreen`. Today owns daily state, the highest-priority current schedule-backed Commitment behavior, usage remaining, active protections, existing week usage evidence, monitoring health, and temporary-access indication. `/commitments` remains the legacy schedule-management destination. Focus Score is absent from Today but remains available through its compatibility route and legacy detail screen.
 
 ## Global app bar
 

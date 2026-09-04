@@ -11,16 +11,11 @@ class AppearanceScreen extends StatelessWidget {
   const AppearanceScreen({super.key});
 
   static const Map<int, String> _accentNames = <int, String>{
-    0xFFFF4500: 'Blaze',
-    0xFFD50000: 'Crimson',
-    0xFF76FF03: 'Biohazard',
-    0xFF00E5FF: 'Protocol',
-    0xFFFFD600: 'Voltage',
-    0xFFD500F9: 'Sovereign',
-    0xFFFF1744: 'Plasma',
-    0xFF2979FF: 'Cobalt',
-    0xFF90A4AE: 'Stealth',
-    0xFF1DE9B6: 'Mint',
+    0xFFC2410C: 'Blaze',
+    0xFFA61B1B: 'Crimson',
+    0xFF175CD3: 'Cobalt',
+    0xFF067647: 'Mint',
+    0xFF6941C6: 'Violet',
   };
 
   @override
@@ -44,7 +39,7 @@ class AppearanceScreen extends StatelessWidget {
             const SizedBox(height: 16),
             _Section(
               title: 'System Accent',
-              subtitle: 'Choose the color your squad will fear.',
+              subtitle: 'Choose a Revoke accent.',
               child: _AccentPicker(scheme: scheme),
             ),
           ],

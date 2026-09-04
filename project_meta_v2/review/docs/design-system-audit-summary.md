@@ -19,10 +19,14 @@ Detailed evidence is in [`audits/2026-09-04-design-system-audit.md`](../../audit
 
 - 74 Dart files contain roughly 68 `Color(...)`, 322 named `Colors.*`, 201 `EdgeInsets`, 359 `SizedBox`, 147 radius, 17 elevation, and 10 shadow occurrences.
 - Feature screens create private card, row, sheet, and state treatments.
-- `ThemeService` exposes ten unrestricted accent colors; semantic state meaning is not fully protected.
+- The pre-Phase 1 audit found ten unrestricted accent colors; Phase 1 now constrains persisted and selectable values to five curated accents while preserving fixed semantic state colors.
 - The Kotlin overlay uses hardcoded hex colors, dp values, Android system typefaces, and punitive legacy copy instead of shared semantic resources.
-- Current top-level structure is Home/Regimes/Squad/Insights with Focus Score, not Today/Commitments/Circle/Insights.
+- Legacy content still uses Home/Regimes/Squad concepts and Focus Score, although the Phase 1 shell now presents the accepted Today/Commitments/Circle/Insights labels.
+
+## Phase 1 implementation update
+
+The audit's recommended foundation now exists in Flutter. The shell exposes the accepted Today / Commitments / Circle / Insights labels, shared primitives use semantic tokens, persisted accent values are constrained through a curated palette, and the app bar contains the compact zero-valued Credits placeholder plus Notifications and Profile. Legacy feature styling remains by design and native overlay styling is unchanged.
 
 ## Readiness
 
-The project is ready to begin a focused implementation pass only after the implementation team treats the new design documents as the contract. Broad screen work should begin with semantic tokens and shared primitives, then the app bar/navigation and Today surface, while preserving native enforcement. No product question blocks the design-system pass itself; free/trial entitlements, the free-versus-Premium capability matrix, and final Circle quorum remain product decisions for later feature implementation.
+The project is ready for the focused Today redesign phase. Broad screen work must continue using the semantic tokens and shared primitives, while preserving native enforcement. No product question blocks the next UI phase itself; free/trial entitlements, the free-versus-Premium capability matrix, and final Circle quorum remain product decisions for later feature implementation.

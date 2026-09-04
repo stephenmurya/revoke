@@ -52,6 +52,14 @@ Premium is prepaid and non-auto-renewing. The canonical reference prices are USD
 
 The v2 design vocabulary is semantic: Today, Commitments, Circle, Insights, Available Credits, Locked Credits, and enforcement/verification states. `AppTheme` and `AppColorsExtension` are foundations, not a complete contract. The dated design audit records the unrestricted accent palette, screen-local components, and native hardcoded palette as current implementation concerns.
 
+### Phase 1 implementation boundary
+
+The implemented shell now uses the accepted Today / Commitments / Circle / Insights labels, while `/home`, `RegimesScreen`, and `/squad` remain compatibility/content locations. This does not contradict the target IA: it is the documented migration boundary. The Credits control is a compact zero placeholder and does not imply a wallet, purchase, or ledger implementation. The current native blocker remains unchanged and is intentionally deferred to the native visual-alignment phase.
+
+### Phase 2 Today boundary
+
+`/home` now renders the dedicated Today presentation and `/commitments` remains the schedule-management compatibility destination. Today uses direct native/local evidence and omits unsupported v2 adherence, recovery, grace, and override metrics. Focus Score is removed from Today without deleting its compatibility route or legacy storage. Credits remain app-bar-only and no Credit-backed values are displayed.
+
 ## Previous-document status
 
 Previous canonical-facing terminology has been corrected. No accidental legacy terminology remains in current product, architecture, decisions, or review-packet text. Remaining scan matches are limited to intentionally preserved historical archive material or dated implementation evidence; they are not current product or backend terminology.

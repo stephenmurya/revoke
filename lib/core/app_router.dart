@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../features/navigation/main_shell.dart';
 import '../features/regimes/regimes_screen.dart';
+import '../features/today/today_screen.dart';
 import '../features/squad/squad_screen.dart';
 import '../features/squad/tribunal_screen.dart';
 import '../features/permissions/permission_screen.dart';
@@ -48,6 +49,7 @@ class AppRouter {
 
   static bool _isShellLocation(String location) {
     return location == '/home' ||
+        location == '/commitments' ||
         location == '/squad' ||
         location == '/insights';
   }
@@ -267,6 +269,11 @@ class AppRouter {
         routes: [
           GoRoute(
             path: '/home',
+            builder: (context, state) => const TodayScreen(),
+          ),
+          // V2 shell label over the existing Regimes implementation.
+          GoRoute(
+            path: '/commitments',
             builder: (context, state) => const RegimesScreen(),
           ),
           // Legacy route alias (pre-rename). Keeps older deep links / restored state working.

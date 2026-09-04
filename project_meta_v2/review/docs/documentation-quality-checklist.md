@@ -26,4 +26,9 @@ Review date: 2026-09-04
 - [x] Credits pill placement and subordinate Today treatment are documented.
 - [x] Premium reference prices are USD $9.99 for 30 days and USD $59.99 for 365 days; weekly and lifetime are excluded.
 - [x] The generic evidence-resolution-window question was removed; only exceptional handling inside/after the accepted 24-hour window remains open.
+- [x] Phase 1 implementation status is separated from target design intent; legacy feature content is explicitly documented as retained beneath the new shell.
+- [x] The review packet records the implemented token foundation, shared primitives, constrained accent mapping, shell labels, and zero-valued Credits placeholder.
+- [x] Phase 2 records Today as a dedicated surface while keeping Commitments management and other feature migrations scoped for later phases.
+- [x] Every Today metric/state has an implementation data source or is explicitly omitted as unsupported.
+- [x] Focus Score is absent from Today while legacy compatibility remains documented.
 - [x] Browser, desktop, cross-device, browser Firebase/licensing, and iOS work are explicitly out of scope.

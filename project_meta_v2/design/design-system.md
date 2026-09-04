@@ -1,6 +1,20 @@
 # Revoke 2.0 Mobile Design-System Contract
 
-Status: Proposed implementation contract based on the current source audit and accepted v2 direction. It is documentation only; no tokens or components are implemented by this pass.
+Status: Canonical implementation contract. Phase 1 implements the Flutter token foundation, shared primitives, global shell, Credits placeholder, and constrained accent mapping described below. Feature-screen migration and native resource mapping remain later work.
+
+## Phase 1 implementation mapping
+
+The existing `AppTheme`, `ColorScheme`, `AppColorsExtension`, `ThemeService`, NeueMontreal font setup, and shared Material styles were retained and extended. The current Flutter implementation adds:
+
+- semantic constants in `lib/core/theme/revoke_tokens.dart`;
+- semantic color fields in `AppColorsExtension` and the theme factory in `lib/core/theme/app_theme.dart`;
+- curated accent normalization and legacy-value fallback in `lib/core/services/theme_service.dart`;
+- reusable primitives in `lib/core/widgets/revoke_components.dart`;
+- the compact, non-financial Credits placeholder in `lib/core/widgets/revoke_credits_pill.dart`;
+- the four-destination shell and app-bar actions in `lib/features/navigation/main_shell.dart`;
+- the compatibility `/commitments` route in `lib/core/app_router.dart`.
+
+The shell labels are implemented. The Commitments and Circle content still use legacy Regimes/Squad feature implementations, while Today now has its dedicated Phase 2 surface. This is intentional migration sequencing, not a claim that those feature surfaces are complete v2 redesigns.
 
 ## Token philosophy
 
