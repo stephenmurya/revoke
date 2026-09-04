@@ -4,8 +4,8 @@ Review date: 2026-09-04
 
 | Decision | Status | Canonical source | Implemented now? | Migration required? |
 |---|---|---|---|---|
-| Commitment is the primary product object | ACCEPTED | decisions/001; product/vision.md | No complete Commitment domain; schedules are current primitive | Yes |
-| Reduce and Protect are the Commitment forms | ACCEPTED | product/commitments.md; product-spec.md | Partial: taper and Time Block/Usage Limit exist separately | Yes |
+| Commitment is the primary product object | ACCEPTED | decisions/001; product/vision.md | User-facing adapter and management flows implemented; schedules remain current persistence primitive | Yes |
+| Reduce and Protect are the Commitment forms | ACCEPTED | product/commitments.md; product-spec.md | Partial: user-facing flows map to taper and Time Block/Usage Limit; backend domain remains absent | Yes |
 | Focus Score is retired | ACCEPTED | decisions/002; product/metrics.md | Legacy UI/storage exists | Yes |
 | Accountability Circles are optional and granular | ACCEPTED | decisions/003; product/accountability.md | Squad flows exist; Circle model does not | Yes |
 | Commitment Credits use `available_credits`, `locked_credits`, and `credit_holds` | ACCEPTED | decisions/008; architecture/credit-ledger-and-billing.md | No v2 ledger | Yes |
@@ -28,7 +28,7 @@ Review date: 2026-09-04
 | Global app bar includes Credits pill, Notifications, and Profile where appropriate | ACCEPTED | decisions/012; design/information-architecture.md | Phase 1 compact zero-valued Credits placeholder, Notifications, and Profile are implemented; no Credit source exists | Yes |
 | Credits are visually subordinate and Today has no large wallet balance card | ACCEPTED | decisions/012; design/information-architecture.md | Compact zero-valued app-bar placeholder; no wallet card or Credit backend | Yes |
 | Revoke 2.0 uses a calm, precise, authoritative, refined, premium visual direction | ACCEPTED | decisions/012; design/overview.md | Phase 2 Today follows the direction; remaining feature screens remain mixed | Yes |
-| A governed design system is required before broad v2 UI implementation | ACCEPTED | decisions/012; design/design-system.md | Phase 1 semantic tokens/primitives/shell are implemented; broad migration remains | Yes |
+| A governed design system is required before broad v2 UI implementation | ACCEPTED | decisions/012; design/design-system.md | Phase 1 tokens/primitives/shell are implemented and used by Phase 3 Commitment surfaces; broad migration remains | Yes |
 | Google Play policy compatibility is not assumed | ACCEPTED | monetization.md; credit-ledger-and-billing.md | External validation only | Release gate |
 | Default grace, eligibility, caps, device policy, Circle quorum, and free tier | OPEN | product/open-questions.md | No | Product decision required |
 | Social Regimes/community marketplace | DEFERRED | product-spec.md; engineering/status.md | No integrated path | No unless later revived |

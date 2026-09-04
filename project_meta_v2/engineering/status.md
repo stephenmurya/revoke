@@ -10,13 +10,19 @@ This file answers what exists now, not what Revoke 2.0 intends to build. The cur
 
 The Flutter design-system foundation and global mobile shell are now implemented without changing native enforcement or backend behavior. `AppTheme`, `ColorScheme`, and `AppColorsExtension` expose semantic surfaces, state colors, typography roles, and restrained component styling. `ThemeService` preserves persisted theme/accent preferences while mapping users to a curated safe accent palette. Shared primitives live under `lib/core/widgets/`. The shell exposes Today, Commitments, Circle, and Insights, with global Credits placeholder, Notifications, and Profile actions. Credits remain a zero-valued UI placeholder because no Credit ledger or billing path exists.
 
-The Commitments-management Regimes screen, Squad, Insights, Settings, and native overlay visuals retain their legacy implementations until their dedicated phases.
+The Commitments management screen was migrated in Phase 3; Squad, Insights, Settings, and native overlay visuals retain their legacy implementations until their dedicated phases.
 
 ## Phase 2 Today experience implemented
 
 The `/home` shell destination now renders `TodayScreen` rather than the legacy Home/Regimes presentation. Today uses existing schedule state, native daily usage-limit calculations, schedule-block timing, local taper plans, native permission state, temporary approval package state, and the existing native week usage snapshot. Focus Score is removed from the primary Today experience but its legacy route/storage remain for compatibility. Unsupported v2 adherence, recovery, grace, and override metrics are intentionally omitted.
 
-The dedicated Today implementation preserves stable stream identity and stateful scroll behavior. Periodic usage refreshes update only changed status data and do not force a page remount. Commitments management remains under the existing Regimes implementation until the next phase.
+The dedicated Today implementation preserves stable stream identity and stateful scroll behavior. Periodic usage refreshes update only changed status data and do not force a page remount. Commitments management remains under the existing schedule-backed implementation until the Commitment domain phase.
+
+## Phase 3 Commitments implementation
+
+The `/commitments` destination now renders `CommitmentsScreen`. `CommitmentPresentationAdapter` maps existing `ScheduleModel` values into user-facing Reduce and Protect `CommitmentViewModel` values. `CreateCommitmentScreen` provides behavioral intent selection, searchable installed-app selection, measured Reduce baseline, explicit target and bounded duration, actual taper-plan preview, Protect daily-limit and protected-period configuration, review, activation, and same-ID editing. `CommitmentDetailScreen` provides current state, plan, target apps, edit, supported Protect pause/resume, and end behavior.
+
+Persistence and enforcement remain unchanged at the compatibility boundary: Protect daily limit writes `ScheduleType.usageLimit` (native type 1), Protect protected period writes `ScheduleType.timeBlock` (native type 0), and Reduce writes a `TaperPlanModel` that materializes a type 1 schedule. `ScheduleService` remains local-first, queues Firestore sync through `RegimeService`, and synchronizes the same schedule payload to native. No Launch Count schedule is produced by the v2 creation flow. The backend still stores schedules under `users/{uid}/regimes`; a native/server Commitment domain object is not implemented.
 
 ## Confirmed working or salvageable foundations
 
@@ -53,7 +59,7 @@ The dedicated Today implementation preserves stable stream identity and stateful
 
 ## V2 product concepts not implemented
 
-- Commitment domain object and immutable activation lease;
+- native/server Commitment domain object and immutable activation lease;
 - deterministic persisted Commitment onboarding state;
 - optional Accountability Circle granular permissions;
 - Commitment Credits, Credit holds, append-only Credit ledger, purchase lineage, Google Play verification, or Premium redemption;
@@ -70,7 +76,7 @@ The dedicated Today implementation preserves stable stream identity and stateful
 - Focus Score is implemented/visible in legacy UI/storage but is retired from v2 product UX;
 - Squads are functional but evolve into optional Accountability Circles;
 - Pleas/Tribunals are functional but need durable approval delivery, fixed voter policy, and idempotency hardening;
-- taper is a Home opt-in but should become Commitment Reduce behavior;
+- legacy Home taper entry remains, while the new Commitments flow presents taper as Reduce behavior;
 - admin/God Mode, mock Tribunals, score adjustment, and amnesty exist and need an explicit production boundary.
 
 ## Revival order
@@ -78,7 +84,7 @@ The dedicated Today implementation preserves stable stream identity and stateful
 1. repair deterministic onboarding and goal persistence;
 2. replace stale test bootstrap and keep existing suites green;
 3. prove enforcement/recovery on physical/emulated devices;
-4. introduce the Commitment domain layer over existing schedules;
+4. extend and harden the Commitment presentation/domain adapter over existing schedules;
 5. add schedule revisions, native acknowledgments, and conflict policy;
 6. formalize usage evidence, timezone rules, monitoring health, and UNVERIFIABLE behavior;
 7. make override approval delivery durable without Flutter dependency;

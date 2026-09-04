@@ -1,6 +1,6 @@
 # Commitments
 
-Status: Canonical Revoke 2.0 product model. Current implementation is documented separately in ../engineering/status.md.
+Status: Canonical Revoke 2.0 product model. The user-facing Reduce/Protect management layer is implemented over legacy schedules; current implementation limits are documented separately in ../engineering/status.md.
 
 ## Purpose
 
@@ -72,3 +72,7 @@ An unverifiable Credit-backed Commitment returns locked Credits. Repeated unexpl
 An override is an explicit, bounded request to temporarily break or pause an active Commitment. The request follows the Commitment's immutable override policy: self, AI Warden, Circle, fallback, or no override. Approval changes access for the permitted window; it does not change the Commitment's financial criteria unless the contract explicitly says so.
 
 See accountability.md for Circle permissions and architecture/commitment-verification.md for evidence/settlement authority.
+
+## Current implementation boundary
+
+The mobile Commitment experience is an adapter over the existing `ScheduleModel`, `ScheduleService`, `RegimeService`, and `TaperPlanService` contracts. Protect daily limits map to Usage Limit schedules, Protect periods map to Time Block schedules, and Reduce maps to a taper plan plus its materialized Usage Limit schedule. Local schedule persistence, native synchronization, and the `users/{uid}/regimes` Firestore collection remain the implementation authority. A native-persisted or server-authoritative Commitment document/activation lease is not yet implemented.

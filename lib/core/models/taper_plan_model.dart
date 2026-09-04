@@ -1,6 +1,7 @@
 class TaperPlanModel {
   final String id;
   final String scheduleId;
+  final String name;
   final String status;
   final List<String> targetApps;
   final int baselineDailyMinutes;
@@ -13,6 +14,7 @@ class TaperPlanModel {
   const TaperPlanModel({
     required this.id,
     required this.scheduleId,
+    this.name = 'Daily Goal Plan',
     required this.status,
     required this.targetApps,
     required this.baselineDailyMinutes,
@@ -59,6 +61,7 @@ class TaperPlanModel {
     return {
       'id': id,
       'scheduleId': scheduleId,
+      'name': name,
       'status': status,
       'targetApps': targetApps,
       'baselineDailyMinutes': baselineDailyMinutes,
@@ -78,6 +81,9 @@ class TaperPlanModel {
     return TaperPlanModel(
       id: (json['id'] as String?)?.trim() ?? '',
       scheduleId: (json['scheduleId'] as String?)?.trim() ?? '',
+      name: (json['name'] as String?)?.trim().isNotEmpty == true
+          ? (json['name'] as String).trim()
+          : 'Daily Goal Plan',
       status: (json['status'] as String?)?.trim() ?? 'active',
       targetApps: List<String>.from(
         json['targetApps'] as List? ?? const <String>[],
@@ -94,6 +100,7 @@ class TaperPlanModel {
   TaperPlanModel copyWith({
     String? id,
     String? scheduleId,
+    String? name,
     String? status,
     List<String>? targetApps,
     int? baselineDailyMinutes,
@@ -106,6 +113,7 @@ class TaperPlanModel {
     return TaperPlanModel(
       id: id ?? this.id,
       scheduleId: scheduleId ?? this.scheduleId,
+      name: name ?? this.name,
       status: status ?? this.status,
       targetApps: targetApps ?? this.targetApps,
       baselineDailyMinutes: baselineDailyMinutes ?? this.baselineDailyMinutes,

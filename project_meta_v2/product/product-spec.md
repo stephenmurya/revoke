@@ -50,9 +50,9 @@ See ../architecture/commitment-verification.md.
 
 Overrides are bounded and policy-controlled. AI Warden evaluates approved context but cannot change an active contract. Accountability Circles are optional, least-privilege, and granular. Membership never grants broad user-profile access or billing authority.
 
-## 6. Home and learning
+## 6. Today and learning
 
-Home exposes direct interpretable cards: active Commitment progress, adherence, override behavior, slips/recovery, grace, verification health, and Credit wallet state where relevant. Focus Score is retired and must not be reintroduced as a replacement composite score.
+Today exposes direct interpretable state: active Commitment progress, adherence, override behavior, slips/recovery, grace, verification health, and Credit wallet state where relevant. Focus Score is retired and must not be reintroduced as a replacement composite score.
 
 ## 7. Premium and Credits
 

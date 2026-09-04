@@ -44,7 +44,7 @@ Accountability Circles are optional and use granular permissions. Commitment Cre
 - `product/accountability.md`: optional Accountability Circles and granular permissions.
 - `product/onboarding.md`: deterministic onboarding, Commitment creation, paywall, and activation.
 - `product/monetization.md`: Premium and Commitment Credits product model.
-- `product/metrics.md`: direct Home cards and metric semantics; Focus Score retirement.
+- `product/metrics.md`: direct Today evidence and metric semantics; Focus Score retirement.
 - `product/open-questions.md`: genuinely unresolved product and policy decisions.
 
 ### Architecture
@@ -75,6 +75,8 @@ Accountability Circles are optional and use granular permissions. Commitment Cre
 - `audits/2026-09-04-design-system-audit.md`: source-verified current Flutter/native UI and design-system audit.
 
 The Phase 1 implementation review is [review/docs/phase-1-implementation.md](review/docs/phase-1-implementation.md). It records the implemented shell/foundation boundary and the UI intentionally deferred to later phases.
+
+The Phase 2 Today review is [review/docs/phase-2-today-implementation.md](review/docs/phase-2-today-implementation.md). The Phase 3 Commitments review is [review/docs/phase-3-commitments-implementation.md](review/docs/phase-3-commitments-implementation.md). These reviews record implementation boundaries and must not be read as claims that the complete v2 backend domain exists.
 
 ### Archive
 

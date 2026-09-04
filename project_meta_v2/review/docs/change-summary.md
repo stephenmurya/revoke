@@ -10,6 +10,8 @@ The implementation-specific review is [Phase 1 Implementation](phase-1-implement
 
 The Today implementation review is [Phase 2 Today Implementation](phase-2-today-implementation.md). It records the new Today surface, data provenance, lifecycle behavior, truthful metric boundary, and regression evidence.
 
+The Commitments implementation review is [Phase 3 Commitments Implementation](phase-3-commitments-implementation.md). It records the adapter boundary, creation/edit/detail flows, legacy schedule mapping, and verification evidence.
+
 ## Correction-pass decisions
 
 | Area | Correction | Canonical sources |

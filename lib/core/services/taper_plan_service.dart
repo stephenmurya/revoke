@@ -105,6 +105,7 @@ class TaperPlanService {
     required int baselineDailyMinutes,
     required int targetDailyMinutes,
     required int durationDays,
+    String name = 'Daily Goal Plan',
   }) {
     final now = DateTime.now();
     final safeBaseline = baselineDailyMinutes.clamp(5, 1440).toInt();
@@ -115,6 +116,7 @@ class TaperPlanService {
     return TaperPlanModel(
       id: planId,
       scheduleId: 'taper_schedule_$planId',
+      name: name.trim().isEmpty ? 'Daily Goal Plan' : name.trim(),
       status: 'active',
       targetApps: targetApps
           .map((pkg) => pkg.trim())
@@ -187,12 +189,30 @@ class TaperPlanService {
     unawaited(syncPendingToCloud());
   }
 
+  /// Ends a Reduce Commitment without changing its identity or the schedule
+  /// payload used by native enforcement. The archived plan remains locally
+  /// available for history and is synchronized best-effort like other plans.
+  static Future<void> endPlanLocalFirst(TaperPlanModel plan) async {
+    final existing = await _readLocalPlans();
+    final ended = plan.copyWith(status: 'archived', updatedAt: DateTime.now());
+    final next = existing
+        .map((current) => current.id == plan.id ? ended : current)
+        .toList(growable: false);
+    await _writeLocalPlans(next);
+    await _markPendingUpsert(ended.id);
+    if (plan.scheduleId.isNotEmpty) {
+      await ScheduleService.deleteSchedule(plan.scheduleId);
+    }
+    unawaited(_pushPlanToCloud(ended));
+    unawaited(syncPendingToCloud());
+  }
+
   static Future<void> materializeTodaySchedule(TaperPlanModel plan) async {
     if (plan.status.trim().toLowerCase() != 'active') return;
     final todayLimit = plan.limitFor(DateTime.now());
     final schedule = ScheduleModel(
       id: plan.scheduleId,
-      name: 'Daily Goal Plan',
+      name: plan.name,
       type: ScheduleType.usageLimit,
       targetApps: List<String>.from(plan.targetApps),
       days: const <int>[1, 2, 3, 4, 5, 6, 7],

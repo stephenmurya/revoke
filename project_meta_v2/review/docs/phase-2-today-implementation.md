@@ -35,7 +35,7 @@ The implemented vertical order is:
 5. direct week usage evidence;
 6. other active Commitment-equivalent rows.
 
-The empty state has one clear action, `Create a Commitment`, routed to the existing `/regime/new` flow. Today rows route to `/commitments` for management rather than exposing edit/delete controls inline.
+The empty state has one clear action, `Create a Commitment`, routed to the v2 `/commitment/new` flow. Today rows route to `/commitments` for management rather than exposing edit/delete controls inline.
 
 ## Data Provenance
 

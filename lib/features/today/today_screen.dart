@@ -1080,7 +1080,7 @@ class _NoCommitmentsState extends StatelessWidget {
             'Create one clear boundary and Revoke will keep its state here.',
         action: RevokeButton(
           label: 'Create a Commitment',
-          onPressed: () => context.push('/regime/new'),
+          onPressed: () => context.push('/commitment/new'),
           expand: false,
         ),
       ),

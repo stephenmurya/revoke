@@ -29,6 +29,9 @@ Review date: 2026-09-04
 - [x] Phase 1 implementation status is separated from target design intent; legacy feature content is explicitly documented as retained beneath the new shell.
 - [x] The review packet records the implemented token foundation, shared primitives, constrained accent mapping, shell labels, and zero-valued Credits placeholder.
 - [x] Phase 2 records Today as a dedicated surface while keeping Commitments management and other feature migrations scoped for later phases.
+- [x] Phase 3 records the user-facing Commitment adapter and management/creation flows while distinguishing them from the legacy schedule persistence authority.
+- [x] Protect daily limits, Protect periods, and Reduce taper plans have explicit native-compatible mappings.
+- [x] Launch Count is not exposed by the v2 Commitment creation flow.
 - [x] Every Today metric/state has an implementation data source or is explicitly omitted as unsupported.
 - [x] Focus Score is absent from Today while legacy compatibility remains documented.
 - [x] Browser, desktop, cross-device, browser Firebase/licensing, and iOS work are explicitly out of scope.

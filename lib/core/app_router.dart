@@ -10,6 +10,10 @@ import '../features/permissions/permission_screen.dart';
 import '../features/home/focus_score_detail_screen.dart';
 import '../features/plea/plea_compose_screen.dart';
 import '../features/monitor/create_schedule_screen.dart';
+import '../features/commitments/commitments_screen.dart';
+import '../features/commitments/commitment_detail_screen.dart';
+import '../features/commitments/commitment_presentation.dart';
+import '../features/commitments/create_commitment_screen.dart';
 import '../features/insights/insights_screen.dart';
 import '../features/settings/controls_hub_screen.dart';
 import '../features/settings/appearance_screen.dart';
@@ -271,10 +275,9 @@ class AppRouter {
             path: '/home',
             builder: (context, state) => const TodayScreen(),
           ),
-          // V2 shell label over the existing Regimes implementation.
           GoRoute(
             path: '/commitments',
-            builder: (context, state) => const RegimesScreen(),
+            builder: (context, state) => const CommitmentsScreen(),
           ),
           // Legacy route alias (pre-rename). Keeps older deep links / restored state working.
           GoRoute(path: '/marketplace', redirect: (context, state) => '/home'),
@@ -340,6 +343,33 @@ class AppRouter {
       GoRoute(
         path: '/regime/new',
         builder: (context, state) => const CreateScheduleScreen(),
+      ),
+      GoRoute(
+        path: '/commitment/new',
+        builder: (context, state) => const CreateCommitmentScreen(),
+      ),
+      GoRoute(
+        path: '/commitment/detail',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is CommitmentViewModel) {
+            return CommitmentDetailScreen(commitment: extra);
+          }
+          return const CommitmentsScreen();
+        },
+      ),
+      GoRoute(
+        path: '/commitment/edit',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is CommitmentViewModel) {
+            return CreateCommitmentScreen(
+              existingSchedule: extra.sourceSchedule,
+              existingPlan: extra.taperPlan,
+            );
+          }
+          return const CommitmentsScreen();
+        },
       ),
       GoRoute(
         path: '/regime/edit',

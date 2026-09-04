@@ -30,7 +30,7 @@ Every Credit purchase requires a fresh disclosure and explicit confirmation befo
 
 ### Home versus Today
 
-The current shell routes `/home` to `RegimesScreen` and renders `HomeScreen`. That is implementation reality, not the v2 information architecture. Canonical v2 names the daily surface Today and the management surface Commitments; `design/information-architecture.md` records the migration relationship.
+The current shell routes `/home` to `TodayScreen` and `/commitments` to `CommitmentsScreen`. Legacy `HomeScreen` and `RegimesScreen` remain compatibility implementations/routes where referenced, but they no longer define the primary v2 shell experience. Canonical v2 names the daily surface Today and the management surface Commitments.
 
 ### Squad versus Circle
 
@@ -38,7 +38,7 @@ Current Squad, Plea, and Tribunal screens remain implementation evidence. The ta
 
 ### Regimes/Schedules versus Commitments
 
-Current schedule creation and schedule cards are dense, local implementations. The canonical design treats schedules as mechanisms beneath Commitments and requires Commitment-oriented summaries in new v2 surfaces.
+The v2 `/commitments` list, detail, and creation flow now use Commitment-oriented summaries and behavioral intent. `ScheduleModel`, `ScheduleService`, `RegimeService`, and the `users/{uid}/regimes` collection remain beneath that surface as retained enforcement/persistence mechanisms.
 
 ### Focus Score and wallet prominence
 
@@ -58,7 +58,11 @@ The implemented shell now uses the accepted Today / Commitments / Circle / Insig
 
 ### Phase 2 Today boundary
 
-`/home` now renders the dedicated Today presentation and `/commitments` remains the schedule-management compatibility destination. Today uses direct native/local evidence and omits unsupported v2 adherence, recovery, grace, and override metrics. Focus Score is removed from Today without deleting its compatibility route or legacy storage. Credits remain app-bar-only and no Credit-backed values are displayed.
+`/home` now renders the dedicated Today presentation and `/commitments` now renders the user-facing Commitment management destination. Today uses direct native/local evidence and omits unsupported v2 adherence, recovery, grace, and override metrics. Focus Score is removed from Today without deleting its compatibility route or legacy storage. Credits remain app-bar-only and no Credit-backed values are displayed.
+
+### Phase 3 Commitments boundary
+
+The Commitments screen and creation journey are now v2-facing, while the backend and native contract remain schedule-backed. This is consistent with the accepted migration strategy: do not rename `ScheduleModel` or rewrite enforcement before a safe domain migration exists. Reduce is only classified when an active taper plan matches the materialized schedule; ambiguous legacy data is shown as needing attention and no Launch Count creation path exists.
 
 ## Previous-document status
 
