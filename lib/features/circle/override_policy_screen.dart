@@ -5,6 +5,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../core/models/circle_models.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/circle_service.dart';
+import '../../core/services/premium_entitlement_service.dart';
 import '../../core/theme/revoke_tokens.dart';
 import '../../core/utils/theme_extensions.dart';
 import '../../core/widgets/revoke_components.dart';
@@ -218,6 +219,17 @@ class _OverridePolicyScreenState extends State<OverridePolicyScreen> {
           content: Text('Select at least one eligible Circle member.'),
         ),
       );
+      return;
+    }
+    if ((_authority == OverrideAuthority.ai ||
+            _authority == OverrideAuthority.circle) &&
+        !PremiumEntitlementService.instance.hasPremium) {
+      if (mounted) {
+        context.push(
+          '/premium',
+          extra: 'AI Architect and Circle authority are Premium capabilities.',
+        );
+      }
       return;
     }
     setState(() => _saving = true);

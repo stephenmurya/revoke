@@ -72,6 +72,14 @@ The Commitments screen and creation journey are now v2-facing, while the backend
 
 Circle member summaries are readable without peer access to full `users/{uid}` profiles. Commitment summary sharing is assigned through a separate `sharedMemberIds` policy field; Circle voter selection uses `selectedMemberIds`. FCM/native approval delivery complements, rather than replaces, the existing Flutter listener. Self access is local-first and bounded; AI and Circle decisions remain server-authoritative.
 
+### Phase 6 Premium boundary
+
+Premium is now a repository-level implementation, not an absent feature claim. Flutter reads one sanitized entitlement projection and may cache only an unexpired server-verified expiry. Google Play purchase tokens are verified and acknowledged by Cloud Functions before a purchase is completed; grants and purchase records are server-only and idempotent. RTDN triggers a Developer API requery. Credits, Credit purchases, Credit redemption, and Credit-backed Commitments remain unimplemented, so the zero-valued Credits pill is not confused with Premium.
+
+The accepted matrix is consistent: Free has basic use, one active Protect Commitment, and Circle participation/voting/help; Premium adds new Reduce activation, additional Protect Commitments, AI Architect authority, Circle creation, and owner permission management. Existing active v1-v5 behavior and legacy authority policies are grandfathered. New Premium purchase disclosure is required on every purchase initiation; restore is a re-verification path, not a new purchase.
+
+The code lifecycle is intentionally separate from release readiness. Play Console product/base-plan configuration, licensed-device testing, Android Publisher credentials, refunds/revocations, and RTDN delivery remain manual gates in `engineering/google-play-setup.md`.
+
 ## Previous-document status
 
 Previous canonical-facing terminology has been corrected. No accidental legacy terminology remains in current product, architecture, decisions, or review-packet text. Remaining scan matches are limited to intentionally preserved historical archive material or dated implementation evidence; they are not current product or backend terminology.

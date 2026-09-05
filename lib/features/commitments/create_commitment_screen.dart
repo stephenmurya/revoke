@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/models/schedule_model.dart';
 import '../../core/models/taper_plan_model.dart';
@@ -10,6 +11,7 @@ import '../../core/native_bridge.dart';
 import '../../core/services/app_discovery_service.dart';
 import '../../core/services/schedule_service.dart';
 import '../../core/services/taper_plan_service.dart';
+import '../../core/services/premium_entitlement_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/revoke_tokens.dart';
 import '../../core/utils/schedule_block_validator.dart';
@@ -754,6 +756,70 @@ class _CreateCommitmentScreenState extends State<CreateCommitmentScreen> {
   Future<void> _save() async {
     if (_saving) return;
     if (!_validateConfiguration()) return;
+    if (!_isEditing) {
+      final entitlement = PremiumEntitlementService.instance;
+      if (entitlement.state.value.isLoading) await entitlement.refresh();
+      if (_isReduce && !entitlement.hasPremium) {
+        if (mounted) {
+          context.push(
+            '/premium',
+            extra: 'Reduce Commitments are available with Premium.',
+          );
+        }
+        return;
+      }
+      if (!_isReduce && !entitlement.hasPremium) {
+        final existingSchedules = await ScheduleService.getSchedules();
+        final activeTaperPlans =
+            await TaperPlanService.getActivePlansForCapability();
+        final taperScheduleIds = activeTaperPlans
+            .map((plan) => plan.scheduleId)
+            .where((id) => id.trim().isNotEmpty)
+            .toSet();
+        final activeProtectCount = existingSchedules.where((schedule) {
+          final active = schedule.isActive != false;
+          return active &&
+              !taperScheduleIds.contains(schedule.id) &&
+              (schedule.type == ScheduleType.timeBlock ||
+                  schedule.type == ScheduleType.usageLimit);
+        }).length;
+        if (!entitlement.canCreateProtect(
+          activeProtectCount: activeProtectCount,
+        )) {
+          if (mounted) {
+            context.push(
+              '/premium',
+              extra: 'Premium lets you add more active Protect Commitments.',
+            );
+          }
+          return;
+        }
+      }
+      if (_isReduce || entitlement.hasPremium) {
+        try {
+          final allowed = await entitlement.assertServerCapability(
+            _isReduce
+                ? 'reduce_commitment'
+                : 'additional_protect_commitment',
+          );
+          if (!allowed) {
+            if (mounted) {
+              context.push(
+                '/premium',
+                extra: 'This Commitment requires Premium.',
+              );
+            }
+            return;
+          }
+        } catch (_) {
+          if (mounted) {
+            setState(() => _error =
+                'Premium access could not be verified. Check your connection and try again.');
+          }
+          return;
+        }
+      }
+    }
     final name = _nameController.text.trim().isEmpty
         ? _defaultName
         : _nameController.text.trim();

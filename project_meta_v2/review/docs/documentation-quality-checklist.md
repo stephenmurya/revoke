@@ -4,7 +4,7 @@ Review date: 2026-09-05
 
 - [x] Canonical source for each major topic is identifiable in `project_meta_v2/README.md`.
 - [x] `old_project_meta/` is explicitly historical/reference-only and was not edited.
-- [x] No application code, Firebase configuration, Firestore rules, Cloud Functions, dependencies, tests, or build configuration was edited.
+- [x] Phase 6 changes are limited to the Premium billing/entitlement boundary, its targeted UI/gates/tests, Firestore authorization, dependencies, and canonical documentation; unrelated native enforcement and product systems were not edited.
 - [x] Accepted decisions are consistent across product, architecture, engineering, and decisions.
 - [x] Unresolved decisions remain visibly marked in `product/open-questions.md`.
 - [x] Implementation reality is separate from intended v2 design through `engineering/status.md` and the dated revival audit.
@@ -16,7 +16,7 @@ Review date: 2026-09-05
 - [x] Reinstall/wipe loss before synchronization is explicitly recorded as an accepted v2 risk.
 - [x] The initial evidence reconciliation window is 24 hours and remains server-configurable.
 - [x] `UNVERIFIABLE` releases locked Credits, forfeits none, and consumes no grace.
-- [x] Purchase disclosure is required before every Credit purchase and must be confirmed every time.
+- [x] Purchase disclosure is required before every Credit purchase and must be confirmed every time; the Phase 6 Premium purchase disclosure is separately required before every new Premium purchase.
 - [x] The disclosure acceptance event includes version, user, timestamp, and purchase flow ID.
 - [x] The required case-insensitive terminology scan was run; results and classifications are in `terminology-scan.md`.
 - [x] Current UI implementation is clearly separated from target v2 design intent.
@@ -41,3 +41,6 @@ Review date: 2026-09-05
 - [x] SELF, AI, and CIRCLE are explicit authority types; Circle quorum uses a fixed voter snapshot and timeout rejects without AI fallback.
 - [x] Approved native access has a protected FCM delivery path in addition to the Flutter listener.
 - [x] No Credits, Premium, billing, browser, or new enforcement engine was added in Phase 5.
+- [x] Phase 6 documents Premium code completion separately from Play Console, licensed-device, RTDN, refund, and production readiness.
+- [x] Raw Play purchase tokens and grant lineage are server-only; the Flutter entitlement projection is sanitized and expiry-bound.
+- [x] Free/Premium capability gates preserve free Circle participation and grandfather existing v1-v5 behavior.

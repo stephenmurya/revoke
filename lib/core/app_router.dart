@@ -32,6 +32,7 @@ import 'services/onboarding_state_service.dart';
 import '../features/auth/onboarding_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/profile/profile_screen.dart';
+import '../features/premium/premium_paywall_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -249,6 +250,12 @@ class AppRouter {
       GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/premium',
+        builder: (context, state) => PremiumPaywallScreen(
+          reason: (state.extra as String?)?.trim(),
+        ),
       ),
       GoRoute(
         path: '/focus-score',

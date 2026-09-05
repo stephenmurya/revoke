@@ -2,7 +2,7 @@
 
 Review date: 2026-09-05
 
-This packet records the terminology correction, mobile design-system audit, and Phase 1 implementation review over the existing `project_meta_v2/` documents. Phase 1 changes Flutter theme, shared-widget, shell, router, and targeted test files only. Native Android enforcement, Firebase configuration, Firestore rules, Cloud Functions, dependencies, and `old_project_meta/` were not edited.
+This packet records the terminology correction, mobile design-system audit, Phases 1-5 implementation reviews, and Phase 6 Premium implementation review over the existing `project_meta_v2/` documents. Phase 6 changes only the Premium billing/entitlement boundary, its targeted UI/gates/tests, Firestore authorization, and canonical documentation. Native enforcement, Commitment Credits, `old_project_meta/`, and unrelated product systems remain untouched.
 
 ## Phase 1 implementation
 
@@ -13,6 +13,8 @@ The Today implementation review is [Phase 2 Today Implementation](phase-2-today-
 The Commitments implementation review is [Phase 3 Commitments Implementation](phase-3-commitments-implementation.md). It records the adapter boundary, creation/edit/detail flows, legacy schedule mapping, and verification evidence.
 
 The Accountability Circle and Override Authority implementation review is [Phase 5 Circle and Override Authority](phase-5-circle-override-implementation.md). It records the server-enforced permission model, sanitized member data, explicit Commitment sharing, authority policy, fixed quorum, native FCM delivery, and compatibility boundary.
+
+The Premium implementation review is [Phase 6 Premium](phase-6-premium-implementation.md). It records the prepaid Google Play product boundary, mandatory disclosure, server verification, acknowledgement, idempotent grants, sanitized entitlement projection, RTDN requery, capability gates, and manual Play setup still required.
 
 ## Correction-pass decisions
 
@@ -31,6 +33,17 @@ The Accountability Circle and Override Authority implementation review is [Phase
 | Premium reference pricing | Accepted USD $9.99 for 30-day prepaid Premium and USD $59.99 for 365-day prepaid Premium; weekly/lifetime excluded; localized Play pricing remains authoritative | decisions/005; product/monetization.md |
 | Evidence question correction | Removed the generic unresolved evidence-resolution-window question; only exceptional escalation remains open inside/after the accepted 24-hour window | product/open-questions.md; review/docs/open-questions.md |
 
+## Phase 6 implementation
+
+| Area | Implementation | Canonical sources |
+|---|---|---|
+| Premium catalog | `premium` with `prepaid-30d` and `prepaid-365d`; localized Play metadata; no weekly/lifetime/auto-renewing offer | product/monetization.md; architecture/premium-entitlement-and-billing.md; decisions/014 |
+| Entitlement authority | Google Play Developer API verification, acknowledgement, server-only grants, sanitized `premiumEntitlement/current`, and offline expiry cache | architecture/premium-entitlement-and-billing.md; decisions/014 |
+| Purchase disclosure | Fresh explicit `premium-purchase-v1` acceptance before every new Premium purchase, with user/flow/version/server timestamp | product/monetization.md; architecture/premium-entitlement-and-billing.md |
+| Capability gates | Free/Premium matrix enforced at new Reduce/additional-Protect activation, Circle creation/owner permissions, and new AI/Circle authority configuration; Circle participation remains free | product/monetization.md; engineering/status.md; phase-6-premium-implementation.md |
+| Reconciliation | RTDN deduplicates and re-queries Google; expiry/revocation preserves history and recomputes entitlement | architecture/premium-entitlement-and-billing.md; engineering/google-play-setup.md |
+| Lifecycle | Repository code complete; Play Console, licensed-device, RTDN, refund/revocation, credentials, and production checks remain open | engineering/google-play-setup.md; phase-6-premium-implementation.md |
+
 ## Earlier v2 work retained
 
 The correction pass preserves the prior v2 decisions: Commitments are primary; Focus Score is retired; Circles are optional; Premium is prepaid; Launch Count is outside initial scope; and the current implementation remains distinct from the target architecture.
@@ -47,6 +60,10 @@ The correction pass preserves the prior v2 decisions: Commitments are primary; F
 - `decisions/010-neutral-credit-terminology.md`
 - `decisions/011-credit-purchase-disclosure.md`
 - `decisions/012-mobile-design-direction-and-ia.md`
+- `decisions/014-premium-entitlement-and-gating.md`
+- `architecture/premium-entitlement-and-billing.md`
+- `engineering/google-play-setup.md`
+- `review/docs/phase-6-premium-implementation.md`
 - `README.md`
 - `design/overview.md`
 - `design/design-system.md`

@@ -16,6 +16,8 @@ import 'core/services/settings_sync_service.dart';
 import 'core/services/squad_service.dart';
 import 'core/services/local_override_history_service.dart';
 import 'core/services/theme_service.dart';
+import 'core/services/premium_billing_service.dart';
+import 'core/services/premium_entitlement_service.dart';
 import 'core/theme/app_theme.dart';
 
 void main() async {
@@ -176,12 +178,18 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
     }
 
     if (nextUid != null && nextUid.isNotEmpty) {
+      unawaited(PremiumEntitlementService.instance.initializeForUser(nextUid));
+      unawaited(PremiumBillingService.instance.initializeForUser(nextUid));
       unawaited(LocalOverrideHistoryService.syncPending(nextUid));
       unawaited(
         SettingsSyncService.hydrateLocalPreferencesFromCloud().catchError(
           (_) {},
         ),
       );
+    }
+    if (nextUid == null || nextUid.isEmpty) {
+      unawaited(PremiumEntitlementService.instance.reset());
+      unawaited(PremiumBillingService.instance.initializeForUser(null));
     }
 
     unawaited(_syncNativeUserOverlayContext());

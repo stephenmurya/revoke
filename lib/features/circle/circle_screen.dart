@@ -9,6 +9,7 @@ import '../../core/models/plea_model.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/circle_service.dart';
 import '../../core/services/squad_service.dart';
+import '../../core/services/premium_entitlement_service.dart';
 import '../../core/theme/revoke_tokens.dart';
 import '../../core/utils/theme_extensions.dart';
 import '../../core/widgets/revoke_components.dart';
@@ -76,6 +77,17 @@ class _CircleScreenState extends State<CircleScreen> {
   Future<void> _createCircle() async {
     final uid = AuthService.currentUser?.uid;
     if (uid == null || uid.isEmpty) return;
+    final premium = PremiumEntitlementService.instance;
+    if (premium.state.value.isLoading) await premium.refresh();
+    if (!premium.hasPremium) {
+      if (mounted) {
+        context.push(
+          '/premium',
+          extra: 'Creating a Circle is available with Premium.',
+        );
+      }
+      return;
+    }
     try {
       await SquadService.createSquad(uid);
       if (mounted) {

@@ -21,6 +21,7 @@ The Markdown files in this directory are the current review packet. The retained
 - [Phase 2 Today Implementation](phase-2-today-implementation.md): source implementation review for the Today experience and its data provenance.
 - [Phase 3 Commitments Implementation](phase-3-commitments-implementation.md): source implementation review for the user-facing Commitment layer, Reduce/Protect flows, persistence, and native compatibility mapping.
 - [Phase 5 Circle and Override Authority](phase-5-circle-override-implementation.md): source implementation review for Circle permissions, privacy boundaries, explicit authority, quorum, and native approval delivery.
+- [Phase 6 Premium](phase-6-premium-implementation.md): source implementation review for prepaid Premium, Play verification, disclosure, grants, entitlement projection, and capability gates.
 
 ## Authority reminder
 

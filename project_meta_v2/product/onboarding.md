@@ -1,6 +1,6 @@
 # Revoke 2.0 Onboarding
 
-Status: Phase 4 foundation implemented over the retained Firebase/auth, Android permission, schedule, and taper services. The v2 first-Commitment journey is operational; optional Circle, Credits, Premium, and server-native Commitment activation remain outside this phase.
+Status: Phase 4 foundation remains implemented over the retained Firebase/auth, Android permission, schedule, and taper services. Phase 6 adds Premium insertion points and server capability checks; commercial onboarding/paywall sequencing is intentionally not fully wired.
 
 ## Phase 4 implementation boundary
 
@@ -29,7 +29,7 @@ Onboarding must explain the problem, establish behavioral reality where possible
 11. Optionally create/join an Accountability Circle and set granular permissions.
 12. Optionally preview Credit-backed Commitment capability; do not ask for Credits before the user understands the Commitment.
 13. Review the full Commitment contract.
-14. Show the primary Premium paywall before activation of paid functionality.
+14. Show the reusable Premium paywall before activation of paid functionality. Phase 6 exposes this insertion point; the full commercial onboarding sequence remains deferred.
 15. If Credit backing was selected, complete the required Credit purchase/lock flow before financially backed activation.
 16. Activate only after server validation, immutable lease creation, native materialization, and synchronization acknowledgment.
 

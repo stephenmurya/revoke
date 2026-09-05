@@ -10,6 +10,7 @@ const {
   doc,
   setDoc,
   getDoc,
+  Timestamp,
 } = require("firebase/firestore");
 
 const projectId = "revoke-firestore-rules-test";
@@ -88,10 +89,17 @@ test("Circle members cannot read another member's private regimes", async () => 
 });
 
 test("Circle creation is bound to the authenticated owner", async () => {
+  await seedWithBypass(async (db) => {
+    await setDoc(doc(db, "users/alice/premiumEntitlement/current"), {
+      active: true,
+      premiumUntil: Timestamp.fromMillis(Date.now() + 86400000),
+    });
+  });
   const aliceDb = testEnv.authenticatedContext("alice").firestore();
   await assertSucceeds(setDoc(doc(aliceDb, "squads/squad_owned"), {
     creatorId: "alice",
     memberIds: ["alice"],
+    premiumRequired: true,
   }));
   await assertFails(setDoc(doc(aliceDb, "squads/squad_spoofed"), {
     creatorId: "bob",

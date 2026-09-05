@@ -6,7 +6,7 @@ Status: Accepted
 
 Revoke 2.0 uses Google Play prepaid Premium products as the initial Premium model. The reference catalog is a 30-day prepaid Premium product at USD $9.99 and a 365-day prepaid Premium product at USD $59.99. They do not auto-renew.
 
-The primary paywall sells Premium after the user understands the problem and configures/reviews a first Commitment. Google Play localized pricing determines actual market pricing. Weekly and lifetime Premium are outside initial v2 scope. Exact free-tier, trial, entitlement, and market decisions remain open; the accepted reference prices are not reopened as product questions.
+The primary paywall sells Premium after the user understands the problem and configures/reviews a first Commitment. Google Play localized pricing determines actual market pricing. Weekly and lifetime Premium are outside initial v2 scope. The initial free/Premium capability matrix and no-trial direction are accepted in decision 014; market availability remains open. The accepted reference prices are not reopened as product questions.
 
 ## Consequences
 

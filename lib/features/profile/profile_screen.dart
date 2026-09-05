@@ -6,7 +6,9 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/premium_entitlement_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/revoke_tokens.dart';
 import '../../core/utils/theme_extensions.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -159,6 +161,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildNicknameCard(
                   "SQUAD NICKNAME",
                   userData['nickname'] ?? "No Nickname",
+                ),
+                const SizedBox(height: 16),
+                ValueListenableBuilder(
+                  valueListenable: PremiumEntitlementService.instance.state,
+                  builder: (context, entitlementState, _) {
+                    final active = entitlementState.isPremium;
+                    final until = entitlementState.entitlement.premiumUntil;
+                    final detail = active && until != null
+                        ? 'Active until ${until.day}/${until.month}/${until.year}'
+                        : 'Explore prepaid Premium access';
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: RevokeRadii.cardRadius,
+                        onTap: () => context.push('/premium'),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: context.colors.surface,
+                            borderRadius: RevokeRadii.cardRadius,
+                            border: Border.all(color: context.colors.borderSubtle),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                PhosphorIcons.sparkle,
+                                color: context.colors.accent,
+                                size: RevokeIconSizes.emphasis,
+                              ),
+                              const SizedBox(width: RevokeSpacing.md),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('PREMIUM', style: context.text.label),
+                                    const SizedBox(height: RevokeSpacing.xs),
+                                    Text(detail, style: context.text.bodySecondary),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                PhosphorIcons.caretRight,
+                                color: context.colors.textMuted,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
 
                 if (_isGodMode) ...[

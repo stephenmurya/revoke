@@ -7,7 +7,7 @@ These are assumptions and design constraints requiring external validation. None
 - Credit purchases use Google Play Billing for Play-distributed Android digital goods.
 - The adopted Flutter in_app_purchase version and its supported Google Play Billing version must be selected at implementation time; no obsolete fixed library-version requirement is documented.
 - Consumable purchase verification, acknowledgement/consumption, RTDN, and voided-purchase reconciliation require current Google Play Developer API validation.
-- Product premium with prepaid-30d is the intended Premium catalog shape; actual availability, disclosure, base-plan configuration, renewal behavior, and market support require Play Console validation.
+- Product `premium` with prepaid-30d and prepaid-365d is the intended Premium catalog shape; actual availability, disclosure, base-plan configuration, acknowledgement, renewal behavior, and market support require Play Console validation.
 - Commitment Credits are closed-loop Revoke entitlements, not cash, transferable property, physical goods, or external services; legal and platform interpretation still requires review.
 - Credit-backed Commitment eligibility, age limits, rooted/unsupported-device treatment, Play Integrity requirements, and evidence retention require policy decisions.
 - Privacy review is required for Circle projections, usage summaries, override/slip history, purchase lineage, device identifiers, and AI context.

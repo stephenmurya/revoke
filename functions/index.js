@@ -5,6 +5,7 @@ const {
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {onTaskDispatched} = require("firebase-functions/v2/tasks");
+const {onMessagePublished} = require("firebase-functions/v2/pubsub");
 const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
@@ -12,15 +13,64 @@ const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue, Timestamp} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
 const {getFunctions} = require("firebase-admin/functions");
+const {
+  PREMIUM_PACKAGE_NAME,
+  hashPurchaseToken,
+  decodeRtdnMessage,
+  isTerminalSubscriptionNotification,
+  createPremiumBillingService,
+} = require("./premium_billing");
 
 initializeApp();
 
 const db = getFirestore();
 const messaging = getMessaging();
 const openRouterKey = defineSecret("OPENROUTER_API_KEY");
+const premiumBilling = createPremiumBillingService({
+  db,
+  adminSdk: admin,
+  packageName: PREMIUM_PACKAGE_NAME,
+});
 const RAP_SHEET_VERSION = 1;
 const RAP_SHEET_MAX_INFRACTIONS = 5;
 const RAP_SHEET_QUERY_LIMIT = 25;
+
+async function _getPremiumEntitlement(uid) {
+  const normalizedUid = (uid || "").toString().trim();
+  if (!normalizedUid) return null;
+  const snap = await db.collection("users").doc(normalizedUid)
+      .collection("premiumEntitlement").doc("current").get();
+  if (!snap.exists) return null;
+  const data = snap.data() || {};
+  const premiumUntilMs = _timestampToMillis(data.premiumUntil);
+  return {
+    ...data,
+    premiumUntilMs,
+    active: data.active === true && premiumUntilMs > Date.now(),
+  };
+}
+
+async function _assertPremiumEntitled(uid) {
+  const entitlement = await _getPremiumEntitlement(uid);
+  if (!entitlement?.active) {
+    throw new HttpsError(
+        "failed-precondition",
+        "Premium is required for this capability.",
+    );
+  }
+  return entitlement;
+}
+
+function _premiumError(error) {
+  if (error instanceof HttpsError) return error;
+  const code = [
+    "invalid-argument",
+    "failed-precondition",
+    "permission-denied",
+    "not-found",
+  ].includes(error?.code) ? error.code : "internal";
+  return new HttpsError(code, error?.message || "Premium verification failed.");
+}
 
 async function logSquadEvent(squadId, type, title, user, metadata) {
   const normalizedSquadId = (squadId || "").toString().trim();
@@ -395,6 +445,204 @@ const CIRCLE_DEFAULT_PERMISSIONS = Object.freeze({
 const RESOLVED_PLEA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MARKED_FOR_DELETION_TTL_MS = 10 * 60 * 1000;
 const CLEANUP_BATCH_LIMIT = 100;
+
+const PREMIUM_DISCLOSURE_VERSION = "premium-purchase-v1";
+
+exports.recordPremiumPurchaseDisclosure = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const payload = request.data || {};
+  const allowed = new Set(["purchaseFlowId", "disclosureVersion"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+  }
+  const flowId = (payload.purchaseFlowId || "").toString().trim();
+  const version = (payload.disclosureVersion || "").toString().trim();
+  if (!flowId || flowId.length > 120 || !/^[a-zA-Z0-9_-]+$/.test(flowId)) {
+    throw new HttpsError("invalid-argument", "A valid purchase flow ID is required.");
+  }
+  if (version !== PREMIUM_DISCLOSURE_VERSION) {
+    throw new HttpsError("failed-precondition", "The Premium purchase disclosure is out of date.");
+  }
+  await db.collection("users").doc(request.auth.uid)
+      .collection("premiumDisclosureAcceptances").doc(flowId).set({
+        uid: request.auth.uid,
+        disclosureVersion: version,
+        acceptedAt: FieldValue.serverTimestamp(),
+      });
+  return {success: true, purchaseFlowId: flowId, disclosureVersion: version};
+});
+
+exports.verifyPremiumPurchase = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const payload = request.data || {};
+  const allowed = new Set(["purchaseToken", "purchaseFlowId"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+  }
+  const uid = request.auth.uid;
+  const purchaseToken = (payload.purchaseToken || "").toString().trim();
+  const purchaseFlowId = (payload.purchaseFlowId || "").toString().trim();
+  if (!purchaseToken || purchaseToken.length > 4096) {
+    throw new HttpsError("invalid-argument", "purchaseToken is required.");
+  }
+
+  // A new purchase must have an acceptance recorded immediately before the
+  // Play sheet was opened. Existing purchase records can be reverified after
+  // restore without asking the user to accept a purchase disclosure again.
+  const purchaseRef = db.collection("users").doc(uid)
+      .collection("premiumPurchases").doc(hashPurchaseToken(purchaseToken));
+  const existingPurchase = await purchaseRef.get();
+  if (!existingPurchase.exists) {
+    if (!purchaseFlowId) {
+      throw new HttpsError("failed-precondition", "Premium purchase disclosure acceptance is required.");
+    }
+    const acceptance = purchaseFlowId ? await db.collection("users").doc(uid)
+        .collection("premiumDisclosureAcceptances").doc(purchaseFlowId).get() : null;
+    if (!acceptance?.exists || acceptance.data()?.disclosureVersion !== PREMIUM_DISCLOSURE_VERSION) {
+      throw new HttpsError("failed-precondition", "Premium purchase disclosure acceptance is required.");
+    }
+  }
+
+  try {
+    return await premiumBilling.verifyPurchase(uid, purchaseToken, {
+      idempotencyKey: purchaseFlowId,
+    });
+  } catch (error) {
+    logger.error("verifyPremiumPurchase failed.", {
+      uid,
+      purchaseTokenHash: hashPurchaseToken(purchaseToken),
+      errorMessage: error?.message || String(error),
+    });
+    throw _premiumError(error);
+  }
+});
+
+exports.reconcilePremiumRtdn = onMessagePublished({
+  topic: "revoke-premium-rtdn",
+  region: "us-central1",
+}, async (event) => {
+  const notification = decodeRtdnMessage(event);
+  if (!notification || notification.packageName !== PREMIUM_PACKAGE_NAME ||
+      !notification.purchaseToken) return;
+
+  const messageId = notification.messageId || hashPurchaseToken(notification.purchaseToken);
+  const eventRef = db.collection("premiumRtdnEvents").doc(messageId);
+  const claim = await db.runTransaction(async (tx) => {
+    const existing = await tx.get(eventRef);
+    if (existing.exists) return false;
+    tx.create(eventRef, {
+      packageName: notification.packageName,
+      notificationType: notification.notificationType,
+      eventTimeMillis: notification.eventTimeMillis,
+      purchaseTokenHash: hashPurchaseToken(notification.purchaseToken),
+      receivedAt: FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+  if (!claim) return;
+
+  const tokenHash = hashPurchaseToken(notification.purchaseToken);
+  const tokenBinding = await db.collection("premiumPurchaseBindings")
+      .doc(tokenHash).get();
+  const bindingQuery = await db.collectionGroup("premiumPurchases")
+      .where("tokenHash", "==", tokenHash).limit(1).get();
+  // Purchases are kept in user-owned server-only subcollections, so RTDN
+  // resolves the account through a private token binding map.
+  let uid = "";
+  if (tokenBinding.exists) uid = (tokenBinding.data()?.uid || "").toString().trim();
+  const bindingSnap = await db.collection("premiumAccountBindings")
+      .where("purchaseTokenHash", "==", tokenHash).limit(1).get();
+  if (!bindingSnap.empty) uid = (bindingSnap.docs[0].data()?.uid || "").toString().trim();
+  if (!uid && !bindingQuery.empty) uid = (bindingQuery.docs[0].data()?.uid || "").toString().trim();
+  if (!uid) {
+    // The API is still re-queried only when a prior verification has bound the
+    // token. Never guess an account from an untrusted RTDN payload.
+    logger.warn("Premium RTDN has no known account binding.", {tokenHash, messageId});
+    return;
+  }
+  try {
+    await premiumBilling.reconcilePurchase(uid, notification.purchaseToken, {
+      notificationType: notification.notificationType,
+      reason: isTerminalSubscriptionNotification(notification.notificationType) ?
+        "google_play_subscription_terminal" : "google_play_subscription_update",
+      allowMissing: true,
+    });
+  } catch (error) {
+    logger.error("Premium RTDN reconciliation failed.", {
+      uid,
+      tokenHash,
+      messageId,
+      errorMessage: error?.message || String(error),
+    });
+    throw error;
+  }
+});
+
+exports.createCircle = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  await _assertPremiumEntitled(request.auth.uid);
+  const uid = request.auth.uid;
+  const userRef = db.collection("users").doc(uid);
+  const circleRef = db.collection("squads").doc();
+  const squadCode = `REV-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+  await db.runTransaction(async (tx) => {
+    const userSnap = await tx.get(userRef);
+    if (userSnap.exists && (userSnap.data()?.squadId || "").toString().trim()) {
+      throw new HttpsError("failed-precondition", "You are already in a Circle.");
+    }
+    tx.create(circleRef, {
+      joinCode: squadCode,
+      squadCode,
+      creatorId: uid,
+      memberIds: [uid],
+      premiumRequired: true,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    tx.set(userRef, {squadId: circleRef.id, squadCode}, {merge: true});
+  });
+  return {success: true, circleId: circleRef.id, squadCode};
+});
+
+exports.assertPremiumCapability = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const capability = (request.data?.capability || "").toString().trim();
+  const allowed = new Set([
+    "reduce_commitment",
+    "additional_protect_commitment",
+    "ai_authority",
+    "circle_authority",
+    "circle_member_management",
+  ]);
+  if (!allowed.has(capability)) {
+    throw new HttpsError("invalid-argument", "Unknown Premium capability.");
+  }
+  if (capability === "additional_protect_commitment") {
+    const userRef = db.collection("users").doc(request.auth.uid);
+    const [schedules, taperPlans] = await Promise.all([
+      userRef.collection("regimes").get(),
+      userRef.collection("taperPlans").get(),
+    ]);
+    const taperScheduleIds = new Set(taperPlans.docs.map((doc) =>
+      (doc.data()?.scheduleId || "").toString().trim()).filter((id) => Boolean(id)));
+    const activeProtectCount = schedules.docs.filter((doc) => {
+      const data = doc.data() || {};
+      return data.isActive !== false && data.isEnabled !== false &&
+        !taperScheduleIds.has(doc.id) &&
+        [0, 1].includes(Number(data.type));
+    }).length;
+    if (activeProtectCount < 1) return {allowed: true, premiumRequired: false};
+  }
+  await _assertPremiumEntitled(request.auth.uid);
+  return {allowed: true, premiumRequired: true};
+});
 
 async function _enqueuePleaFallbackTask(pleaId, requesterUid) {
   const normalizedPleaId = (pleaId || "").toString().trim();
@@ -1233,6 +1481,21 @@ exports.evaluatePleaFallback = onTaskDispatched({
 
     const plea = claim.plea || {};
     const requesterId = (plea.userId || requesterUid || "").toString().trim();
+    if (plea.authority === "ai" || plea.premiumRequired === true) {
+      try {
+        await _assertPremiumEntitled(requesterId);
+      } catch (_) {
+        // Premium expiry changes the effective authority for new AI work. A
+        // pending request is closed safely without changing the saved policy,
+        // so the user can renew and choose AI authority again later.
+        await _finalizePleaWithAiDecision(pleaRef, pleaId, {
+          decision: "reject",
+          minutes: 0,
+          rationale: "AI Architect requires an active Premium entitlement.",
+        });
+        return;
+      }
+    }
     const requesterSnap = requesterId ?
       await db.collection("users").doc(requesterId).get() :
       null;
@@ -2526,6 +2789,10 @@ exports.setCircleMemberPermissions = onCall({
   const permissions = _sanitizeCirclePermissions(payload.permissions, preset);
   const circleRef = db.collection("squads").doc(circleId);
   const memberRef = circleRef.collection("members").doc(memberUid);
+  const circleCheck = await circleRef.get();
+  if (circleCheck.exists && circleCheck.data()?.premiumRequired === true) {
+    await _assertPremiumEntitled(actorUid);
+  }
   await db.runTransaction(async (tx) => {
     const circleSnap = await tx.get(circleRef);
     const memberSnap = await tx.get(memberRef);
@@ -2618,6 +2885,11 @@ exports.setCommitmentOverridePolicy = onCall({
   const userRef = db.collection("users").doc(uid);
   const commitmentRef = userRef.collection("regimes").doc(commitmentId);
   const policyRef = userRef.collection("commitmentPolicies").doc(commitmentId);
+  // AI and Circle authority are paid configuration capabilities. Existing
+  // policies remain readable and enforceable, but changing either authority
+  // must not become a free entitlement bypass.
+  const needsPremium = authority === "ai" || authority === "circle";
+  if (needsPremium) await _assertPremiumEntitled(uid);
   await db.runTransaction(async (tx) => {
     const [userSnap, commitmentSnap] = await Promise.all([tx.get(userRef), tx.get(commitmentRef)]);
     if (!userSnap.exists || !commitmentSnap.exists) {
@@ -2654,6 +2926,7 @@ exports.setCommitmentOverridePolicy = onCall({
       authority,
       selectedMemberIds: authority === "circle" ? selectedMemberIds : [],
       sharedMemberIds,
+      premiumRequired: authority === "ai" || authority === "circle",
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: uid,
     }, {merge: true});
@@ -2752,6 +3025,12 @@ exports.createOverrideRequest = onCall({
   const requestData = await _validateOverrideRequestPayload(payload);
   const userRef = db.collection("users").doc(uid);
   const pleaRef = db.collection("pleas").doc();
+  const requestedPolicySnap = commitmentId ?
+    await userRef.collection("commitmentPolicies").doc(commitmentId).get() : null;
+  if (authority === "ai" ||
+      (authority === "circle" && requestedPolicySnap?.data()?.premiumRequired === true)) {
+    await _assertPremiumEntitled(uid);
+  }
   let result;
   await db.runTransaction(async (tx) => {
     const userSnap = await tx.get(userRef);
@@ -2793,6 +3072,7 @@ exports.createOverrideRequest = onCall({
       durationMinutes: requestData.durationMinutes,
       reason: _sanitizeReasonText(requestData.reason),
       authority,
+      premiumRequired: authority === "ai" || policy.premiumRequired === true,
       visibleToUids,
       eligibleVoterIds,
       requiredApprovalCount: authority === "circle" ? _circleMajority(eligibleVoterIds.length) : 0,
@@ -2951,6 +3231,10 @@ exports.__testables = {
   circleMajority: _circleMajority,
   normalizeV2Authority: _normalizeV2Authority,
   sanitizeCirclePermissions: _sanitizeCirclePermissions,
+  premiumAccountHash: require("./premium_billing").expectedObfuscatedAccountId,
+  normalizePremiumPlaySubscription: require("./premium_billing").normalizePlaySubscription,
+  sequentialPremiumUntil: require("./premium_billing").sequentialPremiumUntil,
+  decodePremiumRtdn: require("./premium_billing").decodeRtdnMessage,
 };
 
 exports.updateUserStatus = onCall({

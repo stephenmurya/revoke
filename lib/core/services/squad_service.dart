@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../models/plea_message_model.dart';
@@ -26,42 +25,18 @@ class SquadService {
     region: 'us-central1',
   );
 
-  /// Helper to generate a 6-character alphanumeric squad code.
-  static String _generateSquadCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = Random();
-    final code = String.fromCharCodes(
-      Iterable.generate(
-        3,
-        (_) => chars.codeUnitAt(random.nextInt(chars.length)),
-      ),
-    );
-    return 'REV-$code';
-  }
-
-  /// Creates a new squad for the user.
-  /// Uses transaction.set with merge to prevent "Permission Denied" if the user doc is missing.
+  /// Creates a new Circle through the server Premium gate. Joining remains
+  /// free; creation and owner authority are Premium capabilities.
   static Future<void> createSquad(String uid) async {
-    final squadCode = _generateSquadCode();
-    final squadRef = _firestore.collection('squads').doc();
-    final userRef = _firestore.collection('users').doc(uid);
-
-    return _firestore.runTransaction((transaction) async {
-      // 1. Create the Squad document
-      transaction.set(squadRef, {
-        'joinCode': squadCode,
-        'squadCode': squadCode,
-        'creatorId': uid,
-        'memberIds': [uid],
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      // 2. Update the User document (using set + merge to ensure it exists)
-      transaction.set(userRef, {
-        'squadId': squadRef.id,
-        'squadCode': squadCode,
-      }, SetOptions(merge: true));
-    });
+    final callable = _functions.httpsCallable('createCircle');
+    try {
+      await callable.call();
+    } on FirebaseFunctionsException catch (error) {
+      final message = (error.message ?? '').trim();
+      throw Exception(message.isEmpty
+          ? 'Circle creation requires Premium.'
+          : message);
+    }
   }
 
   /// Joins an existing squad via a secure callable using a 6-digit (REV-XXX) code.

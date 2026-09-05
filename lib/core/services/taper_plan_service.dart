@@ -145,6 +145,16 @@ class TaperPlanService {
     return plan;
   }
 
+  /// Returns active local plans without materializing or changing their
+  /// schedules. Capability checks use this to distinguish a Reduce-backed
+  /// usage-limit schedule from a user-created Protect daily limit.
+  static Future<List<TaperPlanModel>> getActivePlansForCapability() async {
+    final plans = await _readLocalPlans();
+    return plans
+        .where((plan) => plan.status.trim().toLowerCase() == 'active')
+        .toList(growable: false);
+  }
+
   static Future<void> savePlanLocalFirst(TaperPlanModel plan) async {
     final existing = await _readLocalPlans();
     TaperPlanModel? previousActive;

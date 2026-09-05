@@ -59,4 +59,6 @@ Evidence resolution stores one of the four evidence outcomes and its proof polic
 
 ## PremiumEntitlement
 
-Contains user, provider, product/base plan, status, period start/end, source transaction, grant lineage, and server verification time. Premium is prepaid; it is not assumed to auto-renew.
+Contains user, provider, product/base plan, status, period end, grant lineage, and server verification time. The current materialized document is `users/{uid}/premiumEntitlement/current`; it is sanitized and owner-readable. Private purchase/token records live under `premiumPurchases`, and source grants live under `premiumGrants`. Premium is prepaid and non-auto-renewing; it is never extended by the client.
+
+The Phase 6 compatibility implementation uses Google Play `purchases.subscriptionsv2.get`, validates `premium` plus `prepaid-30d`/`prepaid-365d`, acknowledges only after validation, and recomputes the projection from idempotent grants. RTDN is a requery signal, not entitlement proof. Existing configured behavior is grandfathered while new paid capabilities are server-gated.

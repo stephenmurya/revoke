@@ -4,36 +4,34 @@ These are intentionally unresolved. They must not leak into canonical documents 
 
 ## Subscription and Premium
 
-1. What is the exact initial Premium entitlement and free-tier boundary?
-2. Is there a trial, and what is its duration/eligibility?
-3. Which capabilities require Premium, including AI Warden and Credit-backed Commitments?
-4. Which markets and currencies are included in the first release?
-5. How does a prepaid Premium top-up coexist with any free entitlement?
+The initial free/Premium capability matrix, no-trial direction, prepaid/non-renewing model, and USD $9.99 / $59.99 reference prices are accepted. They are not reopened here.
+
+1. Which markets and currencies are included in the first release?
 
 ## Credit-backed Commitments
 
-6. Are Credit-backed Commitments available immediately after subscribing, or only after a monitoring-health period?
-7. What is the initial maximum Credits lockable per Commitment?
-8. What is the maximum total simultaneously locked Credits per user?
-9. What minimum age and eligibility policy applies?
-10. What exact default grace counts apply by Commitment duration/type?
-11. Which exceptional evidence cases require server escalation inside or after the accepted 24-hour reconciliation window, and what final operational deadline applies to those cases?
-12. How should active holds be handled after a Google Play purchase reversal?
-13. What is the refund/chargeback abuse eligibility policy?
-14. What exact UI wording should explain Credit forfeiture?
+2. Are Credit-backed Commitments available immediately after subscribing, or only after a monitoring-health period?
+3. What is the initial maximum Credits lockable per Commitment?
+4. What is the maximum total simultaneously locked Credits per user?
+5. What minimum age and eligibility policy applies?
+6. What exact default grace counts apply by Commitment duration/type?
+7. Which exceptional evidence cases require server escalation inside or after the accepted 24-hour reconciliation window, and what final operational deadline applies to those cases?
+8. How should active holds be handled after a Google Play purchase reversal?
+9. What is the refund/chargeback abuse eligibility policy?
+10. What exact UI wording should explain Credit forfeiture?
 
 ## Verification and device policy
 
-15. What precise Play Integrity verdict requirements apply at activation, suspicious recovery, and final resolution?
-16. How are rooted, modified, unsupported, or incompatible devices handled?
-17. How much missing telemetry voids one checkpoint versus the entire Reduce program?
-18. What timezone/clock-integrity tolerance is acceptable?
-19. What evidence policy applies when UsageStats and Accessibility observations disagree?
+11. What precise Play Integrity verdict requirements apply at activation, suspicious recovery, and final resolution?
+12. How are rooted, modified, unsupported, or incompatible devices handled?
+13. How much missing telemetry voids one checkpoint versus the entire Reduce program?
+14. What timezone/clock-integrity tolerance is acceptable?
+15. What evidence policy applies when UsageStats and Accessibility observations disagree?
 
 ## Accountability Circles and overrides
 
-20. Does an approved override pause measurement or count usage against the Commitment?
-21. Can strict Protect Commitments disable all overrides?
+16. Does an approved override pause measurement or count usage against the Commitment?
+17. Can strict Protect Commitments disable all overrides?
 
 ## Product behavior and metrics
 

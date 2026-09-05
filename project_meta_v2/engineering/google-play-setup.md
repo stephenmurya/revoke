@@ -1,0 +1,50 @@
+# Google Play Premium Setup Runbook
+
+Status: manual release setup required. The repository contains the code boundary but no Play Console state or production credentials.
+
+## Catalog to configure
+
+Create one subscription product:
+
+- product ID: `premium`;
+- base plan: `prepaid-30d`;
+- base plan: `prepaid-365d`;
+- initial reference prices: USD $9.99 and USD $59.99 respectively.
+
+Do not configure weekly, lifetime, or auto-renewing base plans for the initial Revoke 2.0 catalog. Localized prices shown by Play are authoritative at runtime.
+
+## Backend prerequisites
+
+1. Enable the Google Play Developer API for the release project.
+2. Grant the production service identity the minimum Android Publisher permission required to read subscription status and acknowledge purchases.
+3. Configure the `revoke-premium-rtdn` Pub/Sub topic as the Google Play Real-time Developer Notifications destination.
+4. Deploy `verifyPremiumPurchase`, `recordPremiumPurchaseDisclosure`, `assertPremiumCapability`, `createCircle`, and `reconcilePremiumRtdn` only after reviewing project/package identity.
+5. Keep service credentials in Secret Manager or the deployment environment; never add them to Flutter, Firestore, or this repository.
+
+## Required test matrix
+
+Use a Play license tester and a real configured application package to verify:
+
+- 30-day and 365-day offer discovery by base plan ID;
+- localized price rendering;
+- disclosure required before every new purchase;
+- pending, purchased, canceled, restored, and verification-error states;
+- server acknowledgement only after validation;
+- duplicate token verification is idempotent;
+- account mismatch is rejected;
+- expiry, refund/revocation, and RTDN requery recompute entitlement;
+- reinstall/restore does not create a second grant;
+- Free users cannot activate Reduce, create a second active Protect, create a Circle, or configure new AI/Circle authority;
+- Free users can continue basic use and participate in another member's Circle activity.
+
+## Lifecycle status
+
+| Stage | Current state |
+| --- | --- |
+| Flutter billing code | CODE COMPLETE; static analysis/tests pass |
+| Server verification/grants | CODE COMPLETE; emulator/pure tests pass, live API not tested |
+| Firestore rules | CODE COMPLETE; emulator test coverage added |
+| Play product/base plans | NOT CONFIGURED/NOT VERIFIED IN THIS REPOSITORY |
+| Licensed-device purchase test | NOT RUN |
+| RTDN Pub/Sub delivery | NOT CONFIGURED/NOT VERIFIED |
+| Production release readiness | NOT READY until manual gates pass |

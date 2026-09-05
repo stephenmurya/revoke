@@ -1,6 +1,6 @@
 # Monetization
 
-Status: Canonical Revoke 2.0 product direction. No billing or Credit implementation currently exists; see ../engineering/status.md.
+Status: Phase 6 Premium entitlement and Google Play purchase code is implemented behind an explicit server-verification boundary. Google Play Console configuration, licensed-device testing, RTDN delivery, and production credentials remain release work. Commitment Credits are still not implemented; see ../engineering/status.md.
 
 ## Product systems
 
@@ -32,16 +32,33 @@ Google Play localized pricing is authoritative for what the user pays. Keep cata
 
 ## Premium
 
-Premium should use a Google Play subscription product with a prepaid base plan:
+Premium uses a Google Play subscription product with prepaid base plans:
 
 - subscription product: premium;
 - base plan: prepaid-30d;
+- base plan: prepaid-365d;
 - 30-day prepaid Premium: USD $9.99 reference price;
 - 365-day prepaid Premium: USD $59.99 reference price.
 
-Prepaid Premium does not auto-renew. The user tops up through Google Play or extends Premium using eligible Credits. It must not be described as an automatically renewing subscription.
+Prepaid Premium does not auto-renew. Weekly and lifetime plans are not in the initial v2 catalog. Google Play localized pricing determines actual market pricing; the reference prices are not literal currency-conversion rules.
 
-Google Play localized pricing determines actual market pricing. These are reference/base product decisions, not literal currency-conversion rules. Weekly Premium and lifetime Premium are outside initial v2 scope. The exact free tier, trial, entitlement split, and market availability remain open. The primary onboarding/paywall flow sells Premium after the user understands the problem and has configured/reviewed a first Commitment. Credits belong in the Commitment/Wallet experience, not as a replacement for the primary Premium paywall.
+The accepted initial entitlement matrix is:
+
+| Capability | Free | Premium |
+| --- | --- | --- |
+| Basic Revoke use | Yes | Yes |
+| One active Protect Commitment | Yes | Yes |
+| Additional active Protect Commitments | No | Yes |
+| Reduce Commitments | No for new activation | Yes |
+| AI Architect authority | No for new configuration | Yes |
+| Circle creation and owner permission management | No for new actions | Yes |
+| Circle participation, voting, and helping another member | Yes | Yes |
+
+Existing active v1-v5 behavior is grandfathered at the migration boundary. Existing active Protect and Reduce Commitments are not abruptly disabled when an account is free. A Premium check is required for new paid-capability activation or reconfiguration; the backend remains authoritative.
+
+The primary paywall is reusable and appears after the user understands/configures a paid capability. Commercial onboarding is not fully wired in Phase 6. Credits belong in the later Commitment/Wallet experience, not as a replacement for the Premium paywall.
+
+Premium status is derived from server-verified Google Play grants and exposed to Flutter through a sanitized entitlement document. The client may cache the last verified expiry for offline presentation, but cannot extend it or issue Premium locally. On expiry, AI/Circle authority is unavailable for new configuration; an existing configured policy is not rewritten automatically.
 
 Credit-backed Commitments should be a Premium capability unless a later canonical decision changes that boundary.
 
@@ -61,7 +78,7 @@ new_premium_until = max(existing_premium_until, server_now) + extension_seconds
 
 The initial UI allows redemption in multiples of 10 Credits. Future Premium pricing changes must not devalue existing Credits; adjust future acquisition prices instead.
 
-## Mandatory purchase disclosure
+## Mandatory Credit purchase disclosure
 
 Every time a user initiates a Credit purchase, Revoke must show a purchase disclosure before launching the Google Play purchase sheet. This is required every time: it is not first-purchase-only, onboarding-only, dismiss-once, or remember-my-choice behavior. The user must explicitly confirm understanding before Revoke invokes Google Play Billing.
 
@@ -77,9 +94,17 @@ The disclosure must communicate that:
 
 Record an auditable `credit_purchase_disclosure_accepted` event containing at least `disclosureVersion`, `userId`, a server/client timestamp, and `purchaseFlowId`. An earlier acknowledgement never waives the disclosure on a later purchase.
 
+## Mandatory Premium purchase disclosure
+
+Every Premium purchase initiation must record an explicit, versioned disclosure acceptance before Revoke invokes Google Play Billing. This is required on every purchase, including a later extension, even when an earlier acceptance exists. The current implementation records `premium-purchase-v1` with the user ID, server acceptance timestamp, and purchase flow ID under the server-only acceptance namespace. Restore/reverification of an existing purchase does not start a new purchase and does not require a second acceptance event.
+
+The Premium disclosure states that the product is prepaid, does not renew automatically, uses localized Google Play pricing, and provides digital Revoke access for the displayed period.
+
 ## Billing architecture boundary
 
-Flutter initiates Google Play purchases. The backend verifies the purchase token through Google Play Developer APIs, confirms PURCHASED state, idempotently writes one CREDIT_PURCHASE ledger transaction, and completes the adopted package's current consume/acknowledgement flow. Flutter is never authoritative for Credit issuance.
+Flutter initiates Premium purchases through the official `in_app_purchase` API and selects the exact base-plan offer token returned by Google Play. The backend verifies the purchase token through `purchases.subscriptionsv2.get`, validates the package/product/base plan/account binding/state/expiry, acknowledges the purchase when required, and completes the purchase only after server verification. Flutter is never authoritative for Premium entitlement.
+
+Verified prepaid purchases append one server-only Premium grant per purchase token. The materialized `users/{uid}/premiumEntitlement/current` document is sanitized and owner-readable; grant and purchase lineage remain server-only. Reverification is idempotent, and grants are recomputed in deterministic sequence so a future Credit redemption can append another grant without replacing purchase history. RTDN is only a signal: the backend re-queries the Google API before applying expiry, revocation, or refund consequences.
 
 The backend retains purchase token, order identity, product ID, quantity, obfuscated account mapping where appropriate, verification/consumption state, issuance transaction, and remaining entitlement lineage. RTDN and voided-purchase information reconcile reversals through immutable PURCHASE_REVERSAL entries.
 

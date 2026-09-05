@@ -53,11 +53,13 @@ Accountability Circles are optional and use granular permissions. Commitment Cre
 - `architecture/v2-domain-model.md`: target entities and state machines.
 - `architecture/commitment-verification.md`: authoritative leases, native evidence journal, monitoring health, offline resolution, grace, and settlement.
 - `architecture/credit-ledger-and-billing.md`: append-only Credit ledger, Google Play purchase verification, Premium redemption, and reconciliation.
+- `architecture/premium-entitlement-and-billing.md`: Phase 6 Premium catalog, Play verification, grants, entitlement projection, disclosure, RTDN, and capability boundary.
 
 ### Engineering
 
 - `engineering/status.md`: current implementation reality versus v2 target.
 - `engineering/implementation-principles.md`: revival and authority constraints.
+- `engineering/google-play-setup.md`: manual Play Console, licensed-device, RTDN, and production readiness runbook.
 
 ### Design
 
@@ -81,6 +83,8 @@ The Phase 2 Today review is [review/docs/phase-2-today-implementation.md](review
 The Phase 4 onboarding review is [review/docs/phase-4-onboarding-implementation.md](review/docs/phase-4-onboarding-implementation.md). It records the explicit onboarding state machine, progressive permission boundary, first-Commitment integration, and known limitations.
 
 The Phase 5 Circle and Override Authority review is [review/docs/phase-5-circle-override-implementation.md](review/docs/phase-5-circle-override-implementation.md). It records the least-privilege Circle projection, explicit authority policy, fixed quorum, server resolution boundary, and durable native approval delivery.
+
+The Phase 6 Premium implementation review is [review/docs/phase-6-premium-implementation.md](review/docs/phase-6-premium-implementation.md). It records the prepaid Play entitlement boundary, disclosure requirement, server verification/grant projection, capability gates, and remaining Play Console lifecycle work.
 
 ### Archive
 

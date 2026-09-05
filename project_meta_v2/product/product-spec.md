@@ -56,7 +56,9 @@ Today exposes direct interpretable state: active Commitment progress, adherence,
 
 ## 7. Premium and Credits
 
-Premium is a prepaid Google Play subscription capability. Commitment Credits are optional, purchased only through Google Play Billing, and usable only inside Revoke. Credits may be locked behind a Commitment, released on verified success, released on unverifiable/cancelled outcomes, forfeited only after verified failure and exhausted grace, or redeemed for Premium access time.
+Premium is a prepaid, non-auto-renewing Google Play subscription capability. The initial product is `premium` with `prepaid-30d` and `prepaid-365d` base plans. The accepted reference prices are USD $9.99 for 30 days and USD $59.99 for 365 days; localized Play pricing is authoritative. Free users can use Revoke with one active Protect Commitment and can participate in another member's Circle. Premium adds new Reduce activation, additional Protect Commitments, AI Architect authority, Circle creation, and owner permission management. Existing active v1-v5 behavior is grandfathered.
+
+Commitment Credits are optional, purchased only through Google Play Billing, and usable only inside Revoke. Credits may be locked behind a Commitment, released on verified success, released on unverifiable/cancelled outcomes, forfeited only after verified failure and exhausted grace, or redeemed for Premium access time. Credits and Credit-backed Commitments are not part of Phase 6 implementation.
 
 The v2 conversion is fixed at 100 Credits = 30 Premium days. This is a design decision, not a policy approval. Final Google Play and legal validation is a pre-release gate.
 
@@ -64,4 +66,4 @@ See monetization.md and ../architecture/credit-ledger-and-billing.md.
 
 ## 8. Explicit initial revival boundary
 
-Keep non-financial Time Block and Usage Limit enforcement, local-first operation, basic Insights, optional Circle permissions, and the bounded override flow. Phase 5 implements these Circle/authority semantics over compatibility storage; it does not introduce a native/server Commitment domain. Defer Credit implementation, Premium billing, advanced analytics, community regimes, and other financial infrastructure until verification, policy, and ledger prerequisites are complete.
+Keep non-financial Time Block and Usage Limit enforcement, local-first operation, basic Insights, optional Circle permissions, the bounded override flow, and the new Premium entitlement boundary. Phase 5 implements Circle/authority semantics over compatibility storage, and Phase 6 implements Premium over server-verified Google Play grants; neither introduces a native/server Commitment domain. Defer Credit implementation, Credit-backed activation, advanced analytics, community regimes, and other financial infrastructure until verification, policy, and ledger prerequisites are complete.

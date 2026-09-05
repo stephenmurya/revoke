@@ -20,12 +20,15 @@ Review date: 2026-09-04
 | Evidence reconciliation defaults to 24 hours and remains server-configurable | ACCEPTED | decisions/004; commitment-verification.md | No | Yes |
 | `UNVERIFIABLE` releases locked Credits, forfeits none, and consumes no grace | ACCEPTED | decisions/004; product/commitments.md | No | Yes |
 | Force-close, uninstall, or monitoring loss alone cannot mean failure | ACCEPTED | decisions/004; commitment-verification.md | No | Yes |
-| Purchase disclosure is mandatory before every Credit purchase | ACCEPTED | decisions/011; product/monetization.md | No billing implementation | Yes |
-| Premium is prepaid and non-auto-renewing | ACCEPTED | decisions/005; product/monetization.md | No Premium/billing code | Yes |
-| 30-day prepaid Premium reference price is USD $9.99 | ACCEPTED | decisions/005; product/monetization.md | No Premium/billing code | Yes |
-| 365-day prepaid Premium reference price is USD $59.99 | ACCEPTED | decisions/005; product/monetization.md | No Premium/billing code | Yes |
+| Purchase disclosure is mandatory before every Credit purchase | ACCEPTED | decisions/011; product/monetization.md | Credit path not implemented | Yes |
+| Premium is prepaid and non-auto-renewing | ACCEPTED | decisions/005; product/monetization.md | Repository billing foundation implemented; Play lifecycle unverified | Yes |
+| 30-day prepaid Premium reference price is USD $9.99 | ACCEPTED | decisions/005; product/monetization.md | Product metadata/base-plan mapping implemented; Play price unverified | Yes |
+| 365-day prepaid Premium reference price is USD $59.99 | ACCEPTED | decisions/005; product/monetization.md | Product metadata/base-plan mapping implemented; Play price unverified | Yes |
 | Weekly Premium is outside initial v2 scope | ACCEPTED | decisions/005; product/monetization.md | No | No |
 | Lifetime Premium is outside initial v2 scope | ACCEPTED | decisions/005; product/monetization.md | No | No |
+| Premium purchase disclosure is required before every new Premium purchase | ACCEPTED | decisions/014; architecture/premium-entitlement-and-billing.md | Disclosure callable precedes every new Play flow | Play/device verification remains |
+| Premium entitlement is server-verified, grant-backed, and cached only for offline expiry presentation | ACCEPTED | decisions/014; architecture/premium-entitlement-and-billing.md | Repository code implemented; live Play lifecycle unverified | Yes |
+| Free/Premium capability matrix is fixed for initial v2 | ACCEPTED | decisions/014; product/monetization.md | UI and server gates implemented at new paid-capability boundaries | Existing-data migration/backfill remains |
 | 100 Credits = 30 Premium days; 25,920 seconds/Credit | ACCEPTED | decisions/009; monetization.md | No | Yes |
 | Target bottom navigation is Today / Commitments / Circle / Insights | ACCEPTED | decisions/012; design/information-architecture.md | Implemented; Today is dedicated, other destinations retain their scoped legacy content | Yes |
 | Settings lives under Profile/account, not primary navigation | ACCEPTED | decisions/012; design/information-architecture.md | Current controls/profile routes are separate | Yes |
@@ -34,5 +37,5 @@ Review date: 2026-09-04
 | Revoke 2.0 uses a calm, precise, authoritative, refined, premium visual direction | ACCEPTED | decisions/012; design/overview.md | Phase 2 Today follows the direction; remaining feature screens remain mixed | Yes |
 | A governed design system is required before broad v2 UI implementation | ACCEPTED | decisions/012; design/design-system.md | Phase 1 tokens/primitives/shell are implemented and used by Phase 3 Commitment surfaces; broad migration remains | Yes |
 | Google Play policy compatibility is not assumed | ACCEPTED | monetization.md; credit-ledger-and-billing.md | External validation only | Release gate |
-| Default grace, eligibility, caps, device policy, and free tier | OPEN | product/open-questions.md | No | Product decision required |
+| Default grace, eligibility, caps, device policy, and Credit-backed Commitment policy | OPEN | product/open-questions.md | No | Product decision required |
 | Social Regimes/community marketplace | DEFERRED | product-spec.md; engineering/status.md | No integrated path | No unless later revived |

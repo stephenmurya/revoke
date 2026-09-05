@@ -29,4 +29,4 @@ The audit's recommended foundation now exists in Flutter. The shell exposes the 
 
 ## Readiness
 
-The project is ready for the focused Today redesign phase. Broad screen work must continue using the semantic tokens and shared primitives, while preserving native enforcement. No product question blocks the next UI phase itself; free/trial entitlements, the free-versus-Premium capability matrix, and final Circle quorum remain product decisions for later feature implementation.
+The project was ready for the focused Today redesign phase. Broad screen work must continue using the semantic tokens and shared primitives, while preserving native enforcement. The free/Premium capability matrix is now accepted and implemented at the Phase 6 boundary; Play Console verification and later Credit-backed product decisions remain separate release work.

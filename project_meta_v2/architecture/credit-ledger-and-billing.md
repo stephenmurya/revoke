@@ -80,7 +80,7 @@ Premium is a Google Play subscription product with a prepaid base plan:
 - reference Premium prices: see `product/monetization.md`;
 - weekly and lifetime Premium are outside initial v2 scope.
 
-Prepaid Premium does not auto-renew. The user tops up through Google Play or extends Premium using eligible Credits. The exact free entitlement, Premium capabilities, and pricing remain open in `product/open-questions.md`.
+Prepaid Premium does not auto-renew. The initial free/Premium capability matrix and reference prices are accepted in `product/monetization.md` and decision 014. Future Credit redemption may extend Premium only through a later server-authorized Credit grant; that path is not implemented.
 
 ## Credit-to-Premium conversion
 

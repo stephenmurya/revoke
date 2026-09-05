@@ -13,6 +13,12 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    function hasPremiumEntitlement(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/premiumEntitlement/current) &&
+        get(/databases/$(database)/documents/users/$(userId)/premiumEntitlement/current).data.active == true &&
+        get(/databases/$(database)/documents/users/$(userId)/premiumEntitlement/current).data.premiumUntil > request.time;
+    }
+
     function isCurrentSquadMember() {
       return signedIn() &&
         resource.data.memberIds is list &&
@@ -138,12 +144,30 @@ service cloud.firestore {
         allow read: if isAdmin() || isSelf(userId);
         allow create, update, delete: if false;
       }
+
+      // Premium state is server-authoritative. The client may read only its
+      // sanitized current entitlement and can never write grants, purchases,
+      // or disclosure acknowledgements.
+      match /premiumEntitlement/{docId} {
+        allow read: if isAdmin() || isSelf(userId);
+        allow create, update, delete: if false;
+      }
+      match /premiumGrants/{grantId} {
+        allow read, write: if false;
+      }
+      match /premiumPurchases/{purchaseId} {
+        allow read, write: if false;
+      }
+      match /premiumDisclosureAcceptances/{flowId} {
+        allow read, write: if false;
+      }
     }
 
     // Squad collaboration
     match /squads/{squadId} {
-      allow create: if isAdmin() || (signedIn() &&
+      allow create: if isAdmin() || (signedIn() && hasPremiumEntitlement(request.auth.uid) &&
         request.resource.data.creatorId == request.auth.uid &&
+        request.resource.data.premiumRequired == true &&
         request.resource.data.memberIds is list &&
         request.resource.data.memberIds.size() == 1 &&
         request.resource.data.memberIds.hasOnly([request.auth.uid]));

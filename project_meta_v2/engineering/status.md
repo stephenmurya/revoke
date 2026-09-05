@@ -4,7 +4,7 @@ Last canonical update: 2026-09-05
 
 Source baseline: ../audits/2026-09-04-revival-audit.md.
 
-This file answers what exists now, not what Revoke 2.0 intends to build. The current repository is pre-Credit/pre-Premium-v2 implementation.
+This file answers what exists now, not what Revoke 2.0 intends to build. The current repository is pre-Credit but has a Phase 6 Premium-v2 code boundary; live Google Play configuration and production verification remain incomplete.
 
 ## Phase 1 mobile foundation implemented
 
@@ -37,6 +37,14 @@ The `/squad` compatibility route now renders the optional v2 Circle surface. Cir
 The v2 authority set is explicit: `SELF`, `AI`, or `CIRCLE`. Self requests require a reason, a 30-second reflection period, and 5/10/15-minute bounded access; native temporary-unlock state is used offline and a local history event retries server recording. AI uses the existing sanitized OpenRouter task path and rejects safely. Circle requests snapshot selected eligible voter IDs, exclude the requester, use strict majority `floor(n / 2) + 1`, and reject after the existing five-minute timeout without AI fallback. The old random `SYSTEM_WARDEN` path is no longer used by the v2 callable flow.
 
 Approved AI/Circle access is now delivered through the existing Flutter listener and a targeted FCM data path. `AmnestyPushReceiver` validates the bound app user, package, bounded expiry, and idempotency key before persisting native temporary access, so Flutter does not have to be alive for the native grant. The receiver remains protected by the FCM `SEND` permission. The old `pleas`/Tribunal names and compatibility paths remain internally.
+
+## Phase 6 Premium entitlement and billing foundation implemented
+
+`PremiumBillingService` listens once to the official Flutter purchase stream, discovers the `premium` subscription's `prepaid-30d` and `prepaid-365d` offers by Play-provided base-plan metadata, records the mandatory disclosure before every new purchase, sends purchase tokens to `verifyPremiumPurchase`, and completes purchases only after server verification. `PremiumEntitlementService` exposes one auth-scoped sanitized entitlement stream and caches only the last server-verified expiry for offline presentation; it never extends Premium locally. `PremiumPaywallScreen` is reusable and shows only actual localized Play products, prepaid/non-renewing language, restore, and controlled unavailable states.
+
+The backend uses `purchases.subscriptionsv2.get`, account obfuscation, product/base-plan/state/expiry validation, acknowledgement, idempotent server-only `premiumPurchases`/`premiumGrants`, `premiumEntitlement/current`, and RTDN requery helpers. `assertPremiumCapability` gates new Reduce/additional-Protect activation; Circle creation and owner permission changes, and new AI/Circle authority configuration, are server-gated. Existing active v1-v5 behavior and legacy authority policies are grandfathered. Firestore rules deny client writes to Premium records.
+
+Code is complete for the repository boundary, but Play Console products/base plans, licensed-device tests, production Android Publisher credentials, refund/revocation tests, and RTDN delivery are not verified here. See `google-play-setup.md`.
 
 ## Confirmed working or salvageable foundations
 
@@ -75,8 +83,8 @@ Approved AI/Circle access is now delivered through the existing Flutter listener
 - native/server Commitment domain object and immutable activation lease;
 - server-authoritative Commitment onboarding state and cross-device hydration;
 - complete Circle migration, including broader Commitment progress sharing and removal of all legacy Squad/Plea internals;
-- Commitment Credits, Credit holds, append-only Credit ledger, purchase lineage, Google Play verification, or Premium redemption;
-- prepaid Premium entitlement/paywall;
+- Commitment Credits, Credit holds, append-only Credit ledger, Credit purchase lineage, or Premium redemption;
+- production-ready Premium entitlement/paywall lifecycle (repository code exists; Play setup and live verification remain);
 - financial evidence outcomes/settlement state machine;
 - native append-only evidence journal, signing, and Play Integrity signals;
 - v2 adherence, slip/recovery, grace, Credit wallet, and verification-health cards;
@@ -101,11 +109,11 @@ Approved AI/Circle access is now delivered through the existing Flutter listener
 5. add schedule revisions, native acknowledgments, and conflict policy;
 6. formalize usage evidence, timezone rules, monitoring health, and UNVERIFIABLE behavior;
 7. complete device/FCM proof of durable override delivery and permission migration/backfill;
-8. implement prepaid Premium entitlement and Google Play validation;
+8. configure and prove Premium on licensed Play devices, including RTDN/refunds;
 9. implement Credit ledger/purchase lineage only after evidence and policy gates;
 10. replace Focus Score UI with direct cards;
 11. expand advanced insights later.
 
 ## Rule
 
-Do not mark a v2 feature implemented because a model, screen, or placeholder exists. Update this status only after an end-to-end executable path is verified. Current documentation decisions are not claims that any Credit, billing, evidence journal, or Premium path exists in code.
+Do not mark a v2 feature implemented because a model, screen, or placeholder exists. Premium is marked as a repository code foundation only; its Play Console and production lifecycle are still unverified. Current documentation decisions are not claims that any Credit path exists in code.
