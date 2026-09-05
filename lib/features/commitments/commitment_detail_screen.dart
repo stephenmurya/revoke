@@ -103,6 +103,15 @@ class _CommitmentDetailScreenState extends State<CommitmentDetailScreen> {
             const SizedBox(height: RevokeSpacing.sm),
             RevokeSurface(child: _buildPlan(context, schedule)),
             const SizedBox(height: RevokeSpacing.xl),
+            RevokeButton(
+              label: 'Back with Credits',
+              icon: PhosphorIcons.lock,
+              variant: RevokeButtonVariant.secondary,
+              onPressed: commitment.isActive
+                  ? () => context.push('/commitment/back', extra: commitment)
+                  : null,
+            ),
+            const SizedBox(height: RevokeSpacing.xl),
             const RevokeSectionHeader(title: 'Override authority'),
             const SizedBox(height: RevokeSpacing.sm),
             RevokeSurface(

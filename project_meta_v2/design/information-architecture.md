@@ -31,7 +31,7 @@ Current `/home` and `RegimesScreen` are migration locations, not the target prod
 
 ## Phase 1 implementation status
 
-`MainShell` presents Today, Commitments, Circle, and Insights through `NavigationBar`. `/home` remains the Today-compatible entry point, `/commitments` now points to `CommitmentsScreen`, `/squad` remains the Circle-compatible entry point, and `/insights` remains the existing Insights entry point. The app bar exposes a zero-valued Credits placeholder, Notifications, and Profile. The placeholder does not imply a Credit backend or purchase implementation.
+`MainShell` presents Today, Commitments, Circle, and Insights through `NavigationBar`. `/home` remains the Today-compatible entry point, `/commitments` now points to `CommitmentsScreen`, `/squad` remains the Circle-compatible entry point, and `/insights` remains the existing Insights entry point. The app bar exposes the server-derived available Credits projection through a compact Credits pill, alongside Notifications and Profile. The Credits detail route provides the Phase 7 repository purchase, disclosure, redemption, history, and backing boundary; live Play configuration and production verification remain release gates.
 
 ## Phase 2 Today implementation status
 

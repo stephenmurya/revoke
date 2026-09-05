@@ -4,11 +4,11 @@ Last canonical update: 2026-09-05
 
 Source baseline: ../audits/2026-09-04-revival-audit.md.
 
-This file answers what exists now, not what Revoke 2.0 intends to build. The current repository is pre-Credit but has a Phase 6 Premium-v2 code boundary; live Google Play configuration and production verification remain incomplete.
+This file answers what exists now, not what Revoke 2.0 intends to build. The current repository has a Phase 7 Credit-v2 code boundary layered over the Phase 6 Premium foundation; live Google Play configuration, evidence-device proof, and production verification remain incomplete.
 
 ## Phase 1 mobile foundation implemented
 
-The Flutter design-system foundation and global mobile shell are now implemented without changing native enforcement or backend behavior. `AppTheme`, `ColorScheme`, and `AppColorsExtension` expose semantic surfaces, state colors, typography roles, and restrained component styling. `ThemeService` preserves persisted theme/accent preferences while mapping users to a curated safe accent palette. Shared primitives live under `lib/core/widgets/`. The shell exposes Today, Commitments, Circle, and Insights, with global Credits placeholder, Notifications, and Profile actions. Credits remain a zero-valued UI placeholder because no Credit ledger or billing path exists.
+The Flutter design-system foundation and global mobile shell are now implemented without changing native enforcement or backend behavior. `AppTheme`, `ColorScheme`, and `AppColorsExtension` expose semantic surfaces, state colors, typography roles, and restrained component styling. `ThemeService` preserves persisted theme/accent preferences while mapping users to a curated safe accent palette. Shared primitives live under `lib/core/widgets/`. The shell exposes Today, Commitments, Circle, and Insights, with global server-derived Credits, Notifications, and Profile actions.
 
 The Commitments management screen was migrated in Phase 3; Insights, Settings, and native overlay visuals retain their legacy implementations until their dedicated phases.
 
@@ -78,16 +78,25 @@ Code is complete for the repository boundary, but Play Console products/base pla
 - time/day/timezone boundaries are not formally reconciled;
 - device/OEM Accessibility recovery lacks integration/device proof.
 
+## Phase 7 Commitment Credits implementation
+
+`CreditService` exposes the server wallet projection, sanitized history, purchase lifecycle, every-purchase disclosure flow, Premium redemption, native evidence upload, and offline local projection. `PremiumBillingService` remains the single app-scoped Google Play purchase listener and routes `credits_50`/`credits_100` through its consumable branch. The app-bar pill now reads server-derived available Credits and `/credits` provides the restrained detail surface.
+
+`credit_ledger.js` verifies ProductPurchaseV2, never credits pending purchases, acknowledges and consumes on the server, binds tokens to accounts, appends immutable events, atomically creates per-Commitment holds, creates schedule-backed backing snapshots, accepts evidence batches, reconciles reversals, resolves after the 24-hour default window, and creates Credit-derived Premium grants. `firestore.rules` denies client writes to authoritative Credit state.
+
+Android `CreditEvidenceStore` provides the append-only SQLite journal with sequences and hash-chain fields. `RevokeAccessibilityService` records targeted observations and positive block evidence; local verified-failure projections are durably retained until upload. This remains a compatibility implementation over existing schedule enforcement, not a new enforcement engine.
+
+Repository code is present, but Google Play product configuration, licensed-device purchase/consumption/reversal testing, RTDN delivery, physical-device evidence coverage, signing/Integrity configuration, legal/policy review, and production operational readiness are not verified.
+
 ## V2 product concepts not implemented
 
 - native/server Commitment domain object and immutable activation lease;
 - server-authoritative Commitment onboarding state and cross-device hydration;
 - complete Circle migration, including broader Commitment progress sharing and removal of all legacy Squad/Plea internals;
-- Commitment Credits, Credit holds, append-only Credit ledger, Credit purchase lineage, or Premium redemption;
+- full native/server Commitment lease model, complete proof coverage, retry-linked settlement, and cross-device Credit restoration hardening;
 - production-ready Premium entitlement/paywall lifecycle (repository code exists; Play setup and live verification remain);
-- financial evidence outcomes/settlement state machine;
-- native append-only evidence journal, signing, and Play Integrity signals;
-- v2 adherence, slip/recovery, grace, Credit wallet, and verification-health cards;
+- complete device signing and Play Integrity signals;
+- complete v2 adherence, slip/recovery, and verification-health cards;
 - category analytics and Danger Zone analysis;
 - Social Regimes/community marketplace;
 - complete Launch Count enforcement.
@@ -116,4 +125,4 @@ Code is complete for the repository boundary, but Play Console products/base pla
 
 ## Rule
 
-Do not mark a v2 feature implemented because a model, screen, or placeholder exists. Premium is marked as a repository code foundation only; its Play Console and production lifecycle are still unverified. Current documentation decisions are not claims that any Credit path exists in code.
+Do not mark a v2 feature implemented because a model, screen, or placeholder exists. Credit and Premium are repository code foundations with live Play, device, policy, and production gates still open. The server ledger remains canonical; the local wallet projection and `FAILURE_VERIFIED_LOCAL` state are provisional only.

@@ -64,6 +64,29 @@ test("own score events are readable but not client-writable", async () => {
   }));
 });
 
+test("Credit wallet is owner-readable but all Credit mutations are server-only", async () => {
+  await seedWithBypass(async (db) => {
+    await setDoc(doc(db, "users/alice/creditWallet/current"), {
+      availableCredits: 30,
+      lockedCredits: 20,
+    });
+    await setDoc(doc(db, "users/alice/creditLedger/event_1"), {
+      type: "CREDIT_PURCHASE",
+      amount: 50,
+    });
+  });
+
+  const aliceDb = testEnv.authenticatedContext("alice").firestore();
+  const bobDb = testEnv.authenticatedContext("bob").firestore();
+  await assertSucceeds(getDoc(doc(aliceDb, "users/alice/creditWallet/current")));
+  await assertFails(setDoc(doc(aliceDb, "users/alice/creditWallet/current"), {
+    availableCredits: 999,
+    lockedCredits: 0,
+  }));
+  await assertFails(getDoc(doc(bobDb, "users/alice/creditWallet/current")));
+  await assertFails(getDoc(doc(aliceDb, "users/alice/creditLedger/event_1")));
+});
+
 test("Circle members cannot read another member's private regimes", async () => {
   await seedWithBypass(async (db) => {
     await setDoc(doc(db, "users/alice"), {

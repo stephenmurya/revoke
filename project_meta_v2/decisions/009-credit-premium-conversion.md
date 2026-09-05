@@ -14,3 +14,6 @@ Status: Accepted
 - Discounted bulk Credit tiers are outside the initial v2 scope unless separately approved.
 - See ../product/monetization.md.
 
+## Phase 7 implementation note
+
+`redeemCreditsForPremium` enforces 10/50/100 Credit increments and creates a server Premium grant using the accepted 25,920 seconds per Credit constant. Locked Credits cannot be redeemed; live entitlement behavior remains subject to the existing Premium production gates.

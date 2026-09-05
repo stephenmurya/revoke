@@ -160,6 +160,48 @@ class NativeBridge {
     });
   }
 
+  static Future<void> syncCreditBacking(Map<String, dynamic> backing) async {
+    await _channel.invokeMethod('syncCreditBacking', backing);
+  }
+
+  static Future<void> removeCreditBacking(String backingId) async {
+    await _channel.invokeMethod('removeCreditBacking', {'backingId': backingId});
+  }
+
+  static Future<Map<String, dynamic>> appendCreditEvidence(
+    Map<String, dynamic> evidence,
+  ) async {
+    final result = await _channel.invokeMethod('appendCreditEvidence', evidence);
+    return Map<String, dynamic>.from(result as Map? ?? const {});
+  }
+
+  static Future<List<Map<String, dynamic>>> getPendingCreditEvidence() async {
+    final result = await _channel.invokeMethod('getPendingCreditEvidence');
+    return (result as List? ?? const [])
+        .map((entry) => Map<String, dynamic>.from(entry as Map))
+        .toList(growable: false);
+  }
+
+  static Future<int> markCreditEvidenceUploaded(List<String> eventIds) async {
+    final result = await _channel.invokeMethod('markCreditEvidenceUploaded', {
+      'eventIds': eventIds,
+    });
+    return (result as num?)?.toInt() ?? 0;
+  }
+
+  static Future<List<Map<String, dynamic>>> getPendingLocalCreditForfeitures() async {
+    final result = await _channel.invokeMethod('getPendingLocalCreditForfeitures');
+    return (result as List? ?? const [])
+        .map((entry) => Map<String, dynamic>.from(entry as Map))
+        .toList(growable: false);
+  }
+
+  static Future<void> clearPendingLocalCreditForfeitures(List<String> eventIds) async {
+    await _channel.invokeMethod('clearPendingLocalCreditForfeitures', {
+      'eventIds': eventIds,
+    });
+  }
+
   /// Returns exact usage per package since the provided activation timestamp.
   static Future<Map<String, int>> getSessionUsage(
     List<String> packageNames,

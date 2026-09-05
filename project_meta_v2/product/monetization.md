@@ -1,6 +1,6 @@
 # Monetization
 
-Status: Phase 6 Premium entitlement and Google Play purchase code is implemented behind an explicit server-verification boundary. Google Play Console configuration, licensed-device testing, RTDN delivery, and production credentials remain release work. Commitment Credits are still not implemented; see ../engineering/status.md.
+Status: Phase 7 Credit wallet, purchase, backing, evidence-upload, settlement, and Premium-redemption repository boundaries are implemented behind server verification. Google Play Console configuration, licensed-device testing, RTDN delivery, evidence-device testing, production credentials, and policy review remain release work; see ../engineering/status.md.
 
 ## Product systems
 
@@ -56,7 +56,7 @@ The accepted initial entitlement matrix is:
 
 Existing active v1-v5 behavior is grandfathered at the migration boundary. Existing active Protect and Reduce Commitments are not abruptly disabled when an account is free. A Premium check is required for new paid-capability activation or reconfiguration; the backend remains authoritative.
 
-The primary paywall is reusable and appears after the user understands/configures a paid capability. Commercial onboarding is not fully wired in Phase 6. Credits belong in the later Commitment/Wallet experience, not as a replacement for the Premium paywall.
+The primary paywall is reusable and appears after the user understands/configures a paid capability. Commercial onboarding is not fully wired in Phase 7. Credits belong in the Commitment/Wallet experience, not as a replacement for the Premium paywall. Credit purchases require active Premium; redemption is the exception and does not require active Premium.
 
 Premium status is derived from server-verified Google Play grants and exposed to Flutter through a sanitized entitlement document. The client may cache the last verified expiry for offline presentation, but cannot extend it or issue Premium locally. On expiry, AI/Circle authority is unavailable for new configuration; an existing configured policy is not rewritten automatically.
 

@@ -8,6 +8,7 @@ import '../../core/theme/revoke_tokens.dart';
 import '../../core/utils/theme_extensions.dart';
 import '../../core/widgets/revoke_components.dart';
 import '../../core/widgets/revoke_credits_pill.dart';
+import '../../core/services/credit_service.dart';
 
 class MainShell extends StatefulWidget {
   final Widget child;
@@ -98,14 +99,12 @@ class _MainShellState extends State<MainShell> {
               automaticallyImplyLeading: false,
               title: Text(_pageTitle(location)),
               actions: [
-                RevokeCreditsPill(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Credits are not available yet.'),
-                      ),
-                    );
-                  },
+                ValueListenableBuilder(
+                  valueListenable: CreditService.instance.wallet,
+                  builder: (context, wallet, _) => RevokeCreditsPill(
+                    availableCredits: wallet.availableCredits,
+                    onPressed: () => context.push('/credits'),
+                  ),
                 ),
                 const SizedBox(width: RevokeSpacing.xs),
                 RevokeIconButton(

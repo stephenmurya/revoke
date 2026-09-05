@@ -20,6 +20,7 @@ const {
   isTerminalSubscriptionNotification,
   createPremiumBillingService,
 } = require("./premium_billing");
+const {createCreditLedgerService, hashToken} = require("./credit_ledger");
 
 initializeApp();
 
@@ -29,6 +30,12 @@ const openRouterKey = defineSecret("OPENROUTER_API_KEY");
 const premiumBilling = createPremiumBillingService({
   db,
   adminSdk: admin,
+  packageName: PREMIUM_PACKAGE_NAME,
+});
+const creditLedger = createCreditLedgerService({
+  db,
+  adminSdk: admin,
+  premiumBilling,
   packageName: PREMIUM_PACKAGE_NAME,
 });
 const RAP_SHEET_VERSION = 1;
@@ -448,6 +455,110 @@ const CLEANUP_BATCH_LIMIT = 100;
 
 const PREMIUM_DISCLOSURE_VERSION = "premium-purchase-v1";
 
+function _creditError(error) {
+  if (error instanceof HttpsError) return error;
+  const code = [
+    "invalid-argument",
+    "failed-precondition",
+    "permission-denied",
+    "not-found",
+    "already-exists",
+  ].includes(error?.code) ? error.code : "internal";
+  return new HttpsError(code, error?.message || "Credit operation failed.");
+}
+
+exports.recordCreditPurchaseDisclosure = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  try {
+    await _assertPremiumEntitled(request.auth.uid);
+    return await creditLedger.recordDisclosure(request.auth.uid, request.data || {});
+  } catch (error) {
+    throw _creditError(error);
+  }
+});
+
+exports.verifyCreditPurchase = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  try {
+    await _assertPremiumEntitled(request.auth.uid);
+    return await creditLedger.verifyPurchase(request.auth.uid, request.data || {});
+  } catch (error) {
+    logger.error("verifyCreditPurchase failed.", {
+      uid: request.auth.uid,
+      errorMessage: error?.message || String(error),
+    });
+    throw _creditError(error);
+  }
+});
+
+exports.redeemCreditsForPremium = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  try {
+    return await creditLedger.redeemCredits(request.auth.uid, request.data?.amount);
+  } catch (error) {
+    throw _creditError(error);
+  }
+});
+
+exports.createCreditBacking = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  try {
+    await _assertPremiumEntitled(request.auth.uid);
+    return await creditLedger.createBacking(request.auth.uid, request.data || {});
+  } catch (error) {
+    throw _creditError(error);
+  }
+});
+
+exports.submitCreditEvidence = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  try {
+    return await creditLedger.submitEvidence(request.auth.uid, request.data || {});
+  } catch (error) {
+    throw _creditError(error);
+  }
+});
+
+exports.submitPendingLocalForfeiture = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  try {
+    return await creditLedger.submitPendingLocalForfeiture(request.auth.uid, request.data || {});
+  } catch (error) {
+    throw _creditError(error);
+  }
+});
+
+exports.resolveCreditBacking = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  try {
+    return await creditLedger.resolveBacking(
+        request.auth.uid,
+        String(request.data?.backingId || "").trim(),
+    );
+  } catch (error) {
+    throw _creditError(error);
+  }
+});
+
+exports.resolveCreditBackings = onSchedule({
+  schedule: "every 15 minutes",
+  region: "us-central1",
+}, async () => creditLedger.resolveDue());
+
 exports.recordPremiumPurchaseDisclosure = onCall({
   region: "us-central1",
 }, async (request) => {
@@ -579,6 +690,36 @@ exports.reconcilePremiumRtdn = onMessagePublished({
       errorMessage: error?.message || String(error),
     });
     throw error;
+  }
+});
+
+exports.reconcileCreditRtdn = onMessagePublished({
+  topic: "revoke-credit-rtdn",
+  region: "us-central1",
+}, async (event) => {
+  const message = event?.data?.message || event?.message || {};
+  let payload = message.json;
+  if (!payload && message.data) {
+    try {
+      payload = JSON.parse(Buffer.from(message.data, "base64").toString("utf8"));
+    } catch (_) {
+      payload = null;
+    }
+  }
+  const notification = payload?.oneTimeProductNotification || payload?.one_time_product_notification;
+  const token = String(notification?.purchaseToken || "").trim();
+  if (!notification || !token) return;
+  const binding = await db.collection("creditPurchaseBindings")
+      .doc(hashToken(token)).get();
+  if (!binding.exists) return;
+  const uid = String(binding.data()?.uid || "").trim();
+  if (!uid) return;
+  const type = Number(notification.notificationType || 0);
+  // Google Play one-time product notifications use the voided/refunded
+  // signal for reconciliation. RTDN is only a trigger; the purchase record
+  // and ledger remain the authority for the compensating event.
+  if ([2, 3].includes(type)) {
+    await creditLedger.reconcilePurchaseReversal(uid, token, `rtdn_${type}`);
   }
 });
 
@@ -3235,6 +3376,10 @@ exports.__testables = {
   normalizePremiumPlaySubscription: require("./premium_billing").normalizePlaySubscription,
   sequentialPremiumUntil: require("./premium_billing").sequentialPremiumUntil,
   decodePremiumRtdn: require("./premium_billing").decodeRtdnMessage,
+  creditProductAmount: require("./credit_ledger").productAmount,
+  projectCreditWallet: require("./credit_ledger").projectWallet,
+  evaluateCreditEvidence: require("./credit_ledger").evaluateEvidence,
+  normalizeCreditProductPurchase: require("./credit_ledger").normalizeProductPurchase,
 };
 
 exports.updateUserStatus = onCall({

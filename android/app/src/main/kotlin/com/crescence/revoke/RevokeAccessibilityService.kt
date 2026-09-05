@@ -40,6 +40,7 @@ class RevokeAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         running = true
         EnforcementEngine.ensureLoaded(applicationContext)
+        CreditEvidenceRecorder.recordHealth(applicationContext)
         Log.d("RevokeAccessibility", "Accessibility fast path connected.")
     }
 
@@ -60,6 +61,7 @@ class RevokeAccessibilityService : AccessibilityService() {
 
         val now = System.currentTimeMillis()
         currentForegroundPackage = observedPackage
+        CreditEvidenceRecorder.recordForeground(applicationContext, observedPackage)
         if (observedPackage == lastEvaluatedPackage && now - lastEvaluationAtMs < 250L) {
             return
         }
@@ -88,6 +90,11 @@ class RevokeAccessibilityService : AccessibilityService() {
                 )
 
             if (blockPresentation != null) {
+                CreditEvidenceRecorder.recordForeground(
+                    applicationContext,
+                    observedPackage,
+                    violation = true,
+                )
                 if (EnforcementEngine.isAccessibilityEscapePending(observedPackage)) {
                     Log.d(
                         "RevokeAccessibility",

@@ -2,7 +2,11 @@
 
 Review date: 2026-09-05
 
-This packet records the terminology correction, mobile design-system audit, Phases 1-5 implementation reviews, and Phase 6 Premium implementation review over the existing `project_meta_v2/` documents. Phase 6 changes only the Premium billing/entitlement boundary, its targeted UI/gates/tests, Firestore authorization, and canonical documentation. Native enforcement, Commitment Credits, `old_project_meta/`, and unrelated product systems remain untouched.
+This packet records the terminology correction, mobile design-system audit, Phases 1-5 implementation reviews, the Phase 6 Premium implementation review, and the Phase 7 Commitment Credits implementation review over the existing `project_meta_v2/` documents. Each phase remains scoped to its documented boundary; `old_project_meta/` remains untouched.
+
+Phase 7 adds the Commitment Credits repository boundary over existing Premium, schedule, and native enforcement infrastructure. It does not claim live Play configuration, physical-device evidence proof, policy approval, or production readiness.
+
+The Phase 7 implementation review is [Phase 7 Commitment Credits](phase-7-credit-implementation.md). It records the shared Play purchase listener, server ledger and wallet, per-Commitment holds, native journal, offline provisional state, 24-hour resolver, redemption, reversal boundary, and release gates.
 
 ## Phase 1 implementation
 

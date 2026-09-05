@@ -58,7 +58,7 @@ The v2 design vocabulary is semantic: Today, Commitments, Circle, Insights, Avai
 
 ### Phase 1 implementation boundary
 
-The implemented shell now uses the accepted Today / Commitments / Circle / Insights labels, while `/home`, `RegimesScreen`, and `/squad` remain compatibility/content locations. This does not contradict the target IA: it is the documented migration boundary. The Credits control is a compact zero placeholder and does not imply a wallet, purchase, or ledger implementation. The current native blocker remains unchanged and is intentionally deferred to the native visual-alignment phase.
+The implemented shell now uses the accepted Today / Commitments / Circle / Insights labels, while `/home`, `RegimesScreen`, and `/squad` remain compatibility/content locations. This does not contradict the target IA: it is the documented migration boundary. The Credits control is now a compact server-derived available-Credits projection; the detailed Credit purchase, disclosure, redemption, history, and backing boundary is routed separately. The current native blocker remains unchanged and is intentionally deferred to the native visual-alignment phase.
 
 ### Phase 2 Today boundary
 
@@ -74,7 +74,7 @@ Circle member summaries are readable without peer access to full `users/{uid}` p
 
 ### Phase 6 Premium boundary
 
-Premium is now a repository-level implementation, not an absent feature claim. Flutter reads one sanitized entitlement projection and may cache only an unexpired server-verified expiry. Google Play purchase tokens are verified and acknowledged by Cloud Functions before a purchase is completed; grants and purchase records are server-only and idempotent. RTDN triggers a Developer API requery. Credits, Credit purchases, Credit redemption, and Credit-backed Commitments remain unimplemented, so the zero-valued Credits pill is not confused with Premium.
+Premium is now a repository-level implementation, not an absent feature claim. Flutter reads one sanitized entitlement projection and may cache only an unexpired server-verified expiry. Google Play purchase tokens are verified and acknowledged by Cloud Functions before a purchase is completed; grants and purchase records are server-only and idempotent. RTDN triggers a Developer API requery. Phase 7 adds a separate Credit purchase, redemption, and Credit-backed Commitment compatibility boundary; it does not claim live Play configuration, complete evidence-integrity hardening, or a native/server-native Commitment object.
 
 The accepted matrix is consistent: Free has basic use, one active Protect Commitment, and Circle participation/voting/help; Premium adds new Reduce activation, additional Protect Commitments, AI Architect authority, Circle creation, and owner permission management. Existing active v1-v5 behavior and legacy authority policies are grandfathered. New Premium purchase disclosure is required on every purchase initiation; restore is a re-verification path, not a new purchase.
 
@@ -87,3 +87,11 @@ Previous canonical-facing terminology has been corrected. No accidental legacy t
 ## Intentional distinctions
 
 The dated revival audit may describe implementation names and historical product assumptions that v2 retires. That evidence remains unchanged so current code reality is not erased. Engineering status connects that evidence to the target v2 architecture.
+## Phase 7 Credit consistency
+
+- The app-bar Credits pill is now a server-derived available Credit projection; Today still has no general wallet card.
+- Credit purchases are separate from Premium subscription verification but share the single `PremiumBillingService` purchase stream.
+- The server ledger and `creditWallet/current` projection are authoritative; native/Flutter offline state is provisional only.
+- The accepted 24-hour post-end reconciliation default is implemented in the resolver and is not an open product question.
+- `UNVERIFIABLE` releases locked Credits without forfeiture or grace consumption.
+- Credit-backed Commitments remain a compatibility layer over `users/{uid}/regimes`; this does not claim native/server Commitment persistence.

@@ -30,3 +30,7 @@ The user should understand the in-app nature of Credits and the possible Credit 
 - The disclosure is a prerequisite in the purchase flow, not a post-purchase notice.
 - Billing cannot be invoked until the current disclosure has been explicitly confirmed.
 - Acceptance records support auditability but do not suppress future disclosures.
+
+## Phase 7 implementation note
+
+`CreditDetailsScreen` displays the disclosure on every purchase attempt. `CreditService` records `credit-purchase-v1` with the product and flow ID before `PremiumBillingService` invokes the shared consumable Play purchase branch; the server verifier requires a matching acceptance for a new token.

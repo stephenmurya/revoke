@@ -161,6 +161,41 @@ service cloud.firestore {
       match /premiumDisclosureAcceptances/{flowId} {
         allow read, write: if false;
       }
+
+      // Commitment Credits are server-authoritative. The wallet, sanitized
+      // history, and backing summaries are readable by the owner; ledger,
+      // purchase lineage, holds, evidence, and disclosure records are never
+      // client-writable.
+      match /creditWallet/{docId} {
+        allow read: if isAdmin() || isSelf(userId);
+        allow write: if false;
+      }
+      match /creditHistory/{entryId} {
+        allow read: if isAdmin() || isSelf(userId);
+        allow write: if false;
+      }
+      match /creditBackings/{backingId} {
+        allow read: if isAdmin() || isSelf(userId);
+        allow write: if false;
+      }
+      match /creditLedger/{entryId} {
+        allow read, write: if false;
+      }
+      match /creditPurchases/{purchaseId} {
+        allow read, write: if false;
+      }
+      match /creditPurchaseBindings/{bindingId} {
+        allow read, write: if false;
+      }
+      match /creditHolds/{holdId} {
+        allow read, write: if false;
+      }
+      match /creditEvidence/{eventId} {
+        allow read, write: if false;
+      }
+      match /creditDisclosureAcceptances/{flowId} {
+        allow read, write: if false;
+      }
     }
 
     // Squad collaboration
@@ -225,6 +260,9 @@ service cloud.firestore {
     }
     
     // Default deny all other access
+    match /creditPurchaseBindings/{bindingId} {
+      allow read, write: if false;
+    }
     match /{document=**} {
       allow read, write: if isAdmin();
     }

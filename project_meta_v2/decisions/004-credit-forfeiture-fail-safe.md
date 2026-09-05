@@ -31,3 +31,7 @@ If app data is wiped or the app is uninstalled/reinstalled before synchronizatio
 - The initial evidence reconciliation window is 24 hours after authoritative Commitment end, while the server remains able to configure the duration.
 - Future Credit eligibility may be restricted after repeated unexplained unverifiable outcomes without punishing uncertainty.
 - See ../architecture/commitment-verification.md.
+
+## Phase 7 implementation note
+
+`CreditEvidenceStore` now provides the repository's native SQLite journal and `CreditService` maintains the provisional local projection/pending reconciliation path. `credit_ledger.js` remains the final settlement authority. Physical-device evidence coverage and production integrity signals are still unverified.

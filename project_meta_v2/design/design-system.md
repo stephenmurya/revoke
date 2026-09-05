@@ -1,6 +1,6 @@
 # Revoke 2.0 Mobile Design-System Contract
 
-Status: Canonical implementation contract. Phase 1 implements the Flutter token foundation, shared primitives, global shell, Credits placeholder, and constrained accent mapping described below. Feature-screen migration and native resource mapping remain later work.
+Status: Canonical implementation contract. Phase 1 implements the Flutter token foundation, shared primitives, global shell, and constrained accent mapping described below. Phase 7 extends the shell with the server-derived Credits pill and Credits detail boundary. Feature-screen migration and native resource mapping remain later work.
 
 ## Phase 1 implementation mapping
 

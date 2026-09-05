@@ -2,7 +2,7 @@
 
 Status: Phase 6 code complete in the repository. Play Console catalog, licensed-device verification, RTDN delivery, production service credentials, and policy/legal review remain release gates.
 
-This document owns the Revoke 2.0 Premium entitlement boundary. Commitment Credits, Credit-backed Commitments, Premium redemption, and a wallet are not implemented by Phase 6.
+This document owns the Revoke 2.0 Premium entitlement boundary. Phase 7 adds Credit redemption as a server-created Premium grant; the Credit wallet, purchase, hold, evidence, and backing details are owned by `credit-ledger-and-billing.md` and `credit-backed-commitments.md`.
 
 ## Catalog
 
@@ -49,11 +49,11 @@ flowchart LR
 
 Flutter code lives in:
 
-- `lib/core/services/premium_billing_service.dart`: app-scoped purchase listener, Play product/offer discovery, account obfuscation, disclosure callable, token verification, and purchase completion;
+- `lib/core/services/premium_billing_service.dart`: app-scoped purchase listener, Play product/offer discovery for Premium and one-time Credit products, account obfuscation, disclosure callable, token verification, and purchase completion;
 - `lib/core/services/premium_entitlement_service.dart`: one auth-scoped entitlement stream, offline cache, capability presentation, and server capability checks;
 - `lib/features/premium/premium_paywall_screen.dart`: reusable paywall and Account entry surface;
 - `functions/premium_billing.js`: Play resource normalization, account hash, token-to-account replay binding, idempotent grant calculation, entitlement projection, and RTDN helpers;
-- `functions/index.js`: callable verification/disclosure/capability boundaries, Circle creation gate, and RTDN trigger.
+- `functions/index.js`: callable verification/disclosure/capability boundaries, Circle creation gate, Credit redemption, and RTDN triggers.
 
 ## Purchase disclosure
 
@@ -101,8 +101,8 @@ Rules allow the owner to read only `premiumEntitlement/current`. Client writes t
 
 ## Not implemented in Phase 6
 
-- Commitment Credits, purchases, locks, forfeitures, or `PREMIUM_REDEMPTION`;
-- Credit-backed Commitment activation;
+- Credit purchase verification, locks, forfeitures, and evidence resolution (see the Phase 7 Credit documents);
+- Credit-backed Commitment activation details;
 - automatic commercial onboarding/paywall sequencing;
 - Play Console configuration or production service-account secrets;
 - live licensed-device, refund, RTDN, and restore testing.

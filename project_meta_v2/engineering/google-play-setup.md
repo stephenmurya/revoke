@@ -16,9 +16,9 @@ Do not configure weekly, lifetime, or auto-renewing base plans for the initial R
 ## Backend prerequisites
 
 1. Enable the Google Play Developer API for the release project.
-2. Grant the production service identity the minimum Android Publisher permission required to read subscription status and acknowledge purchases.
-3. Configure the `revoke-premium-rtdn` Pub/Sub topic as the Google Play Real-time Developer Notifications destination.
-4. Deploy `verifyPremiumPurchase`, `recordPremiumPurchaseDisclosure`, `assertPremiumCapability`, `createCircle`, and `reconcilePremiumRtdn` only after reviewing project/package identity.
+2. Grant the production service identity the minimum Android Publisher permission required to read Premium subscriptions and one-time Credit purchases, and to acknowledge/consume them.
+3. Configure the `revoke-premium-rtdn` and `revoke-credit-rtdn` Pub/Sub topics as the Google Play Real-time Developer Notifications destinations.
+4. Deploy `verifyPremiumPurchase`, `recordPremiumPurchaseDisclosure`, `verifyCreditPurchase`, `recordCreditPurchaseDisclosure`, `redeemCreditsForPremium`, `createCreditBacking`, and both RTDN handlers only after reviewing project/package identity.
 5. Keep service credentials in Secret Manager or the deployment environment; never add them to Flutter, Firestore, or this repository.
 
 ## Required test matrix
@@ -47,4 +47,7 @@ Use a Play license tester and a real configured application package to verify:
 | Play product/base plans | NOT CONFIGURED/NOT VERIFIED IN THIS REPOSITORY |
 | Licensed-device purchase test | NOT RUN |
 | RTDN Pub/Sub delivery | NOT CONFIGURED/NOT VERIFIED |
+| Credit one-time products (`credits_50`, `credits_100`) | NOT CONFIGURED/NOT VERIFIED |
+| Credit consume/reversal lifecycle | NOT RUN |
+| Credit evidence device coverage | NOT RUN |
 | Production release readiness | NOT READY until manual gates pass |

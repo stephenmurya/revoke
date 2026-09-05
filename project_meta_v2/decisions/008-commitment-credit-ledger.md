@@ -15,3 +15,7 @@ Ledger transaction types include CREDIT_PURCHASE, CREDIT_LOCK, CREDIT_RELEASE, C
 - Purchase verification, consumption/acknowledgement, reversals, and settlement use atomic/idempotent backend transactions.
 - A purchase is the external payment transaction; Credit forfeiture revokes an in-app entitlement and is not a second payment transaction.
 - See ../architecture/credit-ledger-and-billing.md.
+
+## Phase 7 implementation note
+
+The repository implementation is in `functions/credit_ledger.js` and `lib/core/services/credit_service.dart`. Server callables create immutable events, sanitized wallet/history projections, and per-Commitment holds; Firestore rules deny client writes. Google Play, production credentials, and reversal/consumption device tests remain open.

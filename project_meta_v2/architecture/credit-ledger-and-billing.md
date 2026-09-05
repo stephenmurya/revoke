@@ -1,6 +1,6 @@
 # Commitment Credits, Ledger, and Google Play Billing
 
-Status: Canonical Revoke 2.0 target architecture. This is product/technical design, not a claim that the feature is implemented or that Google Play has approved it.
+Status: Canonical Revoke 2.0 architecture. Phase 7 repository code now implements the documented wallet, purchase, hold, backing, evidence-upload, settlement, reversal, and redemption boundary; live Google Play configuration and production proof remain incomplete. See `credit-backed-commitments.md` for implementation reality.
 
 ## Product terminology and boundaries
 
@@ -80,7 +80,7 @@ Premium is a Google Play subscription product with a prepaid base plan:
 - reference Premium prices: see `product/monetization.md`;
 - weekly and lifetime Premium are outside initial v2 scope.
 
-Prepaid Premium does not auto-renew. The initial free/Premium capability matrix and reference prices are accepted in `product/monetization.md` and decision 014. Future Credit redemption may extend Premium only through a later server-authorized Credit grant; that path is not implemented.
+Prepaid Premium does not auto-renew. The initial free/Premium capability matrix and reference prices are accepted in `product/monetization.md` and decision 014. The Phase 7 repository boundary includes server-authorized Credit redemption; commercial Play configuration and production verification remain incomplete.
 
 ## Credit-to-Premium conversion
 

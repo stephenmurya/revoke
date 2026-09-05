@@ -27,7 +27,7 @@ Review date: 2026-09-05
 - [x] Premium reference prices are USD $9.99 for 30 days and USD $59.99 for 365 days; weekly and lifetime are excluded.
 - [x] The generic evidence-resolution-window question was removed; only exceptional handling inside/after the accepted 24-hour window remains open.
 - [x] Phase 1 implementation status is separated from target design intent; legacy feature content is explicitly documented as retained beneath the new shell.
-- [x] The review packet records the implemented token foundation, shared primitives, constrained accent mapping, shell labels, and zero-valued Credits placeholder.
+- [x] The review packet records the implemented token foundation, shared primitives, constrained accent mapping, shell labels, and server-derived Credits pill; the Phase 7 review records the remaining commercial gates.
 - [x] Phase 2 records Today as a dedicated surface while keeping Commitments management and other feature migrations scoped for later phases.
 - [x] Phase 3 records the user-facing Commitment adapter and management/creation flows while distinguishing them from the legacy schedule persistence authority.
 - [x] Protect daily limits, Protect periods, and Reduce taper plans have explicit native-compatible mappings.

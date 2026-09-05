@@ -25,7 +25,7 @@ Detailed evidence is in [`audits/2026-09-04-design-system-audit.md`](../../audit
 
 ## Phase 1 implementation update
 
-The audit's recommended foundation now exists in Flutter. The shell exposes the accepted Today / Commitments / Circle / Insights labels, shared primitives use semantic tokens, persisted accent values are constrained through a curated palette, and the app bar contains the compact zero-valued Credits placeholder plus Notifications and Profile. Legacy feature styling remains by design and native overlay styling is unchanged.
+The audit's recommended foundation now exists in Flutter. The shell exposes the accepted Today / Commitments / Circle / Insights labels, shared primitives use semantic tokens, persisted accent values are constrained through a curated palette, and the app bar contains the compact server-derived available-Credits pill plus Notifications and Profile. Legacy feature styling remains by design and native overlay styling is unchanged.
 
 ## Readiness
 

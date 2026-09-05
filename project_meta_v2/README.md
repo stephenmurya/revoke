@@ -53,6 +53,7 @@ Accountability Circles are optional and use granular permissions. Commitment Cre
 - `architecture/v2-domain-model.md`: target entities and state machines.
 - `architecture/commitment-verification.md`: authoritative leases, native evidence journal, monitoring health, offline resolution, grace, and settlement.
 - `architecture/credit-ledger-and-billing.md`: append-only Credit ledger, Google Play purchase verification, Premium redemption, and reconciliation.
+- `architecture/credit-backed-commitments.md`: Phase 7 implementation boundary for wallet, backing holds, native evidence, settlement, and redemption.
 - `architecture/premium-entitlement-and-billing.md`: Phase 6 Premium catalog, Play verification, grants, entitlement projection, disclosure, RTDN, and capability boundary.
 
 ### Engineering

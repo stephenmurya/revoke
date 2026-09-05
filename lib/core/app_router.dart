@@ -33,6 +33,8 @@ import '../features/auth/onboarding_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/premium/premium_paywall_screen.dart';
+import '../features/credits/credit_details_screen.dart';
+import '../features/credits/credit_backing_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -256,6 +258,20 @@ class AppRouter {
         builder: (context, state) => PremiumPaywallScreen(
           reason: (state.extra as String?)?.trim(),
         ),
+      ),
+      GoRoute(
+        path: '/credits',
+        builder: (context, state) => const CreditDetailsScreen(),
+      ),
+      GoRoute(
+        path: '/commitment/back',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is CommitmentViewModel) {
+            return CreditBackingScreen(commitment: extra);
+          }
+          return const CommitmentsScreen();
+        },
       ),
       GoRoute(
         path: '/focus-score',

@@ -18,6 +18,7 @@ import 'core/services/local_override_history_service.dart';
 import 'core/services/theme_service.dart';
 import 'core/services/premium_billing_service.dart';
 import 'core/services/premium_entitlement_service.dart';
+import 'core/services/credit_service.dart';
 import 'core/theme/app_theme.dart';
 
 void main() async {
@@ -28,6 +29,9 @@ void main() async {
   await NotificationService.subscribeToGlobalCitizensTopic();
   await AuthService.initializeMessagingTokenSync();
   NativeBridge.setupOverlayListener();
+  PremiumBillingService.instance.registerCreditPurchaseHandler(
+    CreditService.instance.handlePurchase,
+  );
   ScoringService.initializePeriodicSync();
 
   runApp(const GlobalAppServices(child: AppRoot()));
@@ -180,6 +184,7 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
     if (nextUid != null && nextUid.isNotEmpty) {
       unawaited(PremiumEntitlementService.instance.initializeForUser(nextUid));
       unawaited(PremiumBillingService.instance.initializeForUser(nextUid));
+      unawaited(CreditService.instance.initializeForUser(nextUid));
       unawaited(LocalOverrideHistoryService.syncPending(nextUid));
       unawaited(
         SettingsSyncService.hydrateLocalPreferencesFromCloud().catchError(
@@ -190,6 +195,7 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
     if (nextUid == null || nextUid.isEmpty) {
       unawaited(PremiumEntitlementService.instance.reset());
       unawaited(PremiumBillingService.instance.initializeForUser(null));
+      unawaited(CreditService.instance.reset());
     }
 
     unawaited(_syncNativeUserOverlayContext());

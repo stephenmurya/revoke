@@ -8,7 +8,7 @@ This document distinguishes the audited current repository from the target Revok
 
 Revoke is an Android-first Flutter app. Flutter owns Auth, onboarding, schedule/regime UI, taper setup, settings, Insights, Squads/Pleas/Tribunals, notifications, and the approved-Plea listener. Kotlin owns Accessibility foreground events, UsageStats fallback/backstop, schedule evaluation, native overlays, temporary unlock persistence, local native cache, alarms, boot/restart/watchdog recovery, and UsageStats-derived usage. Firebase owns Auth, Firestore data, FCM, callable/triggered Functions, Tribunal resolution, AI fallback, rap sheets, and blocked-attempt events.
 
-This current foundation is salvageable. Phase 3 provides a user-facing Commitment adapter, Phase 5 provides Circle/Override Authority semantics over compatibility storage, and Phase 6 provides a server-verified Premium entitlement/paywall boundary. A native/server Commitment object, Credit ledger, Credit purchase flow, or durable financial evidence journal is not implemented.
+This current foundation is salvageable. Phase 3 provides a user-facing Commitment adapter, Phase 5 provides Circle/Override Authority semantics over compatibility storage, Phase 6 provides a server-verified Premium entitlement/paywall boundary, and Phase 7 layers a server-authoritative Credit ledger, Credit purchase flow, durable native evidence journal, and Credit-backed Commitment compatibility boundary over the retained schedule infrastructure. A native/server-native Commitment object and complete production evidence-integrity system remain unimplemented.
 
 ## Target v2 layering
 
@@ -32,7 +32,7 @@ The v2 user-facing layer is an optional Accountability Circle. `squads`/`pleas`/
 
 Commitment Credits are optional, purchased only through Google Play Billing, stored in an append-only server ledger, and held per Commitment. Evidence resolution is separate from settlement; only FAILURE_VERIFIED after exhausted grace can produce Credit forfeiture. Premium is a prepaid Google Play subscription capability. The native engine never settles Credits or billing.
 
-Phase 6 implements Premium through `in_app_purchase`, `verifyPremiumPurchase`, server-only grants, the sanitized `premiumEntitlement/current` projection, and RTDN-triggered API requery. The initial catalog is `premium` with `prepaid-30d` and `prepaid-365d`; the accepted reference prices are centralized in `product/monetization.md`. Credits and Premium redemption remain later work.
+Phase 6 implements Premium through `in_app_purchase`, `verifyPremiumPurchase`, server-only grants, the sanitized `premiumEntitlement/current` projection, and RTDN-triggered API requery. Phase 7 extends the same billing boundary with `credits_50` and `credits_100`, mandatory per-purchase disclosure, server verification/consumption, append-only Credit accounting, per-Commitment holds, native evidence upload, redemption, and reversal reconciliation. The initial catalog and accepted reference prices remain centralized in `product/monetization.md`; live Play configuration and production verification are still release gates.
 
 ## Offline and policy boundaries
 

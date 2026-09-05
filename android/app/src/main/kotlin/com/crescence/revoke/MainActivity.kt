@@ -180,6 +180,45 @@ class MainActivity : FlutterActivity() {
                             .toSet()
                     result.success(syncWhitelistAppsToNative(packageNames))
                 }
+                "syncCreditBacking" -> {
+                    val backing = (call.arguments as? Map<*, *>).orEmpty()
+                        .mapKeys { it.key.toString() }
+                    CreditBackingStore.sync(this, backing)
+                    result.success(true)
+                }
+                "removeCreditBacking" -> {
+                    val backingId = call.argument<String>("backingId")?.trim().orEmpty()
+                    CreditBackingStore.remove(this, backingId)
+                    result.success(true)
+                }
+                "appendCreditEvidence" -> {
+                    val payload = (call.arguments as? Map<*, *>).orEmpty()
+                        .mapKeys { it.key.toString() }
+                    CreditEvidenceStore(this).use { store ->
+                        result.success(store.append(payload))
+                    }
+                }
+                "getPendingCreditEvidence" -> {
+                    CreditEvidenceStore(this).use { store ->
+                        result.success(store.pending())
+                    }
+                }
+                "markCreditEvidenceUploaded" -> {
+                    val ids = call.argument<List<*>>("eventIds")
+                        ?.mapNotNull { it?.toString() } ?: emptyList()
+                    CreditEvidenceStore(this).use { store ->
+                        result.success(store.markUploaded(ids))
+                    }
+                }
+                "getPendingLocalCreditForfeitures" -> {
+                    result.success(CreditLocalSettlement.pending(this))
+                }
+                "clearPendingLocalCreditForfeitures" -> {
+                    val ids = call.argument<List<*>>("eventIds")
+                        ?.mapNotNull { it?.toString() } ?: emptyList()
+                    CreditLocalSettlement.clear(this, ids)
+                    result.success(true)
+                }
                 "getReminderConfig" -> {
                     result.success(getReminderConfigFromNative())
                 }

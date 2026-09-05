@@ -66,6 +66,8 @@ class PremiumPlanOption {
   String get price => product.price;
 }
 
+typedef CreditPurchaseHandler = Future<void> Function(PurchaseDetails purchase);
+
 /// App-scoped Google Play billing boundary.
 ///
 /// Product metadata and offer tokens come from Play. This service never
@@ -77,6 +79,7 @@ class PremiumBillingService {
   static final PremiumBillingService instance = PremiumBillingService._();
 
   static const String productId = 'premium';
+  static const Set<String> creditProductIds = {'credits_50', 'credits_100'};
   static const String disclosureVersion = 'premium-purchase-v1';
   static const String _pendingFlowPrefix = 'premium_purchase_flow_v2_';
 
@@ -86,6 +89,9 @@ class PremiumBillingService {
   final ValueNotifier<List<PremiumPlanOption>> plans = ValueNotifier(
     const <PremiumPlanOption>[],
   );
+  final ValueNotifier<List<ProductDetails>> creditProducts = ValueNotifier(
+    const <ProductDetails>[],
+  );
   final InAppPurchase _store = InAppPurchase.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
     region: 'us-central1',
@@ -94,6 +100,11 @@ class PremiumBillingService {
   String? _uid;
   String? _activePurchaseFlowId;
   bool _initialized = false;
+  CreditPurchaseHandler? _creditPurchaseHandler;
+
+  void registerCreditPurchaseHandler(CreditPurchaseHandler? handler) {
+    _creditPurchaseHandler = handler;
+  }
 
   Future<void> initializeForUser(String? uid) async {
     final nextUid = uid?.trim().isEmpty == true ? null : uid?.trim();
@@ -128,6 +139,7 @@ class PremiumBillingService {
       final available = await _store.isAvailable();
       if (!available) {
         plans.value = const <PremiumPlanOption>[];
+        creditProducts.value = const <ProductDetails>[];
         state.value = state.value.copyWith(
           isAvailable: false,
           isLoading: false,
@@ -136,12 +148,20 @@ class PremiumBillingService {
         return;
       }
 
-      final response = await _store.queryProductDetails({productId});
+      final response = await _store.queryProductDetails({
+        productId,
+        ...creditProductIds,
+      });
       if (response.error != null) {
         throw StateError(response.error!.message);
       }
       final nextPlans = <PremiumPlanOption>[];
+      final nextCreditProducts = <ProductDetails>[];
       for (final product in response.productDetails) {
+        if (creditProductIds.contains(product.id)) {
+          nextCreditProducts.add(product);
+          continue;
+        }
         if (product.id != productId) continue;
         if (product is! GooglePlayProductDetails) continue;
         final index = product.subscriptionIndex;
@@ -164,6 +184,8 @@ class PremiumBillingService {
       }
       nextPlans.sort((a, b) => a.plan.index.compareTo(b.plan.index));
       plans.value = List.unmodifiable(nextPlans);
+      nextCreditProducts.sort((a, b) => a.id.compareTo(b.id));
+      creditProducts.value = List.unmodifiable(nextCreditProducts);
       state.value = state.value.copyWith(
         isAvailable: true,
         isLoading: false,
@@ -174,11 +196,60 @@ class PremiumBillingService {
       );
     } catch (error) {
       plans.value = const <PremiumPlanOption>[];
+      creditProducts.value = const <ProductDetails>[];
       state.value = state.value.copyWith(
         isAvailable: false,
         isLoading: false,
         error: 'Premium plans could not be loaded. Try again later.',
       );
+    }
+  }
+
+  Future<bool> purchaseCredits(String productId) async {
+    final uid = _uid ?? FirebaseAuth.instance.currentUser?.uid;
+    final normalized = productId.trim();
+    final matching = creditProducts.value.where((item) => item.id == normalized);
+    final product = matching.isEmpty ? null : matching.first;
+    if (uid == null || uid.isEmpty) {
+      state.value = state.value.copyWith(error: 'Sign in before buying Credits.');
+      return false;
+    }
+    if (product == null) {
+      state.value = state.value.copyWith(error: 'This Credit product is not available yet.');
+      return false;
+    }
+    state.value = state.value.copyWith(
+      isPurchasing: true,
+      message: 'Opening Google Play…',
+      clearError: true,
+    );
+    try {
+      final purchaseParam = GooglePlayPurchaseParam(
+        productDetails: product,
+        applicationUserName: sha256
+            .convert('revoke:account:$uid'.codeUnits)
+            .toString(),
+      );
+      final launched = await _store.buyConsumable(purchaseParam: purchaseParam);
+      if (!launched) {
+        state.value = state.value.copyWith(
+          isPurchasing: false,
+          message: 'Google Play did not start the purchase.',
+        );
+      }
+      return launched;
+    } catch (_) {
+      state.value = state.value.copyWith(
+        isPurchasing: false,
+        error: 'Credit purchase could not be started.',
+      );
+      return false;
+    }
+  }
+
+  Future<void> completePurchase(PurchaseDetails purchase) async {
+    if (purchase.pendingCompletePurchase) {
+      await _store.completePurchase(purchase);
     }
   }
 
@@ -265,6 +336,18 @@ class PremiumBillingService {
 
   Future<void> _handlePurchases(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
+      if (creditProductIds.contains(purchase.productID)) {
+        final handler = _creditPurchaseHandler;
+        if (handler == null) {
+          state.value = state.value.copyWith(
+            isPurchasing: false,
+            error: 'Credit purchase handling is not ready.',
+          );
+        } else {
+          await handler(purchase);
+        }
+        continue;
+      }
       switch (purchase.status) {
         case PurchaseStatus.pending:
           state.value = state.value.copyWith(
