@@ -4,10 +4,10 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../models/plea_message_model.dart';
 import '../models/user_model.dart';
 import '../models/plea_model.dart';
+import '../models/circle_models.dart';
 import '../models/squad_log_model.dart';
 import '../models/member_rap_sheet_snapshot.dart';
 import 'regime_service.dart';
-import 'scoring_service.dart';
 
 class PleaNoSquadException implements Exception {
   final String message;
@@ -109,6 +109,43 @@ class SquadService {
         });
   }
 
+  /// V2 Circle reads use server-created, sanitized member summaries. The
+  /// legacy user-document stream remains for retained admin/compatibility UI.
+  static Stream<List<CircleMemberSummary>> getCircleMembersStream(
+    String circleId,
+  ) {
+    final normalized = circleId.trim();
+    if (normalized.isEmpty) {
+      return Stream.value(const <CircleMemberSummary>[]);
+    }
+    return _firestore
+        .collection('squads')
+        .doc(normalized)
+        .collection('members')
+        .orderBy('displayName')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => CircleMemberSummary.fromJson(doc.data(), doc.id))
+              .toList(growable: false),
+        );
+  }
+
+  static Stream<List<PleaModel>> getVisibleOverrideRequestsStream(String uid) {
+    final normalized = uid.trim();
+    if (normalized.isEmpty) return Stream.value(const <PleaModel>[]);
+    return _firestore
+        .collection('pleas')
+        .where('visibleToUids', arrayContains: normalized)
+        .where('status', whereIn: const ['active', 'pending'])
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => PleaModel.fromJson(doc.data(), doc.id))
+              .toList(growable: false),
+        );
+  }
+
   /// Creates a new emergency unlock plea.
   static Future<String> createPlea({
     required String uid,
@@ -147,7 +184,6 @@ class SquadService {
       throw Exception('INVALID_PLEA_ID');
     }
 
-    await ScoringService.applyBeggarsTax(uid);
     return pleaId;
   }
 
@@ -426,26 +462,10 @@ class SquadService {
 
   /// Removes a user from their squad.
   static Future<void> leaveSquad(String uid, String squadId) async {
-    final squadRef = _firestore.collection('squads').doc(squadId);
-    final userRef = _firestore.collection('users').doc(uid);
-
-    return _firestore.runTransaction((transaction) async {
-      final freshSquadSnapshot = await transaction.get(squadRef);
-      if (!freshSquadSnapshot.exists) return;
-
-      final memberIds = List<String>.from(
-        freshSquadSnapshot.get('memberIds') as List,
-      );
-
-      memberIds.remove(uid);
-
-      if (memberIds.isEmpty) {
-        transaction.delete(squadRef);
-      } else {
-        transaction.update(squadRef, {'memberIds': memberIds});
-      }
-
-      transaction.update(userRef, {'squadId': null, 'squadCode': null});
+    // Membership mutation is server-authoritative in v2. Keep this method as
+    // the compatibility entry point used by account deletion.
+    await _functions.httpsCallable('leaveCircle').call({
+      'circleId': squadId.trim(),
     });
   }
 }

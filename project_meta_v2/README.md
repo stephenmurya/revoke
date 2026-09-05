@@ -78,6 +78,10 @@ The Phase 1 implementation review is [review/docs/phase-1-implementation.md](rev
 
 The Phase 2 Today review is [review/docs/phase-2-today-implementation.md](review/docs/phase-2-today-implementation.md). The Phase 3 Commitments review is [review/docs/phase-3-commitments-implementation.md](review/docs/phase-3-commitments-implementation.md). These reviews record implementation boundaries and must not be read as claims that the complete v2 backend domain exists.
 
+The Phase 4 onboarding review is [review/docs/phase-4-onboarding-implementation.md](review/docs/phase-4-onboarding-implementation.md). It records the explicit onboarding state machine, progressive permission boundary, first-Commitment integration, and known limitations.
+
+The Phase 5 Circle and Override Authority review is [review/docs/phase-5-circle-override-implementation.md](review/docs/phase-5-circle-override-implementation.md). It records the least-privilege Circle projection, explicit authority policy, fixed quorum, server resolution boundary, and durable native approval delivery.
+
 ### Archive
 
 `archive/` contains superseded PRDs, status notes, comparative assessments, and older audits. It is retained for historical context and is not a current source of truth.

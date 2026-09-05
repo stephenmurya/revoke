@@ -1,6 +1,6 @@
 # Documentation Quality Checklist
 
-Review date: 2026-09-04
+Review date: 2026-09-05
 
 - [x] Canonical source for each major topic is identifiable in `project_meta_v2/README.md`.
 - [x] `old_project_meta/` is explicitly historical/reference-only and was not edited.
@@ -35,3 +35,9 @@ Review date: 2026-09-04
 - [x] Every Today metric/state has an implementation data source or is explicitly omitted as unsupported.
 - [x] Focus Score is absent from Today while legacy compatibility remains documented.
 - [x] Browser, desktop, cross-device, browser Firebase/licensing, and iOS work are explicitly out of scope.
+- [x] Phase 5 distinguishes Circle semantics from retained `squads`/`pleas` compatibility storage.
+- [x] Circle member reads use sanitized projections; full peer user documents and FCM tokens are not exposed.
+- [x] Commitment sharing and Circle voter selection are separate server-authorized assignments.
+- [x] SELF, AI, and CIRCLE are explicit authority types; Circle quorum uses a fixed voter snapshot and timeout rejects without AI fallback.
+- [x] Approved native access has a protected FCM delivery path in addition to the Flutter listener.
+- [x] No Credits, Premium, billing, browser, or new enforcement engine was added in Phase 5.

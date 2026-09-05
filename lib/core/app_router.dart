@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../features/navigation/main_shell.dart';
-import '../features/regimes/regimes_screen.dart';
 import '../features/today/today_screen.dart';
-import '../features/squad/squad_screen.dart';
+import '../features/circle/circle_screen.dart';
+import '../features/circle/override_history_screen.dart';
+import '../features/circle/override_policy_screen.dart';
+import '../features/circle/override_request_screen.dart';
 import '../features/squad/tribunal_screen.dart';
 import '../features/permissions/permission_screen.dart';
 import '../features/home/focus_score_detail_screen.dart';
-import '../features/plea/plea_compose_screen.dart';
 import '../features/monitor/create_schedule_screen.dart';
 import '../features/commitments/commitments_screen.dart';
 import '../features/commitments/commitment_detail_screen.dart';
@@ -26,10 +27,11 @@ import '../features/admin/ui_tests/ui_test_directory_screen.dart';
 import '../core/models/schedule_model.dart';
 
 import '../core/services/auth_service.dart';
+import 'models/onboarding_state.dart';
+import 'services/onboarding_state_service.dart';
 import '../features/auth/onboarding_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/profile/profile_screen.dart';
-import 'native_bridge.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -38,96 +40,49 @@ class AppRouter {
   static const Duration _cacheTtl = Duration(seconds: 8);
 
   static String? _cachedUid;
-  static Map<String, dynamic>? _cachedUserData;
-  static DateTime? _cachedUserDataAt;
-  static Future<Map<String, dynamic>?>? _pendingUserDataFetch;
-
-  static bool? _cachedHasAllPermissions;
-  static DateTime? _cachedPermissionsAt;
-  static Future<bool>? _pendingPermissionsCheck;
   static bool? _cachedIsAdmin;
   static DateTime? _cachedIsAdminAt;
   static Future<bool>? _pendingAdminCheck;
-
-  static bool _hasSessionBootstrap = false;
-
-  static bool _isShellLocation(String location) {
-    return location == '/home' ||
-        location == '/commitments' ||
-        location == '/squad' ||
-        location == '/insights';
-  }
+  static OnboardingState? _cachedOnboardingState;
+  static String? _cachedOnboardingUid;
+  static Future<OnboardingState>? _pendingOnboardingState;
 
   static void clearSessionCaches() {
     _cachedUid = null;
-    _cachedUserData = null;
-    _cachedUserDataAt = null;
-    _pendingUserDataFetch = null;
-    _cachedHasAllPermissions = null;
-    _cachedPermissionsAt = null;
-    _pendingPermissionsCheck = null;
     _cachedIsAdmin = null;
     _cachedIsAdminAt = null;
     _pendingAdminCheck = null;
-    _hasSessionBootstrap = false;
+    _cachedOnboardingState = null;
+    _cachedOnboardingUid = null;
+    _pendingOnboardingState = null;
   }
 
-  static void invalidatePermissionCache() {
-    _cachedHasAllPermissions = null;
-    _cachedPermissionsAt = null;
-    _pendingPermissionsCheck = null;
+  static void invalidateOnboardingCache() {
+    _cachedOnboardingState = null;
+    _cachedOnboardingUid = null;
+    _pendingOnboardingState = null;
+  }
+
+  static Future<OnboardingState> _getOnboardingState(String uid) async {
+    if (_cachedOnboardingUid == uid && _cachedOnboardingState != null) {
+      return _cachedOnboardingState!;
+    }
+    if (_cachedOnboardingUid != uid) {
+      _cachedOnboardingUid = uid;
+      _cachedOnboardingState = null;
+    }
+    _pendingOnboardingState ??= OnboardingStateService.loadOrCreate()
+        .then((state) {
+          _cachedOnboardingUid = uid;
+          _cachedOnboardingState = state;
+          return state;
+        })
+        .whenComplete(() => _pendingOnboardingState = null);
+    return _pendingOnboardingState!;
   }
 
   static bool _isAdminLocation(String location) {
     return location == '/god-mode' || location.startsWith('/admin/');
-  }
-
-  static Future<Map<String, dynamic>?> _getCachedUserData(String uid) async {
-    final now = DateTime.now();
-    if (_cachedUid != uid) {
-      clearSessionCaches();
-      _cachedUid = uid;
-    }
-
-    if (_cachedUserData != null &&
-        _cachedUserDataAt != null &&
-        now.difference(_cachedUserDataAt!) < _cacheTtl) {
-      return _cachedUserData;
-    }
-
-    _pendingUserDataFetch ??= AuthService.getUserData()
-        .then((data) {
-          _cachedUserData = data;
-          _cachedUserDataAt = DateTime.now();
-          return data;
-        })
-        .whenComplete(() => _pendingUserDataFetch = null);
-
-    return _pendingUserDataFetch!;
-  }
-
-  static Future<bool> _getCachedPermissions() async {
-    final now = DateTime.now();
-    if (_cachedHasAllPermissions != null &&
-        _cachedPermissionsAt != null &&
-        now.difference(_cachedPermissionsAt!) < _cacheTtl) {
-      return _cachedHasAllPermissions!;
-    }
-
-    _pendingPermissionsCheck ??= NativeBridge.checkPermissions()
-        .then((perms) {
-          final hasAll =
-              (perms['accessibility'] ?? false) &&
-              (perms['usage_stats'] ?? false) &&
-              (perms['overlay'] ?? false) &&
-              (perms['exact_alarm'] ?? false);
-          _cachedHasAllPermissions = hasAll;
-          _cachedPermissionsAt = DateTime.now();
-          return hasAll;
-        })
-        .whenComplete(() => _pendingPermissionsCheck = null);
-
-    return _pendingPermissionsCheck!;
   }
 
   static Future<bool> _getCachedIsAdmin(User user) async {
@@ -163,12 +118,7 @@ class AppRouter {
       final user = AuthService.currentUser;
       final location = state.matchedLocation;
       final isGoingToOnboarding = location == '/onboarding';
-      final isSplash = location == '/';
-      final isPermissions = location == '/permissions';
-      final isShellLocation = _isShellLocation(location);
       final forceAuth = state.uri.queryParameters['force_auth'] == '1';
-      final isShareSquadResume =
-          state.uri.queryParameters['step'] == 'share_squad';
 
       if (user == null) {
         clearSessionCaches();
@@ -185,73 +135,28 @@ class AppRouter {
         clearSessionCaches();
         _cachedUid = user.uid;
       }
-
-      if (_hasSessionBootstrap && isShellLocation) {
-        return null;
-      }
-
-      final userData = await _getCachedUserData(user.uid);
-      final squadId = (userData?['squadId'] as String?)?.trim();
-      final nickname = (userData?['nickname'] as String?)?.trim();
-      final hasSquad = squadId != null && squadId.isNotEmpty;
-      final hasNickname = nickname != null && nickname.isNotEmpty;
       final isAdminLocation = _isAdminLocation(location);
 
       if (isAdminLocation) {
         final isAdmin = await _getCachedIsAdmin(user);
         if (!isAdmin) {
-          if (hasSquad) return '/home';
-          if (hasNickname) return '/onboarding?step=share_squad';
           return '/onboarding';
         }
-      }
-
-      if (hasSquad && (isSplash || isGoingToOnboarding)) {
-        return '/home';
-      }
-
-      if (!hasSquad &&
-          hasNickname &&
-          isGoingToOnboarding &&
-          !isShareSquadResume) {
-        return '/onboarding?step=share_squad';
-      }
-
-      if (isSplash) {
-        if (hasSquad) return '/home';
-        if (hasNickname) return '/onboarding?step=share_squad';
-        return '/onboarding';
       }
 
       try {
-        final hasAll = await _getCachedPermissions();
-
-        if (isPermissions) {
-          if (hasAll) {
-            if (hasSquad) return '/home';
-            if (hasNickname) return '/onboarding?step=share_squad';
-            return '/onboarding';
-          }
-          return null;
-        }
-
-        if (!hasAll) {
-          return '/permissions';
-        }
-
-        if (!hasSquad && hasNickname && !isGoingToOnboarding) {
-          return '/onboarding?step=share_squad';
-        }
-        if (!hasSquad && !hasNickname && !isGoingToOnboarding) {
-          return '/onboarding';
-        }
-
-        if (hasAll && hasSquad && isShellLocation) {
-          _hasSessionBootstrap = true;
-        }
-
-        return null;
+        final onboarding = await _getOnboardingState(user.uid);
+        return OnboardingRoutePolicy.redirect(
+          authenticated: true,
+          complete: onboarding.isComplete,
+          location: location,
+          forceAuth: forceAuth,
+        );
       } catch (_) {
+        // Conservative failure: an authenticated user with no readable
+        // onboarding record resumes onboarding rather than entering the app
+        // with an unknown setup state.
+        if (!isGoingToOnboarding) return '/onboarding';
         return null;
       }
     },
@@ -283,7 +188,7 @@ class AppRouter {
           GoRoute(path: '/marketplace', redirect: (context, state) => '/home'),
           GoRoute(
             path: '/squad',
-            builder: (context, state) => const SquadScreen(),
+            builder: (context, state) => const CircleScreen(),
           ),
           GoRoute(
             path: '/insights',
@@ -327,10 +232,19 @@ class AppRouter {
               appName.isEmpty ||
               packageName == null ||
               packageName.isEmpty) {
-            return const RegimesScreen();
+            return const TodayScreen();
           }
-          return BegForTimeScreen(appName: appName, packageName: packageName);
+          final commitmentId = (extra?['commitmentId'] as String?)?.trim() ?? '';
+          return OverrideRequestScreen(
+            appName: appName,
+            packageName: packageName,
+            commitmentId: commitmentId,
+          );
         },
+      ),
+      GoRoute(
+        path: '/override-history',
+        builder: (context, state) => const OverrideHistoryScreen(),
       ),
       GoRoute(
         path: '/profile',
@@ -372,6 +286,16 @@ class AppRouter {
         },
       ),
       GoRoute(
+        path: '/commitment/override-policy',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is CommitmentViewModel) {
+            return OverridePolicyScreen(commitment: extra);
+          }
+          return const CommitmentsScreen();
+        },
+      ),
+      GoRoute(
         path: '/regime/edit',
         builder: (context, state) {
           final extra = state.extra;
@@ -397,7 +321,7 @@ class AppRouter {
         path: '/tribunal/:pleaId',
         builder: (context, state) {
           final pleaId = (state.pathParameters['pleaId'] ?? '').trim();
-          if (pleaId.isEmpty) return const SquadScreen();
+          if (pleaId.isEmpty) return const CircleScreen();
           return TribunalScreen(pleaId: pleaId);
         },
       ),

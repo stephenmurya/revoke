@@ -1,6 +1,6 @@
 # Documentation Consistency Review
 
-Review date: 2026-09-04
+Review date: 2026-09-05
 
 The non-archive canonical corpus and review packet were re-read after the correction pass. The required case-insensitive terminology scan is recorded in `terminology-scan.md`. Historical archive material and the dated source audit are classified separately and were not rewritten.
 
@@ -34,7 +34,11 @@ The current shell routes `/home` to `TodayScreen` and `/commitments` to `Commitm
 
 ### Squad versus Circle
 
-Current Squad, Plea, and Tribunal screens remain implementation evidence. The target product surface is Circle with the previously accepted granular permissions. The design audit identifies the current Squad-specific visual language as a gradual replacement target, not a reason to remove native enforcement or functioning social code prematurely.
+The `/squad` compatibility route now renders the optional Circle surface. Sanitized member projections, server-owned permissions, explicit Commitment sharing, and the new Override Request path are v2 behavior. `SquadService`, `squads`, `pleas`, and Tribunal remain compatibility names and storage; the legacy `SquadScreen` is no longer the primary route.
+
+### Override authority and Tribunal behavior
+
+Commitments use explicit `SELF`, `AI`, or `CIRCLE` policy. Circle authority snapshots eligible voters at request creation and uses strict majority; attendance and chat participation do not establish authority. Circle timeout rejects and does not invoke AI. The existing Tribunal remains the discussion/voting presentation, while the backend owns verdicts and native-access side effects.
 
 ### Regimes/Schedules versus Commitments
 
@@ -63,6 +67,10 @@ The implemented shell now uses the accepted Today / Commitments / Circle / Insig
 ### Phase 3 Commitments boundary
 
 The Commitments screen and creation journey are now v2-facing, while the backend and native contract remain schedule-backed. This is consistent with the accepted migration strategy: do not rename `ScheduleModel` or rewrite enforcement before a safe domain migration exists. Reduce is only classified when an active taper plan matches the materialized schedule; ambiguous legacy data is shown as needing attention and no Launch Count creation path exists.
+
+### Phase 5 Circle boundary
+
+Circle member summaries are readable without peer access to full `users/{uid}` profiles. Commitment summary sharing is assigned through a separate `sharedMemberIds` policy field; Circle voter selection uses `selectedMemberIds`. FCM/native approval delivery complements, rather than replaces, the existing Flutter listener. Self access is local-first and bounded; AI and Circle decisions remain server-authoritative.
 
 ## Previous-document status
 

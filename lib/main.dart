@@ -14,6 +14,7 @@ import 'core/services/schedule_service.dart';
 import 'core/services/scoring_service.dart';
 import 'core/services/settings_sync_service.dart';
 import 'core/services/squad_service.dart';
+import 'core/services/local_override_history_service.dart';
 import 'core/services/theme_service.dart';
 import 'core/theme/app_theme.dart';
 
@@ -81,19 +82,27 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
     if (state == AppLifecycleState.resumed) {
       unawaited(_checkAndReviveNativeService());
       unawaited(_syncNativeUserOverlayContext());
+      final uid = AuthService.currentUser?.uid;
+      if (uid != null) unawaited(LocalOverrideHistoryService.syncPending(uid));
     }
   }
 
   void _bindGlobalCallbacks() {
-    NativeBridge.onRequestPlea = (appName, packageName) {
+    NativeBridge.onRequestPlea = (appName, packageName, commitmentId) {
       AppRouter.router.go(
         '/plea-compose',
-        extra: {'appName': appName, 'packageName': packageName},
+        extra: {
+          'appName': appName,
+          'packageName': packageName,
+          'commitmentId': commitmentId,
+        },
       );
     };
 
     NativeBridge.onOpenSquadSetup = () {
-      AppRouter.router.go('/onboarding?step=share_squad');
+      // Circle setup is optional and no longer lives inside onboarding. Keep
+      // the native callback pointed at the retained Circle/Squad surface.
+      AppRouter.router.go('/squad');
     };
 
     NativeBridge.onBlockedAttempt = (appName, packageName, blockedAtMs) {
@@ -128,6 +137,7 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
     if (user == null) {
       try {
         await NativeBridge.syncUserOverlayContext(hasSquad: false);
+        await NativeBridge.syncNativeUserId(null);
       } catch (_) {}
       return;
     }
@@ -138,6 +148,7 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
       await NativeBridge.syncUserOverlayContext(
         hasSquad: squadId != null && squadId.isNotEmpty,
       );
+      await NativeBridge.syncNativeUserId(user.uid);
     } catch (_) {
       // Best-effort native context sync; blocker should still function safely.
     }
@@ -165,6 +176,7 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
     }
 
     if (nextUid != null && nextUid.isNotEmpty) {
+      unawaited(LocalOverrideHistoryService.syncPending(nextUid));
       unawaited(
         SettingsSyncService.hydrateLocalPreferencesFromCloud().catchError(
           (_) {},

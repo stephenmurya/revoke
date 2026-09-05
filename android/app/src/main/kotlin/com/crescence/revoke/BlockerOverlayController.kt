@@ -879,7 +879,7 @@ object BlockerOverlayController {
             orientation = LinearLayout.VERTICAL
 
             addView(
-                buildPrimaryButton(context, "ACCEPT FATE") {
+                buildPrimaryButton(context, "ACCEPT") {
                     acceptFate(context, presentation.packageName)
                 },
                 LinearLayout.LayoutParams(
@@ -888,21 +888,21 @@ object BlockerOverlayController {
                 ),
             )
 
-            if (presentation.hasSquad) {
+            addView(
+                buildSecondaryButton(context, "REQUEST ACCESS") {
+                    openPleaFlow(context, presentation)
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(context, 56),
+                ).apply {
+                    topMargin = dp(context, 12)
+                },
+            )
+
+            if (!presentation.hasSquad) {
                 addView(
-                    buildSecondaryButton(context, "BEG FOR TIME") {
-                        openPleaFlow(context, presentation)
-                    },
-                    LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        dp(context, 56),
-                    ).apply {
-                        topMargin = dp(context, 12)
-                    },
-                )
-            } else {
-                addView(
-                    buildStatusTreatment(context, "NO SQUAD TO PLEAD TO"),
+                    buildStatusTreatment(context, "CIRCLE IS OPTIONAL"),
                     LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -911,7 +911,7 @@ object BlockerOverlayController {
                     },
                 )
                 addView(
-                    buildSecondaryButton(context, "OPEN SQUAD SETUP") {
+                    buildSecondaryButton(context, "OPEN CIRCLE SETUP") {
                         openSquadSetup(context, presentation.packageName)
                     },
                     LinearLayout.LayoutParams(
@@ -1006,11 +1006,12 @@ object BlockerOverlayController {
                 action = "com.revoke.app.REQUEST_PLEA"
                 putExtra("appName", presentation.appName)
                 putExtra("packageName", presentation.packageName)
+                putExtra("commitmentId", presentation.commitmentId)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
-        hide(context, "beg_for_time")
+        hide(context, "request_access")
         context.startActivity(intent)
     }
 

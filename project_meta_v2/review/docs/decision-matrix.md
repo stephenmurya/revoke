@@ -7,7 +7,11 @@ Review date: 2026-09-04
 | Commitment is the primary product object | ACCEPTED | decisions/001; product/vision.md | User-facing adapter and management flows implemented; schedules remain current persistence primitive | Yes |
 | Reduce and Protect are the Commitment forms | ACCEPTED | product/commitments.md; product-spec.md | Partial: user-facing flows map to taper and Time Block/Usage Limit; backend domain remains absent | Yes |
 | Focus Score is retired | ACCEPTED | decisions/002; product/metrics.md | Legacy UI/storage exists | Yes |
-| Accountability Circles are optional and granular | ACCEPTED | decisions/003; product/accountability.md | Squad flows exist; Circle model does not | Yes |
+| Accountability Circles are optional and granular | ACCEPTED | decisions/003; product/accountability.md | Circle surface, sanitized member summaries, owner permissions, and self-leave are implemented over `squads` | Migration remains for legacy names and broader progress sharing |
+| Commitment sharing is explicit and separate from voter authority | ACCEPTED | decisions/003; product/accountability.md; decisions/013 | `sharedMemberIds` policy plus sanitized `getSharedCommitmentSummaries` callable | Yes, for wider shared progress |
+| Override authority is explicit as SELF / AI / CIRCLE | ACCEPTED | decisions/013; product/accountability.md | Per-Commitment policy callable and v2 request path implemented | Legacy callers remain |
+| Circle voters are snapshotted and use strict majority; timeout rejects | ACCEPTED | decisions/013; product/accountability.md | `eligibleVoterIds`, `requiredApprovalCount`, vote trigger, and timeout path implemented | Device/production proving remains |
+| Approved access does not depend solely on Flutter being alive | ACCEPTED | decisions/013; product/accountability.md | Protected FCM receiver validates and persists native temporary unlock; Flutter listener remains fallback | Device/FCM proving remains |
 | Commitment Credits use `available_credits`, `locked_credits`, and `credit_holds` | ACCEPTED | decisions/008; architecture/credit-ledger-and-billing.md | No v2 ledger | Yes |
 | Canonical ledger events are `CREDIT_PURCHASE`, `CREDIT_LOCK`, `CREDIT_RELEASE`, `CREDIT_FORFEITURE`, `PREMIUM_REDEMPTION`, and `PURCHASE_REVERSAL` | ACCEPTED | decisions/008; decisions/010 | No | Yes |
 | Positive offline failure may provisionally forfeit locked Credits locally | ACCEPTED | decisions/004; commitment-verification.md | No | Yes |
@@ -30,5 +34,5 @@ Review date: 2026-09-04
 | Revoke 2.0 uses a calm, precise, authoritative, refined, premium visual direction | ACCEPTED | decisions/012; design/overview.md | Phase 2 Today follows the direction; remaining feature screens remain mixed | Yes |
 | A governed design system is required before broad v2 UI implementation | ACCEPTED | decisions/012; design/design-system.md | Phase 1 tokens/primitives/shell are implemented and used by Phase 3 Commitment surfaces; broad migration remains | Yes |
 | Google Play policy compatibility is not assumed | ACCEPTED | monetization.md; credit-ledger-and-billing.md | External validation only | Release gate |
-| Default grace, eligibility, caps, device policy, Circle quorum, and free tier | OPEN | product/open-questions.md | No | Product decision required |
+| Default grace, eligibility, caps, device policy, and free tier | OPEN | product/open-questions.md | No | Product decision required |
 | Social Regimes/community marketplace | DEFERRED | product-spec.md; engineering/status.md | No integrated path | No unless later revived |

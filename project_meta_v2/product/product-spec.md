@@ -48,7 +48,7 @@ See ../architecture/commitment-verification.md.
 
 ## 5. Overrides and Circles
 
-Overrides are bounded and policy-controlled. AI Warden evaluates approved context but cannot change an active contract. Accountability Circles are optional, least-privilege, and granular. Membership never grants broad user-profile access or billing authority.
+Overrides are bounded and policy-controlled by an explicit per-Commitment `SELF`, `AI`, or `CIRCLE` authority. AI evaluates sanitized request context but cannot change an active contract. Accountability Circles are optional, least-privilege, and granular. Membership never grants broad user-profile access or billing authority. Circle voters are snapshotted at request creation and use deterministic majority; Circle timeout rejects without changing authority.
 
 ## 6. Today and learning
 
@@ -64,4 +64,4 @@ See monetization.md and ../architecture/credit-ledger-and-billing.md.
 
 ## 8. Explicit initial revival boundary
 
-Keep non-financial Time Block and Usage Limit enforcement, local-first operation, basic Insights, optional Circles, and the bounded override flow. Defer Credit implementation, Premium billing, advanced analytics, community regimes, and other financial infrastructure until verification, policy, and ledger prerequisites are complete.
+Keep non-financial Time Block and Usage Limit enforcement, local-first operation, basic Insights, optional Circle permissions, and the bounded override flow. Phase 5 implements these Circle/authority semantics over compatibility storage; it does not introduce a native/server Commitment domain. Defer Credit implementation, Premium billing, advanced analytics, community regimes, and other financial infrastructure until verification, policy, and ledger prerequisites are complete.

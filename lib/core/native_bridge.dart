@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 class NativeBridge {
   static const MethodChannel _channel = MethodChannel('com.revoke.app/overlay');
   static Function()? onOpenSquadSetup;
-  static Function(String appName, String packageName)? onRequestPlea;
+  static Function(String appName, String packageName, String commitmentId)?
+      onRequestPlea;
   static Function(String appName, String packageName, int blockedAtMs)?
   onBlockedAttempt;
 
@@ -14,7 +15,8 @@ class NativeBridge {
       } else if (call.method == 'requestPlea') {
         final appName = call.arguments?['appName'] as String? ?? "Unknown App";
         final packageName = call.arguments?['packageName'] as String? ?? "";
-        onRequestPlea?.call(appName, packageName);
+        final commitmentId = call.arguments?['commitmentId'] as String? ?? "";
+        onRequestPlea?.call(appName, packageName, commitmentId);
       } else if (call.method == 'blockedAttempt') {
         final appName = call.arguments?['appName'] as String? ?? "Unknown App";
         final packageName = call.arguments?['packageName'] as String? ?? "";
@@ -99,6 +101,14 @@ class NativeBridge {
   static Future<void> syncUserOverlayContext({required bool hasSquad}) async {
     await _channel.invokeMethod('syncUserOverlayContext', {
       'hasSquad': hasSquad,
+    });
+  }
+
+  /// Lets the native FCM fallback bind an approval to the signed-in device
+  /// session before Flutter is available. No access decision is made here.
+  static Future<void> syncNativeUserId(String? uid) async {
+    await _channel.invokeMethod('syncNativeUserId', {
+      'uid': uid?.trim() ?? '',
     });
   }
 

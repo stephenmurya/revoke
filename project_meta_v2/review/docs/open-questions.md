@@ -1,6 +1,6 @@
 # Open Questions Review
 
-Review date: 2026-09-04
+Review date: 2026-09-05
 
 The canonical unresolved list is [product/open-questions.md](../../product/open-questions.md). This packet summarizes only questions still requiring product or policy input.
 
@@ -12,10 +12,12 @@ The canonical unresolved list is [product/open-questions.md](../../product/open-
 - exceptional evidence escalation and missing-telemetry handling inside the accepted 24-hour reconciliation window;
 - exact Play Integrity verdict policy and rooted/unsupported-device handling;
 - timezone/clock tolerance and reconciliation when UsageStats and Accessibility disagree;
-- Squad-to-Circle migration timing, quorum, per-Commitment Circle assignment, presets, and emergency authority;
+- Squad-to-Circle data/name migration timing and any future emergency authority;
+- whether an approved Override pauses measurement or counts usage against the Commitment;
+- whether strict Protect Commitments may disable all Override Requests;
 - override duration and whether approved overrides pause or count measurement;
 - primary adherence period, streak decision/definition, recovery definition, and Danger Zone threshold;
 - active-hold behavior after purchase reversal, retry/chargeback abuse eligibility, and exact forfeiture wording;
 - final Google Play policy path, market/currency scope, and jurisdiction-specific legal review.
 
-Accepted decisions are deliberately not reopened here: Commitment primacy, optional granular Circles, Focus Score retirement, Credits/evidence-first settlement, the 24-hour initial reconciliation default, prepaid Premium, fixed Premium reference pricing, fixed Credit conversion, native journal/time authority, Launch Count exclusion, and the target mobile information architecture.
+Accepted decisions are deliberately not reopened here: Commitment primacy, optional granular Circles, explicit Commitment sharing, SELF/AI/CIRCLE Override Authority, fixed Circle voter snapshots and strict-majority quorum, Circle timeout rejection, durable native approval delivery, Focus Score retirement, Credits/evidence-first settlement, the 24-hour initial reconciliation default, prepaid Premium, fixed Premium reference pricing, fixed Credit conversion, native journal/time authority, Launch Count exclusion, and the target mobile information architecture.

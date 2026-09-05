@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
-import '../../core/app_router.dart';
 import '../../core/native_bridge.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/theme_extensions.dart';
@@ -141,9 +140,7 @@ class _PermissionScreenState extends State<PermissionScreen>
       _currentStep = _nextIncompleteStep();
     });
 
-    if (changed) {
-      AppRouter.invalidatePermissionCache();
-    }
+    if (changed) {}
   }
 
   int _nextIncompleteStep() {
@@ -168,7 +165,6 @@ class _PermissionScreenState extends State<PermissionScreen>
     final disclosure = _disclosures[_currentStep];
     if (_isGranted(disclosure.key)) {
       if (_allGranted) {
-        AppRouter.invalidatePermissionCache();
         if (!mounted) return;
         context.go('/home');
         return;

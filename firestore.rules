@@ -27,19 +27,15 @@ service cloud.firestore {
 
     function canAccessPleaData(pleaData) {
       return signedIn() &&
-        pleaData.squadId is string &&
-        currentUserSquadId() == pleaData.squadId;
+        (
+          (pleaData.userId == request.auth.uid) ||
+          (pleaData.visibleToUids is list &&
+            pleaData.visibleToUids.hasAny([request.auth.uid]))
+        );
     }
 
     function isMockPlea(pleaData) {
       return pleaData.isMockSession == true;
-    }
-
-    function canReadUserDoc(userId, userData) {
-      return isSelf(userId) ||
-        (signedIn() &&
-          userData.squadId is string &&
-          currentUserSquadId() == userData.squadId);
     }
 
     function isValidPleaMessageCreate(messageData) {
@@ -91,8 +87,9 @@ service cloud.firestore {
 
     // User profiles
     match /users/{userId} {
-      // Self read or same-squad read.
-      allow read: if isAdmin() || canReadUserDoc(userId, resource.data);
+      // Full profiles are private. Circle members read sanitized summaries
+      // under squads/{circleId}/members instead.
+      allow read: if isAdmin() || isSelf(userId);
 
       // Own profile management (create/update/delete account doc)
       allow create: if isAdmin() || isSelf(userId);
@@ -102,10 +99,7 @@ service cloud.firestore {
       // Cloud-synced regimes live under the user's document.
       match /regimes/{regimeId} {
         allow read: if isAdmin() ||
-          canReadUserDoc(
-            userId,
-            get(/databases/$(database)/documents/users/$(userId)).data
-          );
+          isSelf(userId);
         allow write: if isAdmin() || isSelf(userId);
       }
 
@@ -116,11 +110,7 @@ service cloud.firestore {
 
       // Denormalized squad-visible rap sheet summary (server-written).
       match /rapSheet/{docId} {
-        allow read: if isAdmin() ||
-          canReadUserDoc(
-            userId,
-            get(/databases/$(database)/documents/users/$(userId)).data
-          );
+        allow read: if isAdmin() || isSelf(userId);
         allow create, update, delete: if false;
       }
 
@@ -142,17 +132,39 @@ service cloud.firestore {
         allow update: if isAdmin() || (isSelf(userId) && canMarkNotificationRead());
         allow create, delete: if false;
       }
+
+      // Server-authoritative per-Commitment override authority.
+      match /commitmentPolicies/{commitmentId} {
+        allow read: if isAdmin() || isSelf(userId);
+        allow create, update, delete: if false;
+      }
     }
 
     // Squad collaboration
     match /squads/{squadId} {
-      allow create: if isAdmin() || signedIn();
+      allow create: if isAdmin() || (signedIn() &&
+        request.resource.data.creatorId == request.auth.uid &&
+        request.resource.data.memberIds is list &&
+        request.resource.data.memberIds.size() == 1 &&
+        request.resource.data.memberIds.hasOnly([request.auth.uid]));
       allow read: if isAdmin() || isCurrentSquadMember();
 
-      // Allows joining/leaving/updating squad membership for authenticated users
-      // and supports deleting an emptied squad during account delete/leave flow.
-      allow update: if isAdmin() || isCurrentSquadMember() || (signedIn() && squadHasNoMembers());
-      allow delete: if isAdmin() || isCurrentSquadMember();
+      // Membership changes are performed by callable functions. A client may
+      // create its own one-member Circle, but cannot edit memberIds directly.
+      allow update, delete: if isAdmin();
+
+      // Sanitized Circle member projection. This document must never contain
+      // email, fullName, FCM tokens, raw telemetry, or unrelated Commitments.
+      match /members/{memberUid} {
+        allow read: if isAdmin() || (signedIn() &&
+          get(/databases/$(database)/documents/squads/$(squadId)).data.memberIds is list &&
+          get(/databases/$(database)/documents/squads/$(squadId)).data.memberIds.hasAny([request.auth.uid]) &&
+          resource.data.keys().hasOnly([
+            'uid', 'displayName', 'avatarUrl', 'role', 'preset',
+            'permissions', 'updatedAt'
+          ]));
+        allow create, update, delete: if false;
+      }
 
       // Squad log (server-written audit trail)
       match /logs/{logId} {

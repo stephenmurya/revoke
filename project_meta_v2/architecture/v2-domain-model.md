@@ -43,11 +43,11 @@ Credit-backed evidence should use a durable Room/SQLite-equivalent journal, Andr
 
 ## AccountabilityCircle and permissions
 
-AccountabilityCircle, CircleMembership, and CommitmentMemberPermission contain owner, members, defaults, Commitment-specific grants, and status. Permissions are granular; membership does not expose a full user profile.
+AccountabilityCircle, CircleMembership, and CommitmentMemberPermission contain owner, members, defaults, Commitment-specific grants, and status. Permissions are granular; membership does not expose a full user profile. The current compatibility implementation uses sanitized `squads/{circleId}/members/{uid}` projections and `users/{uid}/commitmentPolicies/{commitmentId}` with separate `selectedMemberIds` (voter authority) and `sharedMemberIds` (summary visibility).
 
 ## OverrideRequest
 
-Successor/product abstraction over Plea/Tribunal: Commitment ID, requester, bounded duration, sanitized reason, policy snapshot, eligible voter snapshot, status, verdict source, approved-until, and idempotency key.
+Successor/product abstraction over Plea/Tribunal: Commitment ID, requester, bounded duration, sanitized reason, explicit SELF/AI/CIRCLE authority, policy snapshot, eligible voter snapshot, status, verdict source, approved-until, and idempotency key. The current implementation stores this in `pleas` with compatibility fields and protects decision writes behind callable/triggered backend paths.
 
 ## CreditLedgerEntry and CreditHold
 

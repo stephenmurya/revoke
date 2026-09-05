@@ -32,14 +32,8 @@ These are intentionally unresolved. They must not leak into canonical documents 
 
 ## Accountability Circles and overrides
 
-20. When does the Squad-to-Circle naming/data migration occur?
-21. What exact quorum model applies to Circle override votes?
-22. Can users assign different Circles to different Commitments?
-23. Can a Circle member receive emergency unilateral override authority, or is that deferred?
-24. Which permission presets ship first?
-25. What is the default maximum override duration?
-26. Does an approved override pause measurement or count usage against the Commitment?
-27. Can strict Protect Commitments disable all overrides?
+20. Does an approved override pause measurement or count usage against the Commitment?
+21. Can strict Protect Commitments disable all overrides?
 
 ## Product behavior and metrics
 

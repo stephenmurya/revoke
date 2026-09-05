@@ -410,7 +410,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
     final verdictColor = approved
         ? context.colors.success
         : context.colors.danger;
-    final verdictText = approved ? 'VERDICT GRANTED' : 'VERDICT REJECTED';
+    final verdictText = approved ? 'ACCESS APPROVED' : 'ACCESS NOT APPROVED';
 
     final profilesFuture = _voterProfilesFuture ?? _loadVoterProfiles(plea);
 
@@ -532,7 +532,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${plea.userName} asks ${plea.durationMinutes}m on ${plea.appName}',
+            '${plea.userName} requested ${plea.durationMinutes}m on ${plea.appName}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTheme.smBold.copyWith(color: context.scheme.onSurface),
@@ -727,7 +727,9 @@ class _TribunalScreenState extends State<TribunalScreen> {
                     currentUid != null &&
                     plea.status == 'active' &&
                     !isRequester &&
-                    !_isAdminObserver;
+                    !_isAdminObserver &&
+                    (plea.authority != 'circle' ||
+                        plea.eligibleVoterIds.contains(currentUid));
                 final isAdmin = _isAdminObserver;
                 final showObserverBanner = isAdmin && !isParticipant;
                 final voteLocked = !canVote || _voting;

@@ -15,6 +15,12 @@ class PleaModel {
   final String status;
   final DateTime createdAt;
   final DateTime? resolvedAt;
+  final String commitmentId;
+  final String authority;
+  final List<String> eligibleVoterIds;
+  final int requiredApprovalCount;
+  final String outcomeSource;
+  final DateTime? approvedUntil;
 
   PleaModel({
     required this.id,
@@ -31,6 +37,12 @@ class PleaModel {
     required this.status,
     required this.createdAt,
     this.resolvedAt,
+    this.commitmentId = '',
+    this.authority = 'legacy',
+    this.eligibleVoterIds = const [],
+    this.requiredApprovalCount = 0,
+    this.outcomeSource = '',
+    this.approvedUntil,
   });
 
   factory PleaModel.fromJson(Map<String, dynamic> json, String docId) {
@@ -68,6 +80,10 @@ class PleaModel {
     final resolvedAt = resolvedAtRaw is Timestamp
         ? resolvedAtRaw.toDate()
         : null;
+    final approvedUntilRaw = json['approvedUntil'];
+    final approvedUntil = approvedUntilRaw is Timestamp
+        ? approvedUntilRaw.toDate()
+        : null;
 
     return PleaModel(
       id: docId,
@@ -86,6 +102,14 @@ class PleaModel {
       status: json['status'] as String? ?? 'active',
       createdAt: createdAt,
       resolvedAt: resolvedAt,
+      commitmentId: (json['commitmentId'] as String?)?.trim() ?? '',
+      authority: (json['authority'] as String?)?.trim().toLowerCase() ?? 'legacy',
+      eligibleVoterIds: List<String>.from(
+        json['eligibleVoterIds'] as List? ?? const [],
+      ).map((id) => id.trim()).where((id) => id.isNotEmpty).toList(),
+      requiredApprovalCount: (json['requiredApprovalCount'] as num?)?.toInt() ?? 0,
+      outcomeSource: (json['outcomeSource'] as String?)?.trim() ?? '',
+      approvedUntil: approvedUntil,
     );
   }
 
@@ -104,6 +128,13 @@ class PleaModel {
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
       if (resolvedAt != null) 'resolvedAt': Timestamp.fromDate(resolvedAt!),
+      if (commitmentId.isNotEmpty) 'commitmentId': commitmentId,
+      if (authority.isNotEmpty) 'authority': authority,
+      if (eligibleVoterIds.isNotEmpty) 'eligibleVoterIds': eligibleVoterIds,
+      if (requiredApprovalCount > 0)
+        'requiredApprovalCount': requiredApprovalCount,
+      if (outcomeSource.isNotEmpty) 'outcomeSource': outcomeSource,
+      if (approvedUntil != null) 'approvedUntil': Timestamp.fromDate(approvedUntil!),
     };
   }
 }

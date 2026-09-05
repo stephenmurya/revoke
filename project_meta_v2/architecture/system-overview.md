@@ -8,7 +8,7 @@ This document distinguishes the audited current repository from the target Revok
 
 Revoke is an Android-first Flutter app. Flutter owns Auth, onboarding, schedule/regime UI, taper setup, settings, Insights, Squads/Pleas/Tribunals, notifications, and the approved-Plea listener. Kotlin owns Accessibility foreground events, UsageStats fallback/backstop, schedule evaluation, native overlays, temporary unlock persistence, local native cache, alarms, boot/restart/watchdog recovery, and UsageStats-derived usage. Firebase owns Auth, Firestore data, FCM, callable/triggered Functions, Tribunal resolution, AI fallback, rap sheets, and blocked-attempt events.
 
-This current foundation is salvageable but does not implement the v2 Commitment, Circle permissions, Credit ledger, Premium billing, durable evidence journal, or direct Home cards in full.
+This current foundation is salvageable. Phase 3 provides a user-facing Commitment adapter, and Phase 5 provides Circle/Override Authority semantics over compatibility storage; a native/server Commitment object, Credit ledger, Premium billing, or durable financial evidence journal is not implemented.
 
 ## Target v2 layering
 
@@ -26,7 +26,7 @@ A server-created immutable Commitment lease defines UTC boundaries and the rule 
 
 ### Accountability layer
 
-Squads/Pleas/Tribunals can remain internal compatibility names while evolving to optional Accountability Circles with granular permissions, least-privilege projections, fixed voter snapshots, durable override delivery, and idempotent side effects.
+The v2 user-facing layer is an optional Accountability Circle. `squads`/`pleas`/Tribunal remain compatibility storage and routes. Circle member summaries are sanitized; member permissions and per-Commitment sharing are server-authorized; Override Authority is explicit as SELF, AI, or CIRCLE; Circle voters are snapshotted; and resolution side effects are idempotent. Approved access can reach native Android through the existing protected FCM receiver even when Flutter is inactive.
 
 ### Credit and Premium layers
 
@@ -35,6 +35,8 @@ Commitment Credits are optional, purchased only through Google Play Billing, sto
 ## Offline and policy boundaries
 
 Activated enforcement continues locally where Android permits. Native evidence continues offline and uploads opportunistically. The backend evaluates after authoritative end plus a configurable resolution window. If evidence cannot establish success/failure by the deadline, it resolves UNVERIFIABLE and returns Credits. Google Play compatibility and legal assumptions are pre-release validation gates, not established facts.
+
+Self Override access is a separate local-first path: after deliberate friction, native temporary-unlock persistence can grant a bounded 5/10/15-minute window offline, while a local Override History event queues best-effort synchronization. This local event is not the global server ledger.
 
 ## Required prerequisites before Credit-backed Commitments
 
@@ -48,4 +50,3 @@ Activated enforcement continues locally where Android permits. Native evidence c
 8. idempotent Google Play verification/reversal handling;
 9. policy/legal review and device eligibility rules;
 10. auditable reason for every UNVERIFIABLE result.
-

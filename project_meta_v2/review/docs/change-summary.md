@@ -1,6 +1,6 @@
 # Documentation Change Summary
 
-Review date: 2026-09-04
+Review date: 2026-09-05
 
 This packet records the terminology correction, mobile design-system audit, and Phase 1 implementation review over the existing `project_meta_v2/` documents. Phase 1 changes Flutter theme, shared-widget, shell, router, and targeted test files only. Native Android enforcement, Firebase configuration, Firestore rules, Cloud Functions, dependencies, and `old_project_meta/` were not edited.
 
@@ -11,6 +11,8 @@ The implementation-specific review is [Phase 1 Implementation](phase-1-implement
 The Today implementation review is [Phase 2 Today Implementation](phase-2-today-implementation.md). It records the new Today surface, data provenance, lifecycle behavior, truthful metric boundary, and regression evidence.
 
 The Commitments implementation review is [Phase 3 Commitments Implementation](phase-3-commitments-implementation.md). It records the adapter boundary, creation/edit/detail flows, legacy schedule mapping, and verification evidence.
+
+The Accountability Circle and Override Authority implementation review is [Phase 5 Circle and Override Authority](phase-5-circle-override-implementation.md). It records the server-enforced permission model, sanitized member data, explicit Commitment sharing, authority policy, fixed quorum, native FCM delivery, and compatibility boundary.
 
 ## Correction-pass decisions
 

@@ -18,5 +18,6 @@ Decision records capture choices that materially shape Revoke 2.0. Status values
 | 010 | Neutral Credit terminology is mandatory across Revoke |
 | 011 | Purchase disclosure is required before every Credit purchase |
 | 012 | Mobile design direction and Today/Commitments/Circle/Insights IA are accepted |
+| 013 | Override authority is explicit, Circle quorum is fixed, and approved access delivery is durable |
 
 Open product/policy questions remain in ../product/open-questions.md. These records do not claim that Google Play or legal review is complete.

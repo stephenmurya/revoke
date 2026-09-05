@@ -28,8 +28,8 @@ class NotificationService {
   static const AndroidNotificationChannel _squadAlertsChannel =
       AndroidNotificationChannel(
         'squad_alerts',
-        'Squad Alerts',
-        description: 'High-priority alerts for incoming squad pleas.',
+        'Accountability Alerts',
+        description: 'Alerts for Circle activity and access requests.',
         importance: Importance.max,
         playSound: true,
         sound: RawResourceAndroidNotificationSound('lookatthisdude'),
@@ -122,12 +122,12 @@ class NotificationService {
       final title =
           message.data['title']?.toString() ??
           message.notification?.title ??
-          (isPlea ? 'SQUAD ALERT' : 'Revoke');
+          (isPlea ? 'Override request' : 'Revoke');
       final body =
           message.data['body']?.toString() ??
           message.notification?.body ??
           (isPlea
-              ? 'A squad member is begging for time.'
+              ? 'A Circle member requested temporary access.'
               : 'You have a new notification.');
 
       if (title.trim().isEmpty && body.trim().isEmpty) {
@@ -205,6 +205,12 @@ class NotificationService {
       case 'plea_request':
       case 'plea-created':
         return 'plea';
+      case 'override_request':
+        return 'plea';
+      case 'override_approved':
+      case 'override_resolved':
+      case 'override_resolution':
+        return 'verdict';
       case 'verdict_reached':
         return 'verdict';
       case 'strength':
@@ -255,8 +261,7 @@ class NotificationService {
         '${message.notification?.title ?? ''} ${message.notification?.body ?? ''}'
             .toLowerCase();
     if (notificationText.contains('plea') ||
-        notificationText.contains('beg') ||
-        notificationText.contains('begging')) {
+        notificationText.contains('override request')) {
       return true;
     }
 
@@ -270,8 +275,8 @@ class NotificationService {
   }) async {
     final androidDetails = AndroidNotificationDetails(
       'squad_alerts',
-      'Squad Alerts',
-      channelDescription: 'High-priority alerts for incoming squad pleas.',
+      'Accountability Alerts',
+      channelDescription: 'Alerts for Circle activity and access requests.',
       importance: Importance.max,
       priority: Priority.high,
       playSound: true,
@@ -341,8 +346,8 @@ class NotificationService {
 
     final androidDetails = AndroidNotificationDetails(
       'squad_alerts',
-      'Squad Alerts',
-      channelDescription: 'High-priority alerts for incoming squad pleas.',
+      'Accountability Alerts',
+      channelDescription: 'Alerts for Circle activity and access requests.',
       importance: Importance.high,
       priority: Priority.high,
       playSound: true,

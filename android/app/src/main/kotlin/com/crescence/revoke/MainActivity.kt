@@ -36,7 +36,8 @@ class MainActivity : FlutterActivity() {
                 "com.revoke.app.REQUEST_PLEA" -> {
                     val appName = intent.getStringExtra("appName")
                     val packageName = intent.getStringExtra("packageName")
-                    dispatchPleaRequest(appName, packageName)
+                    val commitmentId = intent.getStringExtra("commitmentId")
+                    dispatchPleaRequest(appName, packageName, commitmentId)
                 }
                 "com.revoke.app.BLOCKED_ATTEMPT" -> {
                     val appName = intent.getStringExtra("appName")
@@ -56,10 +57,15 @@ class MainActivity : FlutterActivity() {
         methodChannel?.invokeMethod("openSquadSetup", null)
     }
 
-    private fun dispatchPleaRequest(appName: String?, packageName: String?) {
+    private fun dispatchPleaRequest(
+        appName: String?,
+        packageName: String?,
+        commitmentId: String?,
+    ) {
         val payload = mapOf(
             "appName" to appName,
-            "packageName" to packageName
+            "packageName" to packageName,
+            "commitmentId" to commitmentId,
         )
         if (methodChannel == null) {
             pendingPleaPayload = payload
@@ -86,7 +92,8 @@ class MainActivity : FlutterActivity() {
             "com.revoke.app.REQUEST_PLEA" -> {
                 val appName = intent.getStringExtra("appName")
                 val packageName = intent.getStringExtra("packageName")
-                dispatchPleaRequest(appName, packageName)
+                val commitmentId = intent.getStringExtra("commitmentId")
+                dispatchPleaRequest(appName, packageName, commitmentId)
             }
             "com.revoke.app.OPEN_SQUAD_SETUP" -> {
                 dispatchOpenSquadSetup()
@@ -234,6 +241,14 @@ class MainActivity : FlutterActivity() {
                 "syncUserOverlayContext" -> {
                     val hasSquad = call.argument<Boolean>("hasSquad") == true
                     EnforcementEngine.syncUserOverlayContext(this, hasSquad)
+                    result.success(true)
+                }
+                "syncNativeUserId" -> {
+                    val uid = call.argument<String>("uid")?.trim().orEmpty()
+                    getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("revoke_uid", uid)
+                        .apply()
                     result.success(true)
                 }
                 "getAppDetails" -> {

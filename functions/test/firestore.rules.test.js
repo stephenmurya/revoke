@@ -63,7 +63,7 @@ test("own score events are readable but not client-writable", async () => {
   }));
 });
 
-test("same-squad members can read another member's regimes but cannot write them", async () => {
+test("Circle members cannot read another member's private regimes", async () => {
   await seedWithBypass(async (db) => {
     await setDoc(doc(db, "users/alice"), {
       uid: "alice",
@@ -80,10 +80,22 @@ test("same-squad members can read another member's regimes but cannot write them
   });
 
   const bobDb = testEnv.authenticatedContext("bob").firestore();
-  await assertSucceeds(getDoc(doc(bobDb, "users/alice/regimes/regime_1")));
+  await assertFails(getDoc(doc(bobDb, "users/alice/regimes/regime_1")));
   await assertFails(setDoc(doc(bobDb, "users/alice/regimes/regime_1"), {
     name: "Tampered",
     isEnabled: false,
+  }));
+});
+
+test("Circle creation is bound to the authenticated owner", async () => {
+  const aliceDb = testEnv.authenticatedContext("alice").firestore();
+  await assertSucceeds(setDoc(doc(aliceDb, "squads/squad_owned"), {
+    creatorId: "alice",
+    memberIds: ["alice"],
+  }));
+  await assertFails(setDoc(doc(aliceDb, "squads/squad_spoofed"), {
+    creatorId: "bob",
+    memberIds: ["alice", "bob"],
   }));
 });
 
@@ -118,7 +130,7 @@ test("users can sync only their own taper plans", async () => {
   }));
 });
 
-test("same-squad members can read another member's rap sheet snapshot", async () => {
+test("Circle members cannot read another member's private rap sheet", async () => {
   await seedWithBypass(async (db) => {
     await setDoc(doc(db, "users/alice"), {
       uid: "alice",
@@ -143,7 +155,7 @@ test("same-squad members can read another member's rap sheet snapshot", async ()
   });
 
   const bobDb = testEnv.authenticatedContext("bob").firestore();
-  await assertSucceeds(getDoc(doc(bobDb, "users/alice/rapSheet/latest")));
+  await assertFails(getDoc(doc(bobDb, "users/alice/rapSheet/latest")));
 });
 
 test("cross-squad members cannot read another member's rap sheet snapshot", async () => {
@@ -188,6 +200,8 @@ test("same-squad members can read plea vote docs", async () => {
       squadId: "squad_1",
       userId: "alice",
       status: "active",
+      visibleToUids: ["alice", "bob"],
+      eligibleVoterIds: ["bob"],
     });
     await setDoc(doc(db, "pleas/plea_1/votes/bob"), {
       uid: "bob",
@@ -197,6 +211,26 @@ test("same-squad members can read plea vote docs", async () => {
 
   const bobDb = testEnv.authenticatedContext("bob").firestore();
   await assertSucceeds(getDoc(doc(bobDb, "pleas/plea_1/votes/bob")));
+});
+
+test("Circle member summaries are readable without exposing the user profile", async () => {
+  await seedWithBypass(async (db) => {
+    await setDoc(doc(db, "users/alice"), {uid: "alice", squadId: "squad_1", email: "private@example.com"});
+    await setDoc(doc(db, "users/bob"), {uid: "bob", squadId: "squad_1"});
+    await setDoc(doc(db, "squads/squad_1"), {memberIds: ["alice", "bob"], creatorId: "alice"});
+    await setDoc(doc(db, "squads/squad_1/members/alice"), {
+      uid: "alice",
+      displayName: "Alice",
+      avatarUrl: "",
+      role: "owner",
+      preset: "guardian",
+      permissions: {viewCommitmentSummary: true},
+    });
+  });
+
+  const bobDb = testEnv.authenticatedContext("bob").firestore();
+  await assertSucceeds(getDoc(doc(bobDb, "squads/squad_1/members/alice")));
+  await assertFails(getDoc(doc(bobDb, "users/alice")));
 });
 
 test("non-squad members cannot read plea vote docs", async () => {

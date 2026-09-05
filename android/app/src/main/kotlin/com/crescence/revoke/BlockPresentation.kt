@@ -16,6 +16,7 @@ data class BlockStatChip(
 data class BlockPresentation(
     val appName: String,
     val packageName: String,
+    val commitmentId: String = "",
     val appIcon: Drawable?,
     val blockState: BlockState,
     val regimeName: String,

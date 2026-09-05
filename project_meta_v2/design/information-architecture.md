@@ -1,6 +1,8 @@
 # Revoke 2.0 Mobile Information Architecture
 
-Status: Accepted target mobile information architecture. Phase 1 implemented the global labels and shell destinations; Phase 3 now provides the user-facing Commitments management and creation layer while retaining legacy persistence and compatibility routes beneath it.
+Status: Accepted target mobile information architecture. Phase 1 implemented the global labels and shell destinations; Phase 3 provides the user-facing Commitments management and creation layer; Phase 5 provides the optional Circle and Override Authority surface while retaining legacy persistence and compatibility routes beneath it.
+
+On first entry, the v2 onboarding route is a deterministic state-machine surface. It is not a Circle gate and it does not require all enforcement permissions before the user can see the Reality Check. After a first Commitment is saved, onboarding completes the enforcement-permission and intervention explanation stages before returning the user to Today.
 
 ## Primary navigation
 
@@ -67,7 +69,7 @@ Commitments is the management surface for Reduce and Protect Commitments, active
 
 ## Circle
 
-Circle is the Accountability Circle surface. It replaces Squad as the long-term product concept while preserving granular permissions, least-privilege projections, and bounded override participation. This pass does not define the entire Circle interaction model or quorum rules.
+Circle is the optional Accountability Circle surface. It replaces Squad as the long-term product concept while preserving granular permissions, least-privilege projections, explicit Commitment sharing, and bounded override participation. The current implementation supports member management, six server-enforced permissions, sanitized shared summaries, Override History, and explicit per-Commitment authority. Tribunal remains the detailed decision surface during migration.
 
 ## Insights
 
@@ -90,3 +92,4 @@ Insights presents understandable behavioral evidence: adherence, usage trends, r
 - Migrate existing schedule cards into Commitment summaries without changing native enforcement ownership in the same pass.
 - Retire Focus Score from new surface structure; direct interpretable metrics replace it.
 - Keep Profile as the account gateway and do not elevate Settings into primary navigation.
+- Keep `selectedMemberIds` (Circle voter authority) separate from `sharedMemberIds` (Commitment summary visibility).

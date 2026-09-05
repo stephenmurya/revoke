@@ -1,6 +1,14 @@
 # Revoke 2.0 Onboarding
 
-Status: Canonical target flow. The current onboarding remains a release blocker; see ../engineering/status.md and the revival audit.
+Status: Phase 4 foundation implemented over the retained Firebase/auth, Android permission, schedule, and taper services. The v2 first-Commitment journey is operational; optional Circle, Credits, Premium, and server-native Commitment activation remain outside this phase.
+
+## Phase 4 implementation boundary
+
+`OnboardingStateService` persists an explicit version-2 state record in user-scoped local storage. `OnboardingRoutePolicy` routes only from authentication and that explicit completion state. The journey resumes the persisted step and draft fields; it does not infer completion from nickname, Circle membership, or permission state. Existing users with persisted schedules are conservatively migrated as already active, while ambiguous authenticated users remain in onboarding.
+
+The implemented journey is Welcome -> Authentication -> Identity -> Usage Access -> Reality Check -> Reduce/Protect intent -> first Commitment -> enforcement permissions -> intervention explanation -> review -> complete. The first Commitment reuses `CreateCommitmentScreen`, so it writes the existing schedule/taper records and native-compatible payloads. Usage Access is requested before Reality Check; Accessibility, overlay, and exact-alarm permissions are requested only after the Commitment is saved. Completion is independent of Circle setup.
+
+This is a local-first resume record. It survives normal process death and restart on the device; it is not yet a cross-device onboarding authority. Existing permission repair remains a separate route and permission loss after completion does not redirect to onboarding.
 
 ## Goal
 
@@ -39,9 +47,8 @@ Persist semantic progress rather than only a page index, including at minimum:
 - financial backing choice;
 - accepted terms/product versions.
 
-The state machine should expose states such as ACCOUNT_COMPLETE, USAGE_PERMISSION_REQUIRED, BASELINE_COMPLETE, COMMITMENT_DRAFTED, ENFORCEMENT_PERMISSIONS_REQUIRED, OVERRIDE_POLICY_COMPLETE, CREDIT_SETUP_COMPLETE, PAYWALL_REQUIRED, READY_TO_ACTIVATE, and COMPLETE.
+The future state machine may add server-backed states such as ACCOUNT_COMPLETE, BASELINE_COMPLETE, OVERRIDE_POLICY_COMPLETE, CREDIT_SETUP_COMPLETE, PAYWALL_REQUIRED, and READY_TO_ACTIVATE. The current mobile state names are the explicit `OnboardingStep` values in `lib/core/models/onboarding_state.dart`; optional Circle/Credit/Premium steps are not silently represented as complete.
 
 ## Trust and payment rules
 
 No Circle creation, Credit backing, or Premium purchase is mandatory for ordinary Revoke use. The user must see amount, exact criteria, grace, verification health, and the rule that unverifiable evidence returns Credits before confirming a Credit-backed Commitment. Google Play policy compatibility is not assumed and must be validated before release.
-

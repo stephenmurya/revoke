@@ -191,16 +191,37 @@ async function _sendPleaVerdictSideEffects({
     return;
   }
 
+  // Firestore triggers and retrying tasks can both reach this function. Claim
+  // the delivery once; native also treats the request id as idempotent.
+  const pleaRef = db.collection("pleas").doc(normalizedPleaId);
+  const claimed = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(pleaRef);
+    if (snap.exists && snap.data()?.nativeUnlockDeliveryClaimedAt) return false;
+    if (snap.exists) {
+      tx.set(pleaRef, {
+        nativeUnlockDeliveryClaimedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+    }
+    return true;
+  });
+  if (!claimed) return;
+
   const squadId = (pleaData?.squadId || "").toString().trim();
   const requesterName = (pleaData?.userName || "").toString().trim() ||
     "A Member";
   const appName = (pleaData?.appName || "access").toString().trim() ||
     "access";
   const isApproved = normalizedVerdict === "approved";
-  const outcome = isApproved ? "APPROVED" : "REJECTED";
-  const inAppVerdictTitle = `VERDICT: ${isApproved ? "GRANTED" : "DENIED"}`;
-  const inAppVerdictBody = "The Conclave has decided your fate.";
-  const verdictBody = `Your plea for ${appName} was ${outcome.toLowerCase()}.`;
+  const outcome = isApproved ? "approved" : "not approved";
+  const inAppVerdictTitle = isApproved ? "Temporary access approved" : "Access request closed";
+  const inAppVerdictBody = isApproved
+    ? `${appName} is available for a short period.`
+    : `The request for ${appName} was not approved.`;
+  const verdictBody = isApproved
+    ? `Temporary access to ${appName} is available now.`
+    : `Your request for ${appName} was not approved.`;
+  const approvedUntilMs = _timestampToMillis(pleaData?.approvedUntil) ||
+    (isApproved ? Date.now() + Math.max(1, Number(pleaData?.durationMinutes) || 5) * 60 * 1000 : 0);
 
   try {
     const userSnap = await db.collection("users").doc(normalizedRequesterId).get();
@@ -212,7 +233,7 @@ async function _sendPleaVerdictSideEffects({
     await createInAppNotification(normalizedRequesterId, {
       title: inAppVerdictTitle,
       body: inAppVerdictBody,
-      type: "verdict",
+      type: "override_resolution",
       metadata: {
         pleaId: String(normalizedPleaId),
         squadId: String(squadId),
@@ -221,26 +242,31 @@ async function _sendPleaVerdictSideEffects({
       },
     });
 
-    if (requesterToken && requesterWantsVerdicts) {
+    if (requesterToken && (isApproved || requesterWantsVerdicts)) {
       await _sendUserNotificationBestEffort(
           requesterToken,
-          `VERDICT: ${outcome}`,
+          isApproved ? "Temporary access approved" : "Access request closed",
           verdictBody,
           {
-            type: "verdict",
+            type: isApproved ? "override_approved" : "override_resolved",
             pleaId: String(normalizedPleaId),
+            overrideId: String(normalizedPleaId),
+            uid: String(normalizedRequesterId),
             squadId: String(squadId),
             verdict: String(normalizedVerdict),
             outcomeSource: String(outcomeSource),
+            packageName: String((pleaData?.packageName || "").toString()),
+            approvedUntilMs: String(approvedUntilMs),
+            durationMinutes: String(Math.max(1, Number(pleaData?.durationMinutes) || 5)),
+            idempotencyKey: String((pleaData?.idempotencyKey || normalizedPleaId).toString()),
           },
       );
     }
 
-    const title = `Verdict: ${normalizedVerdict.toUpperCase()} for ${requesterName}.`;
     await logSquadEvent(
         squadId,
         "verdict",
-        title,
+        `Temporary access ${outcome} for ${requesterName}.`,
         {
           userId: normalizedRequesterId,
           userName: requesterName,
@@ -338,6 +364,33 @@ const AI_FORCE_KILL_DELAY_SECONDS = 5 * 60;
 const AI_FALLBACK_MAX_APPROVAL_MINUTES = 15;
 const OPENROUTER_MODEL = "meta-llama/llama-3-8b-instruct:free";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+// V2 Circle/Override authority contract. These values are intentionally kept
+// server-side so membership or client payloads cannot expand authority.
+const CIRCLE_PERMISSIONS = Object.freeze([
+  "viewCommitmentSummary",
+  "viewOverrideHistory",
+  "receiveOverrideRequests",
+  "participateInOverrideDiscussion",
+  "voteOnOverrideRequests",
+  "receiveAccountabilityNotifications",
+]);
+const CIRCLE_PRESETS = Object.freeze([
+  "observer",
+  "accountabilityPartner",
+  "guardian",
+  "custom",
+]);
+const OVERRIDE_AUTHORITIES = Object.freeze(["self", "ai", "circle"]);
+const OVERRIDE_DURATION_MINUTES = Object.freeze([5, 10, 15]);
+const CIRCLE_DEFAULT_PERMISSIONS = Object.freeze({
+  viewCommitmentSummary: true,
+  viewOverrideHistory: false,
+  receiveOverrideRequests: false,
+  participateInOverrideDiscussion: false,
+  voteOnOverrideRequests: false,
+  receiveAccountabilityNotifications: false,
+});
 
 const RESOLVED_PLEA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MARKED_FOR_DELETION_TTL_MS = 10 * 60 * 1000;
@@ -484,37 +537,54 @@ exports.broadcastPleaCreated = onDocumentCreated({
       return;
     }
 
-    const usersSnap = await db
-        .collection("users")
-        .where("squadId", "==", squadId)
-        .get();
+    const visibleToUids = Array.isArray(plea.visibleToUids)
+      ? [...new Set(plea.visibleToUids.map((id) => id?.toString().trim()).filter((id) => id))]
+      : [];
+    const recipientIds = visibleToUids.length > 0
+      ? visibleToUids.filter((id) => id !== requesterUid)
+      : (await db.collection("users").where("squadId", "==", squadId).get())
+          .docs.map((doc) => doc.id).filter((id) => id !== requesterUid);
+    const userSnaps = await Promise.all(
+        recipientIds.map((uid) => db.collection("users").doc(uid).get()),
+    );
+    const memberSnaps = visibleToUids.length > 0
+      ? await Promise.all(
+          recipientIds.map((uid) => db.collection("squads").doc(squadId)
+              .collection("members").doc(uid).get()),
+      )
+      : [];
 
     const tokens = [];
-    const eligibleVoterIds = [];
+    const notificationRecipientIds = [];
     let optOutCount = 0;
-    for (const userDoc of usersSnap.docs) {
-      const data = userDoc.data() || {};
-      const memberUid = (data.uid || userDoc.id || "").toString().trim();
+    for (let index = 0; index < userSnaps.length; index += 1) {
+      const data = userSnaps[index].data() || {};
+      const memberUid = recipientIds[index];
       const token = (data.fcmToken || "").toString().trim();
-      const wantsReq = _wantsNotification(data, "pleaRequests");
-      if (!memberUid || memberUid === requesterUid) continue;
-      eligibleVoterIds.push(memberUid);
+      const permissions = memberSnaps[index]?.data()?.permissions || {};
+      const hasV2ReceivePermission = visibleToUids.length === 0 ||
+        permissions.receiveAccountabilityNotifications === true;
+      const wantsReq = hasV2ReceivePermission &&
+        data.notificationPrefs?.receiveAccountabilityNotifications !== false &&
+        _wantsNotification(data, "pleaRequests");
+      if (!memberUid) continue;
       if (!wantsReq) {
         optOutCount += 1;
         continue;
       }
+      notificationRecipientIds.push(memberUid);
       if (!token) continue;
       tokens.push(token);
     }
 
-    const uniqueEligibleVoterIds = [...new Set(eligibleVoterIds)];
+    const uniqueNotificationRecipientIds = [...new Set(notificationRecipientIds)];
     const uniqueTokens = [...new Set(tokens)];
-    const inAppBody = `${requesterName} is begging the Squad. Cast your vote.`;
-    const inAppPromises = uniqueEligibleVoterIds.map((memberId) =>
+    const inAppBody = `${requesterName} requested temporary access to ${appName}.`;
+    const inAppPromises = uniqueNotificationRecipientIds.map((memberId) =>
       createInAppNotification(memberId, {
-        title: "TRIBUNAL SUMMONED",
+        title: "Override request",
         body: inAppBody,
-        type: "plea",
+        type: "override_request",
         metadata: {
           pleaId: String(pleaId),
           squadId: String(squadId),
@@ -534,7 +604,7 @@ exports.broadcastPleaCreated = onDocumentCreated({
       return;
     }
 
-    const title = "JUDGMENT REQUIRED";
+    const title = "Override request";
     const body = inAppBody;
     let successCount = 0;
     let failureCount = 0;
@@ -554,7 +624,7 @@ exports.broadcastPleaCreated = onDocumentCreated({
           },
         },
         data: {
-          type: "plea",
+          type: "override_request",
           event: "plea_created",
           pleaId: String(pleaId),
           squadId: String(squadId),
@@ -579,7 +649,7 @@ exports.broadcastPleaCreated = onDocumentCreated({
     logger.info("Plea broadcast completed.", {
       pleaId,
       squadId,
-      inAppRecipients: uniqueEligibleVoterIds.length,
+      inAppRecipients: uniqueNotificationRecipientIds.length,
       inAppWrites,
       recipients: uniqueTokens.length,
       optedOut: optOutCount,
@@ -953,8 +1023,6 @@ exports.createPlea = onCall({
     const requesterRef = db.collection("users").doc(requestedUid);
     const limitsRef = db.collection("limits").doc(requestedUid);
     const pleaRef = db.collection("pleas").doc();
-    const highScoreWardenApproval = Math.random() >= 0.5;
-
     const nowMs = Date.now();
     let createdStatus = "active";
     let outcomeSource = "human_tribunal";
@@ -1034,58 +1102,23 @@ exports.createPlea = onCall({
         packageName,
         durationMinutes,
         reason,
+        authority: "circle",
+        visibleToUids: [requestedUid, ...eligibleVoters],
+        eligibleVoterIds: eligibleVoters,
+        requiredApprovalCount: _circleMajority(eligibleVoters.length),
         createdAt: FieldValue.serverTimestamp(),
         createdBy: callerUid,
       };
 
       if (isSoloPlea) {
-        const focusScoreRaw = Number(requesterData.focusScore);
-        const focusScore = Number.isFinite(focusScoreRaw) ?
-          Math.floor(focusScoreRaw) :
-          0;
-
-        let isApproved = false;
-        let wardenReason = "Score too low. The Warden denies your request.";
-
-        if (focusScore >= 500) {
-          isApproved = highScoreWardenApproval;
-          wardenReason = isApproved ?
-            "The Warden grants you mercy. Do not waste this time." :
-            "The Warden has spoken. Plea denied.";
-        }
-
-        const verdict = isApproved ? "approved" : "rejected";
-        createdStatus = verdict;
-        outcomeSource = "system_warden";
-        usedWarden = true;
-
-        tx.set(pleaRef, {
-          ...basePleaDoc,
-          participants: [requestedUid, "SYSTEM_WARDEN"],
-          voteCounts: {
-            accept: isApproved ? 1 : 0,
-            reject: isApproved ? 0 : 1,
-          },
-          votes: {
-            SYSTEM_WARDEN: isApproved ? "accept" : "reject",
-          },
-          status: verdict,
-          resolvedAt: FieldValue.serverTimestamp(),
-          outcomeSource: "system_warden",
-          wardenReason,
-          eligibleVoterCount: 0,
-        });
-
-        const verdictMessage = isApproved ?
-          "The Warden grants you mercy. Do not waste this time." :
-          "The Warden has spoken. Plea denied.";
-        tx.set(pleaRef.collection("messages").doc(), {
-          senderId: "SYSTEM_WARDEN",
-          senderName: "The Warden",
-          isSystem: true,
-          text: verdictMessage,
-          timestamp: FieldValue.serverTimestamp(),
-        });
+        // Legacy createPlea has no explicit authority and cannot silently
+        // choose a decision-maker. V2 self requests use recordSelfOverride;
+        // legacy social requests require an actual eligible member.
+        throw new HttpsError(
+            "failed-precondition",
+            "An explicit access authority is required for this request.",
+            {reasonCode: "AUTHORITY_REQUIRED"},
+        );
       } else {
         tx.set(pleaRef, {
           ...basePleaDoc,
@@ -1093,13 +1126,8 @@ exports.createPlea = onCall({
           voteCounts: {accept: 0, reject: 0},
           votes: {},
           status: "active",
-          outcomeSource: "human_tribunal",
+          outcomeSource: "circle_vote",
           eligibleVoterCount: eligibleVoters.length,
-          aiFallbackStatus: "queued",
-          aiFallbackDueAt: Timestamp.fromMillis(
-              nowMs + (AI_FALLBACK_DELAY_SECONDS * 1000),
-          ),
-          aiFallbackModel: OPENROUTER_MODEL,
         });
       }
 
@@ -1120,22 +1148,7 @@ exports.createPlea = onCall({
       usedWarden,
     });
 
-    if (usedWarden) {
-      const isApproved = createdStatus === "approved";
-      await createInAppNotification(requestedUid, {
-        title: `VERDICT: ${isApproved ? "GRANTED" : "DENIED"}`,
-        body: "The Conclave has decided your fate.",
-        type: "verdict",
-        metadata: {
-          pleaId: pleaRef.id,
-          outcomeSource,
-          source: "system_warden",
-        },
-      });
-    }
-
-    if (!usedWarden && createdStatus === "active") {
-      await _enqueuePleaFallbackTask(pleaRef.id, requestedUid);
+    if (createdStatus === "active") {
       await _enqueuePleaForceKillTask(pleaRef.id, requestedUid);
     }
 
@@ -1146,7 +1159,7 @@ exports.createPlea = onCall({
       const squadId = (requesterData.squadId || "").toString().trim();
       const userName = _deriveUserDisplayName(requesterData);
       const userAvatar = (requesterData.photoUrl || "").toString().trim();
-      const title = `${userName} is begging for ${durationMinutes} mins on ${appName}.`;
+      const title = `${userName} requested temporary access to ${appName}.`;
       await logSquadEvent(
           squadId,
           "plea_request",
@@ -1294,7 +1307,7 @@ exports.forceKillStaleTribunal = onTaskDispatched({
 
   const pleaRef = db.collection("pleas").doc(pleaId);
   const systemText =
-    "The Architect is currently unreachable. Request automatically denied to preserve discipline.";
+    "This access request expired before a decision was available.";
 
   try {
     const result = await db.runTransaction(async (tx) => {
@@ -1303,7 +1316,9 @@ exports.forceKillStaleTribunal = onTaskDispatched({
 
       const plea = snap.data() || {};
       const status = (plea.status || "active").toString().trim().toLowerCase();
-      if (status !== "pending") {
+      const authority = _normalizeV2Authority(plea.authority);
+      const expectedStatus = authority === "circle" ? "active" : "pending";
+      if (status !== expectedStatus) {
         return {skipped: true, reason: "not_pending", status};
       }
 
@@ -1311,17 +1326,19 @@ exports.forceKillStaleTribunal = onTaskDispatched({
         status: "rejected",
         voteCounts: {accept: 0, reject: 1},
         resolvedAt: FieldValue.serverTimestamp(),
-        outcomeSource: "ai_deadman",
-        aiFallbackStatus: "force_rejected",
-        aiResolvedAt: FieldValue.serverTimestamp(),
-        aiFallbackDecision: "rejected",
-        aiFallbackMinutes: 0,
-        aiFallbackRationale: systemText,
+        outcomeSource: authority === "circle" ? "circle_timeout" : "ai_deadman",
+        ...(authority === "ai" ? {
+          aiFallbackStatus: "force_rejected",
+          aiResolvedAt: FieldValue.serverTimestamp(),
+          aiFallbackDecision: "rejected",
+          aiFallbackMinutes: 0,
+          aiFallbackRationale: systemText,
+        } : {}),
       }, {merge: true});
       tx.set(pleaRef.collection("messages").doc(), {
         text: systemText,
-        senderId: "AI_ARCHITECT",
-        senderName: "AI Architect",
+        senderId: "SYSTEM",
+        senderName: "Revoke",
         isSystem: true,
         timestamp: FieldValue.serverTimestamp(),
       });
@@ -1341,7 +1358,9 @@ exports.forceKillStaleTribunal = onTaskDispatched({
         verdict: "rejected",
         acceptVotes: 0,
         rejectVotes: 1,
-        outcomeSource: "ai_deadman",
+        outcomeSource: _normalizeV2Authority(result.plea?.authority) === "circle"
+          ? "circle_timeout"
+          : "ai_deadman",
       });
     }
 
@@ -1414,10 +1433,24 @@ exports.sendPleaMessage = onCall({
           throw new HttpsError("failed-precondition", "User profile is missing.");
         }
         const userData = userSnap.data() || {};
-        const userSquadId = (userData.squadId || "").toString().trim();
-        const pleaSquadId = (plea.squadId || "").toString().trim();
-        if (!userSquadId || userSquadId !== pleaSquadId) {
-          throw new HttpsError("permission-denied", "User cannot message this tribunal.");
+        const fixedVoters = _normalizeParticipantIds(plea.eligibleVoterIds);
+        if (Array.isArray(plea.visibleToUids) && !plea.visibleToUids.includes(uid)) {
+          throw new HttpsError("permission-denied", "User cannot message this request.");
+        }
+        if (Array.isArray(plea.eligibleVoterIds) && uid !== plea.userId) {
+          const memberRef = db.collection("squads").doc((plea.squadId || "").toString().trim())
+              .collection("members").doc(uid);
+          const memberSnap = await tx.get(memberRef);
+          const permissions = memberSnap.data()?.permissions || {};
+          if (!fixedVoters.includes(uid) || permissions.participateInOverrideDiscussion !== true) {
+            throw new HttpsError("permission-denied", "Discussion permission is not enabled.");
+          }
+        } else if (!Array.isArray(plea.eligibleVoterIds)) {
+          const userSquadId = (userData.squadId || "").toString().trim();
+          const pleaSquadId = (plea.squadId || "").toString().trim();
+          if (!userSquadId || userSquadId !== pleaSquadId) {
+            throw new HttpsError("permission-denied", "User cannot message this tribunal.");
+          }
         }
 
         const limitsSnap = await tx.get(limitsRef);
@@ -1541,15 +1574,20 @@ exports.castVote = onCall({
       }
 
       if (!isAdmin) {
-        const callerRef = db.collection("users").doc(uid);
-        const callerSnap = await tx.get(callerRef);
-        if (!callerSnap.exists) {
-          throw new HttpsError("failed-precondition", "User profile is missing.");
+        const fixedVoters = _normalizeParticipantIds(plea.eligibleVoterIds);
+        if (Array.isArray(plea.eligibleVoterIds) && !fixedVoters.includes(uid)) {
+          throw new HttpsError("permission-denied", "You are not an eligible voter for this request.");
         }
-        const callerSquadId = (callerSnap.data()?.squadId || "").toString().trim();
-        const pleaSquadId = (plea.squadId || "").toString().trim();
-        if (!callerSquadId || callerSquadId != pleaSquadId) {
-          throw new HttpsError("permission-denied", "User is not allowed to vote on this plea.");
+        // V2 requests carry an immutable voter snapshot. Permission changes
+        // after creation must not silently change the quorum for that request.
+        if (!Array.isArray(plea.eligibleVoterIds)) {
+          const callerRef = db.collection("users").doc(uid);
+          const callerSnap = await tx.get(callerRef);
+          const callerSquadId = (callerSnap.data()?.squadId || "").toString().trim();
+          const pleaSquadId = (plea.squadId || "").toString().trim();
+          if (!callerSnap.exists || !callerSquadId || callerSquadId !== pleaSquadId) {
+            throw new HttpsError("permission-denied", "User is not allowed to vote on this request.");
+          }
         }
       }
 
@@ -1897,6 +1935,14 @@ exports.joinPleaSession = onCall({
 
     if (!isAdmin) {
       await _assertUserCanAccessPlea(uid, plea);
+      if (Array.isArray(plea.eligibleVoterIds) && uid !== plea.userId) {
+        const memberRef = db.collection("squads").doc((plea.squadId || "").toString().trim())
+            .collection("members").doc(uid);
+        const memberSnap = await memberRef.get();
+        if (!memberSnap.exists || memberSnap.data()?.permissions?.participateInOverrideDiscussion !== true) {
+          throw new HttpsError("permission-denied", "Discussion permission is not enabled.");
+        }
+      }
     }
 
     await pleaRef.set({
@@ -1939,6 +1985,9 @@ exports.markPleaForDeletion = onCall({
     const plea = pleaSnap.data() || {};
     if (!isAdmin) {
       await _assertUserCanAccessPlea(uid, plea);
+      if (uid !== plea.userId) {
+        throw new HttpsError("permission-denied", "Only the requester can remove this history item.");
+      }
     }
 
     await pleaRef.set({
@@ -2317,12 +2366,591 @@ function _resolveScoreEventOccurredAtMs(event) {
   return _timestampToMillis(event.createdAt);
 }
 
+function _normalizeV2Authority(value) {
+  const normalized = (value || "").toString().trim().toLowerCase();
+  return OVERRIDE_AUTHORITIES.includes(normalized) ? normalized : "";
+}
+
+function _circlePresetPermissions(preset) {
+  const all = Object.fromEntries(CIRCLE_PERMISSIONS.map((key) => [key, true]));
+  switch (preset) {
+    case "accountabilityPartner":
+      return all;
+    case "guardian":
+      return all;
+    case "observer":
+      return {...CIRCLE_DEFAULT_PERMISSIONS, receiveAccountabilityNotifications: true};
+    case "custom":
+    default:
+      return {...CIRCLE_DEFAULT_PERMISSIONS};
+  }
+}
+
+function _sanitizeCirclePermissions(rawPermissions, preset) {
+  const source = rawPermissions && typeof rawPermissions === "object" ?
+    rawPermissions : _circlePresetPermissions(preset);
+  const normalized = {};
+  for (const key of CIRCLE_PERMISSIONS) {
+    normalized[key] = source[key] === true;
+  }
+  return normalized;
+}
+
+function _circleMajority(count) {
+  const safeCount = Number.isFinite(Number(count)) ? Math.max(0, Math.floor(Number(count))) : 0;
+  return safeCount === 0 ? 0 : Math.floor(safeCount / 2) + 1;
+}
+
+function _buildCircleMemberSummary(uid, userData, existingData, role) {
+  const existingPermissions = existingData?.permissions;
+  const preset = CIRCLE_PRESETS.includes(existingData?.preset) ?
+    existingData.preset : "custom";
+  const permissions = existingPermissions && typeof existingPermissions === "object" ?
+    _sanitizeCirclePermissions(existingPermissions, preset) :
+    _sanitizeCirclePermissions(
+        role === "owner" ? _circlePresetPermissions("guardian") : null,
+        role === "owner" ? "guardian" : "custom",
+    );
+  return {
+    uid,
+    displayName: _deriveUserDisplayName(userData),
+    avatarUrl: (userData?.photoUrl || "").toString().trim(),
+    role,
+    preset,
+    permissions,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+exports.syncCircleMemberSummaries = onDocumentWritten({
+  document: "squads/{squadId}",
+  region: "us-central1",
+}, async (event) => {
+  const squadId = (event.params?.squadId || "").toString().trim();
+  const squad = event.data?.after?.data();
+  if (!squadId || !squad) return;
+  const memberIds = [...new Set(
+      (Array.isArray(squad.memberIds) ? squad.memberIds : [])
+          .map((uid) => uid?.toString().trim())
+          .filter((uid) => Boolean(uid)),
+  )];
+  if (memberIds.length === 0) return;
+
+  const memberRef = db.collection("squads").doc(squadId).collection("members");
+  const userSnaps = await Promise.all(
+      memberIds.map((uid) => db.collection("users").doc(uid).get()),
+  );
+  const existingSnaps = await Promise.all(
+      memberIds.map((uid) => memberRef.doc(uid).get()),
+  );
+  const batch = db.batch();
+  for (let i = 0; i < memberIds.length; i += 1) {
+    const uid = memberIds[i];
+    const userData = userSnaps[i].data() || {};
+    const existingData = existingSnaps[i].exists ? existingSnaps[i].data() : null;
+    const role = uid === (squad.creatorId || "").toString().trim() ? "owner" : "member";
+    batch.set(memberRef.doc(uid), _buildCircleMemberSummary(
+        uid,
+        userData,
+        existingData,
+        role,
+    ), {merge: true});
+  }
+  await batch.commit();
+});
+
+// Existing Circles may predate the projection trigger. A member may request a
+// server-side refresh of the sanitized projection without receiving any user
+// profile fields in the response.
+exports.ensureCircleMemberSummaries = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const circleId = (request.data?.circleId || "").toString().trim();
+  if (!circleId) throw new HttpsError("invalid-argument", "circleId is required.");
+  const uid = request.auth.uid;
+  const circleRef = db.collection("squads").doc(circleId);
+  const [circleSnap, userSnap] = await Promise.all([
+    circleRef.get(),
+    db.collection("users").doc(uid).get(),
+  ]);
+  const circle = circleSnap.data() || {};
+  const memberIds = Array.isArray(circle.memberIds) ? circle.memberIds : [];
+  if (!circleSnap.exists || (userSnap.data()?.squadId || "").toString().trim() !== circleId ||
+      !memberIds.includes(uid)) {
+    throw new HttpsError("permission-denied", "You are not a member of this Circle.");
+  }
+  const normalizedMemberIds = [...new Set(
+      memberIds.map((memberId) => memberId?.toString().trim()).filter((memberId) => Boolean(memberId)),
+  )];
+  const memberRef = circleRef.collection("members");
+  const [userSnaps, existingSnaps] = await Promise.all([
+    Promise.all(normalizedMemberIds.map((memberUid) => db.collection("users").doc(memberUid).get())),
+    Promise.all(normalizedMemberIds.map((memberUid) => memberRef.doc(memberUid).get())),
+  ]);
+  const batch = db.batch();
+  for (let index = 0; index < normalizedMemberIds.length; index += 1) {
+    const memberUid = normalizedMemberIds[index];
+    const existing = existingSnaps[index].exists ? existingSnaps[index].data() : null;
+    const role = memberUid === (circle.creatorId || "").toString().trim() ? "owner" : "member";
+    batch.set(memberRef.doc(memberUid), _buildCircleMemberSummary(
+        memberUid,
+        userSnaps[index].data() || {},
+        existing,
+        role,
+    ), {merge: true});
+  }
+  await batch.commit();
+  return {success: true, circleId, memberCount: normalizedMemberIds.length};
+});
+
+exports.setCircleMemberPermissions = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const payload = request.data || {};
+  const allowed = new Set(["circleId", "memberUid", "preset", "permissions"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+  }
+  const actorUid = request.auth.uid;
+  const circleId = (payload.circleId || "").toString().trim();
+  const memberUid = (payload.memberUid || "").toString().trim();
+  const preset = (payload.preset || "custom").toString().trim();
+  if (!circleId || !memberUid || !CIRCLE_PRESETS.includes(preset)) {
+    throw new HttpsError("invalid-argument", "circleId, memberUid, and a valid preset are required.");
+  }
+  if (memberUid === actorUid) {
+    throw new HttpsError("failed-precondition", "Owner permissions are managed by Circle authority.");
+  }
+  const permissions = _sanitizeCirclePermissions(payload.permissions, preset);
+  const circleRef = db.collection("squads").doc(circleId);
+  const memberRef = circleRef.collection("members").doc(memberUid);
+  await db.runTransaction(async (tx) => {
+    const circleSnap = await tx.get(circleRef);
+    const memberSnap = await tx.get(memberRef);
+    if (!circleSnap.exists || circleSnap.data()?.creatorId !== actorUid) {
+      throw new HttpsError("permission-denied", "Only the Circle owner can manage permissions.");
+    }
+    const memberIds = Array.isArray(circleSnap.data()?.memberIds) ? circleSnap.data().memberIds : [];
+    if (!memberIds.includes(memberUid)) {
+      throw new HttpsError("not-found", "Circle member not found.");
+    }
+    if (!memberSnap.exists) {
+      const userSnap = await tx.get(db.collection("users").doc(memberUid));
+      if (!userSnap.exists) throw new HttpsError("not-found", "Circle member profile not found.");
+      tx.set(memberRef, _buildCircleMemberSummary(
+          memberUid,
+          userSnap.data() || {},
+          {preset, permissions},
+          "member",
+      ));
+    } else {
+      tx.update(memberRef, {
+        preset,
+        permissions,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+  });
+  return {success: true, circleId, memberUid, preset, permissions};
+});
+
+exports.leaveCircle = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const circleId = (request.data?.circleId || "").toString().trim();
+  if (!circleId) throw new HttpsError("invalid-argument", "circleId is required.");
+  const uid = request.auth.uid;
+  const userRef = db.collection("users").doc(uid);
+  const circleRef = db.collection("squads").doc(circleId);
+  await db.runTransaction(async (tx) => {
+    const [userSnap, circleSnap] = await Promise.all([tx.get(userRef), tx.get(circleRef)]);
+    if (!circleSnap.exists) return;
+    const circle = circleSnap.data() || {};
+    if ((userSnap.data()?.squadId || "").toString().trim() !== circleId) {
+      throw new HttpsError("permission-denied", "You are not a member of this Circle.");
+    }
+    const memberIds = (Array.isArray(circle.memberIds) ? circle.memberIds : [])
+        .map((memberId) => memberId?.toString().trim())
+        .filter((memberId) => memberId && memberId !== uid);
+    if ((circle.creatorId || "").toString().trim() === uid && memberIds.length > 0) {
+      throw new HttpsError("failed-precondition", "Transfer Circle ownership before leaving.");
+    }
+    if (memberIds.length === 0) tx.delete(circleRef);
+    else tx.update(circleRef, {memberIds, updatedAt: FieldValue.serverTimestamp()});
+    tx.set(userRef, {squadId: null, squadCode: null}, {merge: true});
+    tx.delete(circleRef.collection("members").doc(uid));
+  });
+  return {success: true, circleId};
+});
+
+exports.setCommitmentOverridePolicy = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const payload = request.data || {};
+  const allowed = new Set(["commitmentId", "authority", "selectedMemberIds", "sharedMemberIds"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+  }
+  const uid = request.auth.uid;
+  const commitmentId = (payload.commitmentId || "").toString().trim();
+  const authority = _normalizeV2Authority(payload.authority);
+  const selectedMemberIds = [...new Set(
+      (Array.isArray(payload.selectedMemberIds) ? payload.selectedMemberIds : [])
+          .map((id) => id?.toString().trim())
+          .filter((id) => Boolean(id) && id !== uid),
+  )];
+  const sharedMemberIds = [...new Set(
+      (Array.isArray(payload.sharedMemberIds) ? payload.sharedMemberIds : [])
+          .map((id) => id?.toString().trim())
+          .filter((id) => Boolean(id) && id !== uid),
+  )];
+  if (!commitmentId || !authority) {
+    throw new HttpsError("invalid-argument", "commitmentId and authority are required.");
+  }
+  if (authority === "circle" && selectedMemberIds.length === 0) {
+    throw new HttpsError("failed-precondition", "Circle authority requires eligible members.");
+  }
+
+  const userRef = db.collection("users").doc(uid);
+  const commitmentRef = userRef.collection("regimes").doc(commitmentId);
+  const policyRef = userRef.collection("commitmentPolicies").doc(commitmentId);
+  await db.runTransaction(async (tx) => {
+    const [userSnap, commitmentSnap] = await Promise.all([tx.get(userRef), tx.get(commitmentRef)]);
+    if (!userSnap.exists || !commitmentSnap.exists) {
+      throw new HttpsError("not-found", "Commitment not found.");
+    }
+    const userData = userSnap.data() || {};
+    const circleId = (userData.squadId || "").toString().trim();
+    if (authority === "circle" || sharedMemberIds.length > 0) {
+      if (!circleId) throw new HttpsError("failed-precondition", "Join a Circle before using Circle authority.");
+      const circleSnap = await tx.get(db.collection("squads").doc(circleId));
+      if (!circleSnap.exists) throw new HttpsError("failed-precondition", "Circle is unavailable.");
+      const memberIds = Array.isArray(circleSnap.data()?.memberIds) ? circleSnap.data().memberIds : [];
+      const assignedIds = [...new Set([...selectedMemberIds, ...sharedMemberIds])];
+      if (!assignedIds.every((id) => memberIds.includes(id))) {
+        throw new HttpsError("permission-denied", "Selected Circle member is no longer a member.");
+      }
+      for (const memberUid of selectedMemberIds) {
+        const memberSnap = await tx.get(db.collection("squads").doc(circleId).collection("members").doc(memberUid));
+        const permissions = memberSnap.data()?.permissions || {};
+        if (!memberSnap.exists || permissions.voteOnOverrideRequests !== true) {
+          throw new HttpsError("failed-precondition", "Every selected member must have voting permission.");
+        }
+      }
+      for (const memberUid of sharedMemberIds) {
+        const memberSnap = await tx.get(db.collection("squads").doc(circleId).collection("members").doc(memberUid));
+        const permissions = memberSnap.data()?.permissions || {};
+        if (!memberSnap.exists || permissions.viewCommitmentSummary !== true) {
+          throw new HttpsError("failed-precondition", "Every shared member must have summary-view permission.");
+        }
+      }
+    }
+    tx.set(policyRef, {
+      commitmentId,
+      authority,
+      selectedMemberIds: authority === "circle" ? selectedMemberIds : [],
+      sharedMemberIds,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: uid,
+    }, {merge: true});
+  });
+  return {success: true, commitmentId, authority, selectedMemberIds, sharedMemberIds};
+});
+
+exports.getSharedCommitmentSummaries = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const viewerUid = request.auth.uid;
+  const viewerSnap = await db.collection("users").doc(viewerUid).get();
+  const circleId = (viewerSnap.data()?.squadId || "").toString().trim();
+  if (!circleId) return {commitments: []};
+
+  const circleSnap = await db.collection("squads").doc(circleId).get();
+  if (!circleSnap.exists) return {commitments: []};
+  const memberIds = [...new Set(
+      (Array.isArray(circleSnap.data()?.memberIds) ? circleSnap.data().memberIds : [])
+          .map((id) => id?.toString().trim())
+          .filter((id) => id && id !== viewerUid),
+  )];
+  const summaries = [];
+  for (const ownerUid of memberIds) {
+    const memberSnap = await db.collection("squads").doc(circleId).collection("members").doc(ownerUid).get();
+    if (!memberSnap.exists || memberSnap.data()?.permissions?.viewCommitmentSummary !== true) continue;
+    const ownerName = (memberSnap.data()?.displayName || "A Circle member").toString().trim() || "A Circle member";
+    const [regimesSnap, taperSnap] = await Promise.all([
+      db.collection("users").doc(ownerUid).collection("regimes").get(),
+      db.collection("users").doc(ownerUid).collection("taperPlans").get(),
+    ]);
+    const taperByScheduleId = new Map();
+    for (const planDoc of taperSnap.docs) {
+      const plan = planDoc.data() || {};
+      const scheduleId = (plan.scheduleId || "").toString().trim();
+      if (scheduleId) taperByScheduleId.set(scheduleId, plan);
+    }
+    const policySnaps = await Promise.all(
+        regimesSnap.docs.map((doc) => db.collection("users").doc(ownerUid)
+            .collection("commitmentPolicies").doc(doc.id).get()),
+    );
+    for (let index = 0; index < regimesSnap.docs.length; index += 1) {
+      const scheduleDoc = regimesSnap.docs[index];
+      const policy = policySnaps[index].data() || {};
+      const sharedIds = Array.isArray(policy.sharedMemberIds) ? policy.sharedMemberIds : [];
+      if (!sharedIds.map((id) => id?.toString().trim()).includes(viewerUid)) continue;
+      const schedule = scheduleDoc.data() || {};
+      if (schedule.isActive === false || schedule.isEnabled === false) continue;
+      const taper = taperByScheduleId.get(scheduleDoc.id);
+      const type = taper ? "reduce" : Number(schedule.type) === 0 ? "protect_period" : "protect_daily_limit";
+      const summary = taper
+        ? `Reduce plan · target ${Number(taper.targetDailyMinutes) || 0} min/day`
+        : type === "protect_period" ? "Protected period" : `Daily limit · ${Number(schedule.limitMinutes || schedule.durationSeconds / 60) || 0} min`;
+      summaries.push({
+        ownerName,
+        name: (schedule.name || "Commitment").toString().trim() || "Commitment",
+        type,
+        summary,
+        targetAppCount: Array.isArray(schedule.targetApps) ? schedule.targetApps.length :
+          (Array.isArray(schedule.apps) ? schedule.apps.length : 0),
+      });
+      if (summaries.length >= 50) return {commitments: summaries};
+    }
+  }
+  return {commitments: summaries};
+});
+
+async function _validateOverrideRequestPayload(payload) {
+  const appName = (payload.appName || "").toString().trim();
+  const packageName = (payload.packageName || "").toString().trim();
+  const reason = (payload.reason || "").toString().trim();
+  const durationMinutes = Number(payload.durationMinutes);
+  if (!appName || appName.length > 80 || !packageName || packageName.length > 180 || !reason || reason.length > 300) {
+    throw new HttpsError("invalid-argument", "App, package, and reason are required.");
+  }
+  if (!Number.isFinite(durationMinutes) || !OVERRIDE_DURATION_MINUTES.includes(Math.floor(durationMinutes))) {
+    throw new HttpsError("invalid-argument", "durationMinutes must be 5, 10, or 15.");
+  }
+  return {appName, packageName, reason, durationMinutes: Math.floor(durationMinutes)};
+}
+
+exports.createOverrideRequest = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const payload = request.data || {};
+  const allowed = new Set(["commitmentId", "authority", "appName", "packageName", "durationMinutes", "reason"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+  }
+  const uid = request.auth.uid;
+  const authority = _normalizeV2Authority(payload.authority);
+  const commitmentId = (payload.commitmentId || "").toString().trim();
+  if (!authority) throw new HttpsError("invalid-argument", "authority is required.");
+  const requestData = await _validateOverrideRequestPayload(payload);
+  const userRef = db.collection("users").doc(uid);
+  const pleaRef = db.collection("pleas").doc();
+  let result;
+  await db.runTransaction(async (tx) => {
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists) throw new HttpsError("failed-precondition", "User profile is missing.");
+    const userData = userSnap.data() || {};
+    const policySnap = commitmentId ?
+      await tx.get(userRef.collection("commitmentPolicies").doc(commitmentId)) : null;
+    const policy = policySnap?.exists ? policySnap.data() || {} : {authority: "self", selectedMemberIds: []};
+    const storedAuthority = _normalizeV2Authority(policy.authority) || "self";
+    if (storedAuthority !== authority) {
+      throw new HttpsError("failed-precondition", "Request authority does not match this Commitment's policy.");
+    }
+    const circleId = (userData.squadId || "").toString().trim();
+    const eligibleVoterIds = [];
+    if (authority === "circle") {
+      if (!circleId) throw new HttpsError("failed-precondition", "Circle authority is unavailable without a Circle.");
+      const selected = Array.isArray(policy.selectedMemberIds) ? policy.selectedMemberIds : [];
+      for (const memberUid of [...new Set(selected.map((id) => id?.toString().trim()).filter((id) => id && id !== uid))]) {
+        const memberSnap = await tx.get(db.collection("squads").doc(circleId).collection("members").doc(memberUid));
+        if (memberSnap.exists && memberSnap.data()?.permissions?.voteOnOverrideRequests === true) {
+          eligibleVoterIds.push(memberUid);
+        }
+      }
+      if (eligibleVoterIds.length === 0) {
+        throw new HttpsError("failed-precondition", "No eligible Circle voters are available.");
+      }
+    }
+    const nowMs = Date.now();
+    const status = authority === "ai" ? "pending" : authority === "circle" ? "active" : "approved";
+    const approvedUntil = status === "approved" ? nowMs + requestData.durationMinutes * 60 * 1000 : 0;
+    const visibleToUids = [uid, ...eligibleVoterIds];
+    const base = {
+      userId: uid,
+      userName: _deriveUserDisplayName(userData),
+      squadId: circleId,
+      commitmentId,
+      appName: requestData.appName,
+      packageName: requestData.packageName,
+      durationMinutes: requestData.durationMinutes,
+      reason: _sanitizeReasonText(requestData.reason),
+      authority,
+      visibleToUids,
+      eligibleVoterIds,
+      requiredApprovalCount: authority === "circle" ? _circleMajority(eligibleVoterIds.length) : 0,
+      participants: [uid],
+      voteCounts: {accept: 0, reject: 0},
+      votes: {},
+      status,
+      outcomeSource: authority === "self" ? "self" : authority === "ai" ? "ai_architect" : "circle_vote",
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: uid,
+      idempotencyKey: pleaRef.id,
+    };
+    if (status === "approved") {
+      base.resolvedAt = FieldValue.serverTimestamp();
+      base.approvedUntil = Timestamp.fromMillis(approvedUntil);
+    } else if (authority === "ai") {
+      base.aiFallbackStatus = "queued";
+      base.aiFallbackDueAt = Timestamp.fromMillis(nowMs + AI_FALLBACK_DELAY_SECONDS * 1000);
+      base.aiFallbackModel = OPENROUTER_MODEL;
+    }
+    tx.set(pleaRef, base);
+    result = {status, approvedUntil, eligibleVoterIds};
+  });
+
+  if (result.status === "approved") {
+    await _sendPleaVerdictSideEffects({
+      pleaId: pleaRef.id,
+      pleaData: {
+        ...requestData,
+        squadId: "",
+        userName: "You",
+        approvedUntil: Timestamp.fromMillis(result.approvedUntil),
+        authority,
+      },
+      requesterId: uid,
+      verdict: "approved",
+      outcomeSource: "self",
+    });
+  } else if (authority === "ai") {
+    await _enqueuePleaFallbackTask(pleaRef.id, uid);
+    await _enqueuePleaForceKillTask(pleaRef.id, uid);
+  } else {
+    await _enqueuePleaForceKillTask(pleaRef.id, uid);
+  }
+  return {success: true, pleaId: pleaRef.id, status: result.status, authority};
+});
+
+exports.recordSelfOverride = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const payload = request.data || {};
+  const allowed = new Set(["commitmentId", "appName", "packageName", "durationMinutes", "reason", "idempotencyKey"]);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) throw new HttpsError("invalid-argument", `Unexpected field: ${key}`);
+  }
+  const values = await _validateOverrideRequestPayload(payload);
+  const uid = request.auth.uid;
+  const idempotencyKey = (payload.idempotencyKey || "").toString().trim();
+  const pleaRef = idempotencyKey ? db.collection("pleas").doc(`self_${idempotencyKey.replace(/[^a-zA-Z0-9_-]/g, "_")}`) : db.collection("pleas").doc();
+  const nowMs = Date.now();
+  let alreadyExists = false;
+  await db.runTransaction(async (tx) => {
+    const existing = await tx.get(pleaRef);
+    if (existing.exists) {
+      alreadyExists = true;
+      return;
+    }
+    tx.set(pleaRef, {
+      userId: uid,
+      userName: "You",
+      squadId: "",
+      commitmentId: (payload.commitmentId || "").toString().trim(),
+      appName: values.appName,
+      packageName: values.packageName,
+      durationMinutes: values.durationMinutes,
+      reason: _sanitizeReasonText(values.reason),
+      authority: "self",
+      visibleToUids: [uid],
+      eligibleVoterIds: [],
+      participants: [uid],
+      voteCounts: {accept: 1, reject: 0},
+      votes: {},
+      status: "approved",
+      outcomeSource: "self",
+      createdAt: FieldValue.serverTimestamp(),
+      resolvedAt: FieldValue.serverTimestamp(),
+      approvedUntil: Timestamp.fromMillis(nowMs + values.durationMinutes * 60 * 1000),
+      idempotencyKey: idempotencyKey || pleaRef.id,
+    });
+  });
+  if (!alreadyExists) {
+    await _sendPleaVerdictSideEffects({
+      pleaId: pleaRef.id,
+      pleaData: {...values, authority: "self", approvedUntil: Timestamp.fromMillis(nowMs + values.durationMinutes * 60 * 1000)},
+      requesterId: uid,
+      verdict: "approved",
+      outcomeSource: "self",
+    });
+  }
+  return {success: true, pleaId: pleaRef.id, status: "approved", idempotent: alreadyExists};
+});
+
+exports.getCircleMemberOverrideHistory = onCall({
+  region: "us-central1",
+}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const targetUid = (request.data?.targetUid || "").toString().trim();
+  if (!targetUid) throw new HttpsError("invalid-argument", "targetUid is required.");
+  const actorUid = request.auth.uid;
+  if (actorUid !== targetUid) {
+    const [actorSnap, targetSnap] = await Promise.all([
+      db.collection("users").doc(actorUid).get(),
+      db.collection("users").doc(targetUid).get(),
+    ]);
+    const actorData = actorSnap.data() || {};
+    const targetData = targetSnap.data() || {};
+    const circleId = (actorData.squadId || "").toString().trim();
+    if (!circleId || circleId !== (targetData.squadId || "").toString().trim()) {
+      throw new HttpsError("permission-denied", "Member history is not shared with this Circle.");
+    }
+    const memberSnap = await db.collection("squads").doc(circleId).collection("members").doc(actorUid).get();
+    if (memberSnap.data()?.permissions?.viewOverrideHistory !== true) {
+      throw new HttpsError("permission-denied", "Override History permission is not enabled.");
+    }
+  }
+  const snapshot = await db.collection("pleas")
+      .where("userId", "==", targetUid)
+      .orderBy("createdAt", "desc")
+      .limit(50)
+      .get();
+  return {
+    success: true,
+    targetUid,
+    history: snapshot.docs.map((doc) => {
+      const data = doc.data() || {};
+      return {
+        id: doc.id,
+        appName: (data.appName || "App").toString(),
+        durationMinutes: Number(data.durationMinutes) || 0,
+        authority: _normalizeV2Authority(data.authority) || "legacy",
+        status: (data.status || "recorded").toString(),
+        createdAtMs: _timestampToMillis(data.createdAt),
+        resolvedAtMs: _timestampToMillis(data.resolvedAt),
+      };
+    }),
+  };
+});
+
 exports.__testables = {
   buildRapSheetSnapshot,
   parseAiDecision: _parseAiDecision,
   sanitizeReasonText: _sanitizeReasonText,
   deriveAppCategory: _deriveAppCategory,
   extractJsonObjectString: _extractJsonObjectString,
+  circleMajority: _circleMajority,
+  normalizeV2Authority: _normalizeV2Authority,
+  sanitizeCirclePermissions: _sanitizeCirclePermissions,
 };
 
 exports.updateUserStatus = onCall({
@@ -3084,8 +3712,14 @@ exports.autoFinalizeStalePleas = onSchedule({
 
       const summary = await _computePleaVoteSummary(pleaRef, plea);
 
-      // Timeout verdict is always rejected on tie or incomplete quorum.
-      const verdict = summary.acceptVotes > summary.rejectVotes ? "approved" : "rejected";
+      // Circle requests require a fixed-snapshot majority. An incomplete
+      // snapshot never becomes an approval merely because one member voted.
+      const required = summary.hasFixedVoterSnapshot
+        ? (summary.requiredApprovalCount || _circleMajority(summary.voters.length))
+        : 0;
+      const verdict = summary.hasFixedVoterSnapshot
+        ? (summary.acceptVotes >= required ? "approved" : "rejected")
+        : (summary.acceptVotes > summary.rejectVotes ? "approved" : "rejected");
 
       const timeoutUpdate = {
         status: verdict,
@@ -3145,6 +3779,7 @@ exports.autoFinalizeStalePleas = onSchedule({
       const plea = doc.data() || {};
       if (plea.isMockSession === true) continue;
 
+      if (_normalizeV2Authority(plea.authority) !== "ai") continue;
       const result = await _finalizePleaWithAiDecision(doc.ref, doc.id, {
         decision: "reject",
         minutes: 0,
@@ -3641,6 +4276,9 @@ async function _claimPleaForAiFallback(pleaRef) {
     if (plea.isMockSession === true) {
       return {skipped: true, reason: "mock"};
     }
+    if (_normalizeV2Authority(plea.authority) !== "ai") {
+      return {skipped: true, reason: "authority_not_ai", authority: plea.authority || null};
+    }
     if (status !== "active" && status !== "pending") {
       return {skipped: true, reason: "resolved", status};
     }
@@ -3666,6 +4304,9 @@ async function _finalizePleaWithAiDecision(pleaRef, pleaId, aiDecision) {
 
     const plea = snap.data() || {};
     const status = (plea.status || "active").toString().trim().toLowerCase();
+    if (_normalizeV2Authority(plea.authority) !== "ai") {
+      return {skipped: true, reason: "authority_not_ai", authority: plea.authority || null};
+    }
     if (status !== "pending") {
       return {skipped: true, reason: "not_pending", status};
     }
@@ -3757,6 +4398,13 @@ function _deriveUserDisplayName(userData) {
 }
 
 async function _assertUserCanAccessPlea(uid, pleaData) {
+  const visibleToUids = _normalizeParticipantIds(pleaData?.visibleToUids);
+  if (visibleToUids.length > 0) {
+    if (!visibleToUids.includes(uid)) {
+      throw new HttpsError("permission-denied", "User cannot access this override request.");
+    }
+    return;
+  }
   const pleaSquadId = (pleaData?.squadId || "").toString().trim();
   if (!pleaSquadId) {
     throw new HttpsError("failed-precondition", "Plea has no squad.");
@@ -3814,7 +4462,9 @@ async function _loadMergedVotesForPlea(pleaRef, pleaData) {
 async function _computePleaVoteSummary(pleaRef, pleaData) {
   const requesterId = (pleaData?.userId || "").toString().trim();
   const participants = _normalizeParticipantIds(pleaData?.participants);
-  const voters = participants.filter((id) => id !== requesterId);
+  const fixedVoters = _normalizeParticipantIds(pleaData?.eligibleVoterIds);
+  const hasFixedVoterSnapshot = Array.isArray(pleaData?.eligibleVoterIds);
+  const voters = hasFixedVoterSnapshot ? fixedVoters : participants.filter((id) => id !== requesterId);
   const voterSet = new Set(voters);
   const votes = await _loadMergedVotesForPlea(pleaRef, pleaData);
 
@@ -3837,6 +4487,10 @@ async function _computePleaVoteSummary(pleaRef, pleaData) {
     votesCast,
     acceptVotes,
     rejectVotes,
+    requiredApprovalCount: hasFixedVoterSnapshot
+      ? (Number(pleaData?.requiredApprovalCount) || _circleMajority(voters.length))
+      : 0,
+    hasFixedVoterSnapshot,
   };
 }
 
@@ -3855,9 +4509,19 @@ function _buildPleaVoteUpdates(pleaData, summary) {
     !_votesAreEqual(currentVotes, summary.votes);
 
   const status = (pleaData?.status || "active").toString().trim().toLowerCase();
+  const requiredApprovalCount = summary.hasFixedVoterSnapshot
+    ? (summary.requiredApprovalCount || _circleMajority(summary.voters.length))
+    : 0;
   const quorumReached = summary.voters.length > 0 && summary.votesCast >= summary.voters.length;
-  const shouldResolveNow = status === "active" && quorumReached;
-  const resolvedStatus = summary.acceptVotes > summary.rejectVotes ? "approved" : "rejected";
+  const majorityReached = summary.hasFixedVoterSnapshot && (
+    summary.acceptVotes >= requiredApprovalCount ||
+    summary.rejectVotes >= requiredApprovalCount
+  );
+  const shouldResolveNow = status === "active" &&
+    (summary.hasFixedVoterSnapshot ? majorityReached : quorumReached);
+  const resolvedStatus = summary.hasFixedVoterSnapshot
+    ? (summary.acceptVotes >= requiredApprovalCount ? "approved" : "rejected")
+    : (summary.acceptVotes > summary.rejectVotes ? "approved" : "rejected");
 
   const updates = {};
   if (countsChanged) {
@@ -3872,7 +4536,7 @@ function _buildPleaVoteUpdates(pleaData, summary) {
   if (shouldResolveNow) {
     updates.status = resolvedStatus;
     updates.resolvedAt = FieldValue.serverTimestamp();
-    updates.outcomeSource = "human_tribunal";
+    updates.outcomeSource = summary.hasFixedVoterSnapshot ? "circle_vote" : "human_tribunal";
   }
 
   if (Object.keys(updates).length === 0) {

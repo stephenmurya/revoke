@@ -8,9 +8,9 @@
   },
   "scripts": {
     "test:rules": "firebase emulators:exec --only firestore \"node --test test/firestore.rules.test.js\"",
-    "test:backend": "firebase emulators:exec --only firestore \"node --test test/rap_sheet_snapshot.test.js\"",
+    "test:backend": "firebase emulators:exec --only firestore \"node --test test/rap_sheet_snapshot.test.js test/override_authority.test.js\"",
     "test:ai": "node --test test/ai_fallback.test.js",
-    "test": "firebase emulators:exec --only firestore \"node --test test/firestore.rules.test.js test/rap_sheet_snapshot.test.js\""
+    "test": "firebase emulators:exec --only firestore \"node --test test/firestore.rules.test.js test/rap_sheet_snapshot.test.js test/override_authority.test.js\""
   },
   "keywords": [],
   "author": "",

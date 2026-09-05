@@ -69,7 +69,9 @@ An unverifiable Credit-backed Commitment returns locked Credits. Repeated unexpl
 
 ## Overrides
 
-An override is an explicit, bounded request to temporarily break or pause an active Commitment. The request follows the Commitment's immutable override policy: self, AI Warden, Circle, fallback, or no override. Approval changes access for the permitted window; it does not change the Commitment's financial criteria unless the contract explicitly says so.
+An override is an explicit, bounded request for temporary access during an active Commitment. The request follows the Commitment's explicit authority policy: `SELF`, `AI`, or `CIRCLE`. Authority is not inferred from Circle membership and one authority does not silently fall back into another. Approval changes access for the permitted window; it does not change Commitment criteria.
+
+Phase 5 stores the policy in `users/{uid}/commitmentPolicies/{commitmentId}` while the schedule-backed Commitment adapter remains in place. Circle voters are selected explicitly and snapshotted into each request. Self requests use local native temporary-unlock persistence after deliberate friction; AI and Circle decisions remain server-authoritative.
 
 See accountability.md for Circle permissions and architecture/commitment-verification.md for evidence/settlement authority.
 

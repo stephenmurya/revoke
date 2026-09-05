@@ -1,66 +1,80 @@
 # Accountability Circles and Granular Permissions
 
+Status: Phase 5 user-facing Circle and Override Authority surfaces are implemented over retained `squads`/`pleas` infrastructure. The backend Commitment-native domain remains deferred.
+
 ## Product direction
 
-The existing Squad system evolves into optional Accountability Circles. Revoke must work without joining or creating a Circle. Squad/Plea/Tribunal names may remain internally during migration, but the v2 product language is Circle/override.
+An Accountability Circle is optional. Revoke remains useful without joining or creating one. `Squad`, `Plea`, and existing Tribunal names remain internal compatibility terms where renaming would create risk; ordinary v2 surfaces use Circle, Override Request, Request Access, and Override History.
 
-Membership alone grants no broad access to the user's profile or behavior. Permissions are least-privilege and may be granted as a member default and overridden for an individual Commitment.
+Circle membership is not blanket access. The owner assigns supported permissions, and Commitment sharing is explicit. Circle participation never gates local enforcement.
 
-## Granular permissions
+## Supported permissions
 
-The permission vocabulary must independently control at least:
+The current server-enforced permission vocabulary is:
 
-### Visibility
+| Permission | Current effect |
+|---|---|
+| `viewCommitmentSummary` | Allows a sanitized shared Commitment summary projection when the owner assigns that Commitment to the member. |
+| `viewOverrideHistory` | Allows a member-authorized callable to return sanitized Override History for a shared member. |
+| `receiveOverrideRequests` | Allows in-app/push delivery of requests assigned to that member. |
+| `participateInOverrideDiscussion` | Allows discussion access for an eligible Override Request. |
+| `voteOnOverrideRequests` | Allows voting when the member is in the request's fixed voter snapshot. |
+| `receiveAccountabilityNotifications` | Allows accountability notification delivery. |
 
-- view_commitment_summary
-- view_commitment_progress
-- view_relevant_usage_summary
-- view_override_history
-- view_slip_recovery_history
-- view_credit_lock_exists
-- view_credit_lock_amount
+The supported permission set is sanitized on the server. Membership alone grants none of these capabilities.
 
-### Notifications
-
-- receive_override_requests
-- receive_progress_notifications
-- receive_slip_notifications
-- receive_commitment_failure_notifications
-
-### Participation
-
-- participate_in_override_discussion
-- vote_on_override_requests
-
-Membership does not imply any permission. The owner controls defaults and Commitment-specific grants in v2.
+Reserved, not currently exposed or delivered, are `viewCommitmentProgress`, `viewUsageSummary`, `viewSlipRecoveryHistory`, `receiveProgressNotifications`, `receiveSlipNotifications`, `viewCreditBackingPresence`, and `viewCreditBackingAmount`.
 
 ## Presets
 
-Presets expand into the granular permissions and remain editable:
+Presets are editable templates, not immutable roles:
 
 ### Observer
 
-Selected Commitment summary/progress visibility; no voting or override requests by default.
+Default: shared Commitment summary and relevant Override History visibility. No request receipt, discussion, or voting.
 
 ### Accountability Partner
 
-Progress and relevant usage summary, override requests, discussion, and voting where the Commitment policy permits.
+Default: all currently supported Circle permissions, including request receipt, discussion, voting, history, summary visibility, and accountability notifications.
 
 ### Guardian
 
-Broad Commitment-scoped visibility and override governance, including Credit lock visibility where explicitly granted.
+Default: all currently supported Circle permissions. Future capabilities are not implied by the name.
 
-Presets are convenience only; the underlying permission list is authoritative.
+### Custom
+
+Explicitly selected supported permissions.
+
+## Membership administration
+
+The owner changes another member's supported permissions through `setCircleMemberPermissions`. Members cannot escalate themselves. A member may leave through `leaveCircle`; an owner with remaining members must transfer ownership first. Existing membership is projected by `syncCircleMemberSummaries`/`ensureCircleMemberSummaries` into sanitized `squads/{circleId}/members/{uid}` documents.
 
 ## Data minimization
 
-Circle members should not automatically receive email, FCM token, raw device telemetry, the complete installed-app list, unrelated Commitments, precise usage outside granted scope, payment credentials, or processor identifiers. A Circle should receive commitment-scoped projections rather than the full Firestore user profile.
+Circle clients receive sanitized member summaries only: display name, avatar URL, Circle role/preset, supported permissions, and projection timestamp. Peer clients cannot read another user's full `users/{uid}` document, email, FCM token, raw telemetry, unrelated Commitments, or payment data. Server Functions may read private documents to construct a deliberately reduced response; that server access is not peer access.
 
-## Override governance
+## Explicit Commitment sharing
 
-An OverrideRequest contains the Commitment ID, requester, bounded requested duration, sanitized reason, policy snapshot, eligible voter snapshot, deadline, chat, AI fallback policy, verdict source, unlock expiry, and idempotency key. Eligibility is snapshotted when the request opens; the current participant-based quorum is a migration limitation, not the long-term authority model.
+`users/{uid}/commitmentPolicies/{commitmentId}` stores `sharedMemberIds` separately from `selectedMemberIds` used for Circle voting. A member must have `viewCommitmentSummary` before the owner can assign the Commitment. `getSharedCommitmentSummaries` returns only active, sanitized summaries for explicitly assigned Commitments. No broad same-Circle schedule read is used.
 
-Possible policies are self only, AI Warden, Circle vote, AI fallback after Circle timeout, or no override during a protected window. Circle members cannot increase Credits, redefine active criteria, decide financial settlement, or alter grace.
+## Override Policy
 
-Circle votes may decide a permitted temporary override. Financial settlement follows immutable Commitment criteria and verified evidence, not social opinion.
+Each Commitment can store one explicit authority: `SELF`, `AI`, or `CIRCLE`. The companion policy is keyed by the existing schedule/Commitment ID because the full server Commitment object is not yet implemented. `selectedMemberIds` identifies Circle voters and is validated for current membership and voting permission at request creation. A missing policy defaults to Self in the v2 request path. Legacy ambiguous state is not allowed to silently grant authority.
 
+Authority types do not silently fall back into one another:
+
+- Self uses a local deliberate flow and can work offline while native enforcement is healthy;
+- AI uses the existing sanitized OpenRouter path and rejects safely on failure;
+- Circle uses only the selected voter snapshot and rejects on its five-minute Tribunal timeout.
+
+## Self access
+
+Request Access requires a reason, approximately 30 seconds of reflection, and a bounded duration of 5, 10, or 15 minutes. Native temporary-unlock storage grants the access locally. A local history event is queued for best-effort server recording; the remote history is not the local ledger.
+
+## Circle resolution
+
+At request creation the backend snapshots eligible voters, excludes the requester, and calculates strict majority as `floor(n / 2) + 1`. Attendance, chat participation, and late joins do not change the authority set. Either majority resolves the request; Circle timeout rejects and never invokes AI. Vote and resolution side effects are server-authoritative and idempotent.
+
+## Durable approval delivery
+
+Server approval writes the request outcome and sends a targeted FCM data message. `AmnestyPushReceiver`, protected by `com.google.android.c2dm.permission.SEND`, validates the bound user, package, bounded expiry, and idempotency key before persisting native temporary access. The Flutter listener remains a compatibility path; Flutter being inactive is no longer the only delivery path.

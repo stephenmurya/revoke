@@ -33,6 +33,7 @@ object EnforcementEngine {
     private data class BlockMatch(
         val appName: String,
         val packageName: String,
+        val commitmentId: String,
         val blockState: BlockState,
         val regimeName: String,
         val blockedSinceMs: Long?,
@@ -491,6 +492,7 @@ object EnforcementEngine {
         return BlockMatch(
             appName = resolvePackageLabel(context, packageName),
             packageName = packageName,
+            commitmentId = schedule.optString("id", "").trim(),
             blockState = BlockState.TIME_BLOCK,
             regimeName = resolveRegimeName(schedule),
             blockedSinceMs = activeWindow.startMs,
@@ -515,6 +517,7 @@ object EnforcementEngine {
             return BlockMatch(
                 appName = resolvePackageLabel(context, packageName),
                 packageName = packageName,
+                commitmentId = schedule.optString("id", "").trim(),
                 blockState = BlockState.WINDOW_CLOSED,
                 regimeName = resolveRegimeName(schedule),
                 blockedSinceMs = resolvePreviousWindowEnd(schedule, windows, nowMs) ?: nowMs,
@@ -545,6 +548,7 @@ object EnforcementEngine {
         return BlockMatch(
             appName = resolvePackageLabel(context, packageName),
             packageName = packageName,
+            commitmentId = schedule.optString("id", "").trim(),
             blockState = BlockState.USAGE_LIMIT_REACHED,
             regimeName = resolveRegimeName(schedule),
             blockedSinceMs = null,
@@ -568,6 +572,7 @@ object EnforcementEngine {
         return BlockPresentation(
             appName = match.appName,
             packageName = match.packageName,
+            commitmentId = match.commitmentId,
             appIcon = resolvePackageIcon(context, match.packageName),
             blockState = match.blockState,
             regimeName = match.regimeName,
@@ -639,13 +644,13 @@ object EnforcementEngine {
                     pickCopy(
                         "explain_time_block",
                         listOf(
-                            "Blocked by your ${match.regimeName} regime until $unlockLabel.",
-                            "${match.regimeName} has this app locked until $unlockLabel.",
-                            "This app stays blocked under ${match.regimeName} until $unlockLabel.",
+                    "Blocked by your ${match.regimeName} Commitment until $unlockLabel.",
+                    "${match.regimeName} keeps this app locked until $unlockLabel.",
+                    "This app stays blocked under ${match.regimeName} until $unlockLabel.",
                         ),
                     )
                 } else {
-                    "Blocked by your ${match.regimeName} regime right now."
+                    "Blocked by your ${match.regimeName} Commitment right now."
                 }
             BlockState.USAGE_LIMIT_REACHED -> {
                 val safeLimit = limitLabel ?: "daily"
@@ -679,9 +684,9 @@ object EnforcementEngine {
             return pickCopy(
                 "secondary_no_squad_${match.blockState.name.lowercase()}",
                 listOf(
-                    "No squad is linked yet. Finish setup to unlock plea requests.",
-                    "You need a squad before you can plead for extra time.",
-                    "Set up your squad to unlock plea requests from this screen.",
+                    "Circle is optional. Request short access for yourself or set one up.",
+                    "You can request short access without a Circle.",
+                    "Set up a Circle only when you want shared accountability.",
                 ),
             )
         }
@@ -691,27 +696,27 @@ object EnforcementEngine {
                 pickCopy(
                     "secondary_time_block",
                     listOf(
-                        "Need access? Request a plea from your squad.",
-                        "If it matters, plead your case to the squad.",
-                        "Need more time? Ask your squad before reopening this app.",
+                        "Need access? Request a short exception.",
+                        "If it matters, request access from your selected authority.",
+                        "Need more time? Request access before reopening this app.",
                     ),
                 )
             BlockState.USAGE_LIMIT_REACHED ->
                 pickCopy(
                     "secondary_usage_limit_reached",
                     listOf(
-                        "Need more time? Request a plea from your squad.",
-                        "If this is worth it, plead your case.",
-                        "Need access? Ask your squad before opening it again.",
+                        "Need more time? Request a short exception.",
+                        "If this matters, request access deliberately.",
+                        "Need access? Request it before opening this app again.",
                     ),
                 )
             BlockState.WINDOW_CLOSED ->
                 pickCopy(
                     "secondary_window_closed",
                     listOf(
-                        "Need access? Request a plea from your squad.",
-                        "If it cannot wait, plead your case.",
-                        "Next window is locked in. Ask your squad if you need an exception.",
+                        "Need access? Request a short exception.",
+                        "If it cannot wait, request access deliberately.",
+                        "Next window is set. Request access if you need an exception.",
                     ),
                 )
         }

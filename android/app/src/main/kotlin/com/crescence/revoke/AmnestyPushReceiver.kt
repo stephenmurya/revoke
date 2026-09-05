@@ -17,6 +17,10 @@ class AmnestyPushReceiver : BroadcastReceiver() {
 
         val extras = intent.extras ?: return
         val type = extras.getString("type")?.trim()?.uppercase() ?: return
+        if (type == "OVERRIDE_APPROVED") {
+            NativeOverrideAccess.apply(context, extras)
+            return
+        }
         if (type != "AMNESTY") return
 
         val durationMinutes = parseDurationFromExtras(extras)

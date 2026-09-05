@@ -103,6 +103,30 @@ class _CommitmentDetailScreenState extends State<CommitmentDetailScreen> {
             const SizedBox(height: RevokeSpacing.sm),
             RevokeSurface(child: _buildPlan(context, schedule)),
             const SizedBox(height: RevokeSpacing.xl),
+            const RevokeSectionHeader(title: 'Override authority'),
+            const SizedBox(height: RevokeSpacing.sm),
+            RevokeSurface(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Choose how a short access request is decided for this Commitment.',
+                      style: context.text.bodySecondary,
+                    ),
+                  ),
+                  const SizedBox(width: RevokeSpacing.md),
+                  IconButton(
+                    tooltip: 'Configure Override Authority',
+                    icon: Icon(PhosphorIcons.caretRight),
+                    onPressed: () => context.push(
+                      '/commitment/override-policy',
+                      extra: commitment,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: RevokeSpacing.xl),
             const RevokeSectionHeader(title: 'Apps'),
             const SizedBox(height: RevokeSpacing.sm),
             RevokeSurface(

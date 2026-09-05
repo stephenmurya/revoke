@@ -222,6 +222,7 @@ class AuthService {
         'focusStats',
         'regimes',
         'taperPlans',
+        'commitmentPolicies',
       ]) {
         await _deleteSubcollection(userRef, subcollection);
       }

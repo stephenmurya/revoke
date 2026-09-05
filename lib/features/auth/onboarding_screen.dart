@@ -1,16 +1,59 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/theme/app_theme.dart';
-import '../../core/services/auth_service.dart';
-import '../../core/services/squad_service.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+
+import '../../core/app_router.dart';
+import '../../core/models/onboarding_state.dart';
 import '../../core/native_bridge.dart';
+import '../../core/services/auth_service.dart';
+import '../../core/services/onboarding_state_service.dart';
+import '../../core/services/schedule_service.dart';
+import '../../core/services/taper_plan_service.dart';
+import '../../core/theme/revoke_tokens.dart';
 import '../../core/utils/theme_extensions.dart';
-import '../../core/widgets/revoke_logo.dart';
-import '../../core/widgets/revoke_progress_bar.dart';
-import 'package:share_plus/share_plus.dart';
-import 'accessibility_disclosure_screen.dart';
+import '../../core/widgets/revoke_components.dart';
+import '../commitments/commitment_presentation.dart';
+import '../commitments/create_commitment_screen.dart';
+
+/// A production-safe seam for smoke tests and lightweight onboarding previews.
+class OnboardingWelcome extends StatelessWidget {
+  const OnboardingWelcome({super.key, this.onContinue});
+
+  final VoidCallback? onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(RevokeSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            PhosphorIcons.compass,
+            size: RevokeIconSizes.feature,
+            color: context.colors.accent,
+          ),
+          const SizedBox(height: RevokeSpacing.hero),
+          Text(
+            'A clearer way to change your habits',
+            style: context.text.displaySmall,
+          ),
+          const SizedBox(height: RevokeSpacing.md),
+          Text(
+            'Revoke helps you see your real usage, make a Commitment, and keep the boundary you chose.',
+            style: context.text.bodyLarge?.copyWith(
+              color: context.colors.textSecondary,
+            ),
+          ),
+          const Spacer(),
+          RevokeButton(label: 'Get started', onPressed: onContinue),
+        ],
+      ),
+    );
+  }
+}
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -21,1004 +64,690 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen>
     with WidgetsBindingObserver {
-  static const int _recruitmentStepIndex = 7;
-  static const String _squadCodePrefix = 'REV-';
-  static const int _squadCodeTotalLength = 7;
-  static const int _squadCodeSuffixLength = 3;
-
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
-  final int _totalSteps =
-      8; // Auth, Alias, Perms, Accessibility, Delusion, Reality, Vow, Recruit
-
-  // Form Data
-  String? _nickname;
-  double _estimatedHours = 2.0;
-  double _goalHours = 1.0;
-  Map<String, dynamic>? _realityData;
-  String? _squadId;
-  String? _squadCode;
-  bool _isLoading = false;
-  bool _isJoiningMode = false;
-  final TextEditingController _joinCodeController = TextEditingController();
-  bool _isFormattingJoinCode = false;
-  bool _didHandleRouteResume = false;
-  bool _isSquadCodePressed = false;
-
-  // Permissions Data
-  bool _hasUsageStats = false;
-  bool _hasOverlay = false;
-  bool _hasExactAlarm = false;
-  bool _hasAccessibility = false;
+  OnboardingState _state = const OnboardingState();
+  final TextEditingController _nicknameController = TextEditingController();
+  bool _loading = true;
+  bool _working = false;
+  String? _error;
+  Map<String, bool> _permissions = const <String, bool>{};
+  Map<String, dynamic>? _reality;
+  CommitmentViewModel? _firstCommitment;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _joinCodeController.value = const TextEditingValue(
-      text: _squadCodePrefix,
-      selection: TextSelection.collapsed(offset: _squadCodePrefix.length),
-    );
-    _joinCodeController.addListener(_handleJoinCodeChanged);
-    _checkPermissions(); // Initial check
+    unawaited(_loadState());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _joinCodeController.removeListener(_handleJoinCodeChanged);
-    _joinCodeController.dispose();
+    _nicknameController.dispose();
     super.dispose();
-  }
-
-  void _handleJoinCodeChanged() {
-    if (_isFormattingJoinCode) return;
-    final formatted = _formatSquadCodeInput(_joinCodeController.text);
-    if (formatted == _joinCodeController.text) return;
-
-    _isFormattingJoinCode = true;
-    _joinCodeController.value = TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-    );
-    _isFormattingJoinCode = false;
-  }
-
-  String _formatSquadCodeInput(String raw) {
-    final cleaned = raw.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    String suffix = cleaned.startsWith('REV') ? cleaned.substring(3) : cleaned;
-    if (suffix.length > _squadCodeSuffixLength) {
-      suffix = suffix.substring(0, _squadCodeSuffixLength);
-    }
-    final formatted = '$_squadCodePrefix$suffix';
-    if (formatted.length > _squadCodeTotalLength) {
-      return formatted.substring(0, _squadCodeTotalLength);
-    }
-    return formatted;
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checkPermissions();
+    if (state != AppLifecycleState.resumed) return;
+    if (_state.step == OnboardingStep.usagePermission ||
+        _state.step == OnboardingStep.enforcementPermissions) {
+      unawaited(_checkPermissions());
     }
+  }
+
+  Future<void> _loadState() async {
+    try {
+      final currentUser = AuthService.currentUser;
+      if (currentUser == null) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final state = await OnboardingStateService.loadOrCreate();
+      if (!mounted) return;
+      _nicknameController.text = state.nickname ?? '';
+      setState(() {
+        _state = state;
+        _loading = false;
+      });
+      if (state.step == OnboardingStep.realityCheck) {
+        unawaited(_loadReality());
+      }
+      if (state.step == OnboardingStep.review) {
+        unawaited(_loadFirstCommitment());
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'We could not restore your onboarding progress. Try again.';
+        });
+      }
+    }
+  }
+
+  Future<void> _persist(OnboardingState next) async {
+    setState(() {
+      _state = next;
+      _error = null;
+    });
+    await OnboardingStateService.save(next);
+  }
+
+  Future<void> _goTo(OnboardingStep step, {OnboardingState? base}) async {
+    await _persist((base ?? _state).copyWith(step: step));
+    if (!mounted) return;
+    if (step == OnboardingStep.realityCheck) unawaited(_loadReality());
+    if (step == OnboardingStep.review) unawaited(_loadFirstCommitment());
   }
 
   Future<void> _checkPermissions() async {
-    final perms = await NativeBridge.checkPermissions();
-    final hasAccessibility = await NativeBridge.checkAccessibilityPermission();
-    if (mounted) {
-      setState(() {
-        _hasUsageStats = perms['usage_stats'] ?? false;
-        _hasOverlay = perms['overlay'] ?? false;
-        _hasExactAlarm = perms['exact_alarm'] ?? false;
-        _hasAccessibility = hasAccessibility;
-      });
+    try {
+      final permissions = await NativeBridge.checkPermissions();
+      if (!mounted) return;
+      setState(() => _permissions = permissions);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Android permission status is unavailable.');
+      }
     }
   }
 
-  void _nextPage() {
-    _pageController.nextPage(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
+  Future<void> _loadReality() async {
+    if ((_permissions['usage_stats'] ?? false) != true) {
+      await _checkPermissions();
+      if ((_permissions['usage_stats'] ?? false) != true) return;
+    }
+    setState(() => _working = true);
+    try {
+      final data = await NativeBridge.getRealityCheck();
+      if (!mounted) return;
+      setState(() {
+        _reality = data;
+        _working = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _working = false;
+          _error =
+              'Current usage could not be measured. Check Usage Access and try again.';
+        });
+      }
+    }
+  }
+
+  Future<void> _signIn() async {
+    await _run(() async {
+      await AuthService.signInWithGoogle();
+      final restored = await OnboardingStateService.loadOrCreate();
+      if (!mounted) return;
+      if (restored.isComplete) {
+        AppRouter.invalidateOnboardingCache();
+        context.go('/home');
+        return;
+      }
+      _nicknameController.text = restored.nickname ?? '';
+      await _persist(restored.copyWith(step: OnboardingStep.identity));
+    });
+  }
+
+  Future<void> _saveIdentity() async {
+    final nickname = _nicknameController.text.trim();
+    if (nickname.isEmpty) {
+      setState(() => _error = 'Enter a name to continue.');
+      return;
+    }
+    await _run(() async {
+      await AuthService.updateNickname(nickname);
+      await _persist(
+        _state.copyWith(
+          nickname: nickname,
+          step: OnboardingStep.usagePermission,
+        ),
+      );
+      await _checkPermissions();
+    });
+  }
+
+  Future<void> _openUsageAccess() async {
+    try {
+      await NativeBridge.requestUsageStats();
+      await _checkPermissions();
+      if ((_permissions['usage_stats'] ?? false) == true && mounted) {
+        await _goTo(OnboardingStep.realityCheck);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Usage Access could not be opened.');
+    }
+  }
+
+  Future<void> _chooseIntent(CommitmentType type) async {
+    await _persist(
+      _state.copyWith(intent: type.name, step: OnboardingStep.firstCommitment),
     );
   }
 
-  Future<void> _submitNickname() async {
-    final nickname = _nickname?.trim();
-    if (nickname == null || nickname.isEmpty) return;
-
-    FocusScope.of(context).unfocus();
-    await AuthService.updateNickname(nickname);
-    if (!mounted) return;
-    _nextPage();
+  Future<void> _createFirstCommitment() async {
+    final type = _state.intent == CommitmentType.reduce.name
+        ? CommitmentType.reduce
+        : CommitmentType.protect;
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) =>
+            CreateCommitmentScreen(onboardingMode: true, initialType: type),
+      ),
+    );
+    if (!mounted || result == null || result.trim().isEmpty) return;
+    await _persist(
+      _state.copyWith(
+        firstCommitmentId: result,
+        step: OnboardingStep.enforcementPermissions,
+      ),
+    );
+    await _checkPermissions();
   }
 
-  Future<void> _routePostSignIn() async {
-    final userData = await AuthService.getUserData();
-    final squadId = (userData?['squadId'] as String?)?.trim();
-    final nickname = (userData?['nickname'] as String?)?.trim();
-    final hasSquad = squadId != null && squadId.isNotEmpty;
-    final hasNickname = nickname != null && nickname.isNotEmpty;
-
-    if (!mounted) return;
-    if (hasSquad) {
-      context.go('/home');
-      return;
+  String? get _nextMissingPermission {
+    if ((_permissions['accessibility'] ?? false) != true) {
+      return 'accessibility';
     }
-    if (hasNickname) {
-      await _jumpToShareSquadStep();
-      return;
-    }
-    _nextPage();
+    if ((_permissions['overlay'] ?? false) != true) return 'overlay';
+    if ((_permissions['exact_alarm'] ?? false) != true) return 'exact_alarm';
+    return null;
   }
 
-  Future<void> _fetchReality() async {
-    setState(() => _isLoading = true);
-    // Ensure permissions are actually granted before calling this
-    if (!_hasUsageStats) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("WE NEED PERMISSIONS TO SEE THE TRUTH.")),
-      );
-      setState(() => _isLoading = false);
+  Future<void> _handleEnforcementPermission() async {
+    await _checkPermissions();
+    final missing = _nextMissingPermission;
+    if (missing == null) {
+      await _goTo(OnboardingStep.intervention);
       return;
     }
-
     try {
-      final data = await NativeBridge.getRealityCheck();
-      setState(() {
-        _realityData = data;
-        _isLoading = false;
-      });
-      _nextPage();
-    } catch (e) {
-      setState(() => _isLoading = false);
+      switch (missing) {
+        case 'accessibility':
+          await NativeBridge.requestAccessibilityPermission();
+        case 'overlay':
+          await NativeBridge.requestOverlay();
+        case 'exact_alarm':
+          await NativeBridge.requestExactAlarms();
+      }
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to get reality check: $e")),
-        );
+        setState(() => _error = 'This permission screen could not be opened.');
       }
     }
   }
 
-  Future<void> _handleStepSixEntering() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadFirstCommitment() async {
+    final id = _state.firstCommitmentId;
+    if (id == null || id.isEmpty) return;
     try {
-      final uid = AuthService.currentUser?.uid;
-      if (uid == null) return;
-
-      final userData = await AuthService.getUserData();
-      if (userData?['squadId'] == null) {
-        // Automatically create a squad if none exists
-        await SquadService.createSquad(uid);
-        // Re-fetch to get the new code/id
-        final updatedData = await AuthService.getUserData();
-        setState(() {
-          _squadId = updatedData?['squadId'];
-          _squadCode = updatedData?['squadCode'];
-        });
-      } else {
-        setState(() {
-          _squadId = userData?['squadId'];
-          _squadCode = userData?['squadCode'];
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Squad Error: $e")));
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_didHandleRouteResume) return;
-    _didHandleRouteResume = true;
-
-    final routeState = GoRouterState.of(context);
-    final resumeStep = routeState.uri.queryParameters['step'];
-    if (resumeStep == 'share_squad') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _jumpToShareSquadStep();
-      });
-    }
-  }
-
-  Future<void> _jumpToShareSquadStep() async {
-    if (_currentPage == _recruitmentStepIndex) {
-      await _handleStepSixEntering();
-      return;
-    }
-
-    _pageController.jumpToPage(_recruitmentStepIndex);
-    if (mounted) {
-      setState(() => _currentPage = _recruitmentStepIndex);
-    }
-    await _handleStepSixEntering();
-  }
-
-  Future<void> _copySquadCodeToClipboard() async {
-    final code = _squadCode;
-    if (code == null || code.isEmpty) return;
-
-    await Clipboard.setData(ClipboardData(text: code));
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            "Code copied to clipboard.",
-            style: AppTheme.baseBold.copyWith(
-              color: context.scheme.onPrimary,
-              letterSpacing: 0.8,
-            ),
-          ),
-          backgroundColor: context.scheme.primary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          duration: const Duration(milliseconds: 1200),
+      final schedules = await ScheduleService.getSchedules();
+      final plan = await TaperPlanService.getActivePlan();
+      final matching = schedules
+          .where((schedule) => schedule.id == id)
+          .toList();
+      if (!mounted || matching.isEmpty) return;
+      setState(
+        () => _firstCommitment = CommitmentPresentationAdapter.fromSchedule(
+          matching.first,
+          taperPlan: plan?.scheduleId == id ? plan : null,
         ),
       );
+    } catch (_) {}
   }
 
-  bool _isSystemUsageEntry(String packageName) {
-    final normalized = packageName.toLowerCase();
-    return normalized.contains('systemui') ||
-        normalized.contains('system ui') ||
-        normalized == 'android' ||
-        normalized == 'com.android.systemui';
-  }
-
-  List<Map<String, dynamic>> _filteredTopApps() {
-    final rawTopApps = (_realityData?['topApps'] as List?) ?? const [];
-    return rawTopApps
-        .whereType<Map>()
-        .map((app) => Map<String, dynamic>.from(app))
-        .where((app) {
-          final packageName = (app['packageName'] ?? '').toString();
-          return !_isSystemUsageEntry(packageName);
-        })
-        .toList();
-  }
-
-  double _calculateFilteredActualHours({
-    required List<Map<String, dynamic>> topApps,
-    required double fallbackHours,
-  }) {
-    if (topApps.isEmpty) return fallbackHours;
-    final hasUsageMs = topApps.any((app) => app['usageMs'] is num);
-    if (!hasUsageMs) return fallbackHours;
-
-    final totalUsageMs = topApps.fold<double>(0, (sum, app) {
-      final usageMs = (app['usageMs'] as num?)?.toDouble() ?? 0;
-      return sum + usageMs;
+  Future<void> _run(Future<void> Function() action) async {
+    if (_working) return;
+    setState(() {
+      _working = true;
+      _error = null;
     });
-    final dailyUsageMs = totalUsageMs / 7.0;
-    return dailyUsageMs / (1000 * 60 * 60);
+    try {
+      await action();
+    } catch (_) {
+      if (mounted) setState(() => _error = 'That did not complete. Try again.');
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _complete() async {
+    await _persist(_state.copyWith(step: OnboardingStep.complete));
+    AppRouter.invalidateOnboardingCache();
+    if (mounted) context.go('/home');
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          SafeArea(
+    if (_loading) {
+      return const Scaffold(
+        body: RevokeLoadingState(label: 'Restoring your progress'),
+      );
+    }
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              RevokeSpacing.lg,
+              RevokeSpacing.xl,
+              RevokeSpacing.lg,
+              RevokeSpacing.lg,
+            ),
             child: Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 16,
-                  ),
-                  child: RevokeProgressBar(
-                    totalSteps: _totalSteps,
-                    currentStep: _currentPage,
-                  ),
-                ),
-                Expanded(
-                  child: PageView(
-                    controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    onPageChanged: (page) {
-                      setState(() => _currentPage = page);
-                      if (page == _recruitmentStepIndex) {
-                        _handleStepSixEntering();
-                      }
-                    },
-                    children: [
-                      _buildStepAuth(),
-                      _buildStepAlias(),
-                      _buildStepPermissions(),
-                      _buildStepAccessibilityDisclosure(),
-                      _buildStepDelusion(),
-                      _buildStepReality(),
-                      _buildStepVow(),
-                      _buildStepRecruitment(),
-                    ],
-                  ),
-                ),
+                _buildProgress(),
+                const SizedBox(height: RevokeSpacing.lg),
+                Expanded(child: _buildStep()),
               ],
             ),
           ),
-          if (_isLoading)
-            Container(
-              color: Theme.of(
-                context,
-              ).scaffoldBackgroundColor.withValues(alpha: 0.8),
-              child: Center(
-                child: CircularProgressIndicator(color: context.scheme.primary),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // --- STEPS ---
-
-  Widget _buildStepAuth() {
-    return _buildBaseStep(
-      header: "SURRENDER\nYOUR DATA.",
-      child: Column(
-        children: [
-          const Spacer(),
-          const RevokeLogo(size: 100),
-          const SizedBox(height: 24),
-          Text(
-            "We need usage access and overlay permission before enforcement can run.",
-            textAlign: TextAlign.center,
-            style: AppTheme.bodyMedium.copyWith(
-              color: context.colors.textSecondary,
-            ),
-          ),
-          const Spacer(),
-          _buildPrimaryButton(
-            label: "Sign in with Google",
-            onPressed: () async {
-              setState(() => _isLoading = true);
-              try {
-                final user = await AuthService.signInWithGoogle();
-                if (user != null) {
-                  await _routePostSignIn();
-                } else {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          "Sign-in failed. Please check your internet and Google account.",
-                        ),
-                        backgroundColor: context.colors.danger,
-                      ),
-                    );
-                  }
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Error: $e"),
-                      backgroundColor: context.colors.danger,
-                      duration: const Duration(seconds: 10),
-                    ),
-                  );
-                }
-              } finally {
-                setState(() => _isLoading = false);
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStepAlias() {
-    return _buildBaseStep(
-      header: "PICK A SQUAD\nNICKNAME.",
-      subtext:
-          "This is the name your Wardens will see when they decide your fate.",
-      child: Column(
-        children: [
-          const Spacer(),
-          TextField(
-            onChanged: (v) => _nickname = v,
-            onSubmitted: (_) => _submitNickname(),
-            textInputAction: TextInputAction.done,
-            textAlign: TextAlign.center,
-            style: AppTheme.h2,
-            decoration: AppTheme.nicknameInputDecoration,
-          ),
-          const Spacer(),
-          _buildPrimaryButton(label: "Continue", onPressed: _submitNickname),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStepPermissions() {
-    final allGranted = _hasUsageStats && _hasOverlay && _hasExactAlarm;
-
-    void openPermissionSetup() {
-      context.go('/permissions');
-    }
-
-    void continueFromPermissions() {
-      if (!allGranted) {
-        openPermissionSetup();
-        return;
-      }
-
-      if (_hasAccessibility) {
-        _pageController.animateToPage(
-          4,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
-        return;
-      }
-
-      _nextPage();
-    }
-
-    return _buildBaseStep(
-      header: "GRANT\nGOD MODE.",
-      subtext:
-          "Revoke needs Usage Access, Overlay, and Exact Alarms before enforcement can start.",
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildPermissionTile(
-              "Usage Access",
-              "Lets Revoke detect the app currently on screen.",
-              _hasUsageStats,
-              openPermissionSetup,
-            ),
-            const SizedBox(height: 16),
-            _buildPermissionTile(
-              "Draw Over Apps",
-              "Lets Revoke place the lock-screen over restricted apps.",
-              _hasOverlay,
-              openPermissionSetup,
-            ),
-            const SizedBox(height: 16),
-            _buildPermissionTile(
-              "Exact Alarms",
-              "Lets Revoke wake exactly when a focus regime begins.",
-              _hasExactAlarm,
-              openPermissionSetup,
-            ),
-            const SizedBox(height: 24),
-            _buildPrimaryButton(
-              label: allGranted ? "Continue" : "Open permission setup",
-              onPressed: continueFromPermissions,
-            ),
-          ],
         ),
       ),
     );
   }
 
-  Widget _buildStepAccessibilityDisclosure() {
-    return AccessibilityDisclosureScreen(
-      onCompleted: () {
-        if (!mounted) return;
-        setState(() => _hasAccessibility = true);
-        _nextPage();
-      },
+  Widget _buildProgress() {
+    final step = _state.step.index;
+    return Row(
+      children: [
+        Expanded(
+          child: LinearProgressIndicator(
+            value: (step / (OnboardingStep.values.length - 1)).clamp(0, 1),
+            minHeight: RevokeSpacing.xs,
+            borderRadius: RevokeRadii.pillRadius,
+            backgroundColor: context.colors.surfaceSubtle,
+            color: context.colors.accent,
+          ),
+        ),
+        const SizedBox(width: RevokeSpacing.md),
+        Text(
+          '${step + 1}/${OnboardingStep.values.length - 1}',
+          style: context.text.labelMedium,
+        ),
+      ],
     );
   }
 
-  Widget _buildStepDelusion() {
-    return _buildBaseStep(
-      header: "THE\nDELUSION.",
-      subtext: "How many hours do you THINK you spend on your phone daily?",
-      child: Column(
-        children: [
-          const Spacer(),
-          Text(
-            "${_estimatedHours.toStringAsFixed(1)} HOURS",
-            textAlign: TextAlign.center, // Centered
-            style: AppTheme.size5xlBold.copyWith(color: context.scheme.primary),
+  Widget _buildStep() {
+    switch (_state.step) {
+      case OnboardingStep.welcome:
+        return OnboardingWelcome(
+          onContinue: () => _goTo(
+            AuthService.currentUser == null
+                ? OnboardingStep.authentication
+                : OnboardingStep.identity,
           ),
-          const SizedBox(height: 32),
-          SliderTheme(
-            data: AppTheme.vowSliderTheme,
-            child: Slider(
-              value: _estimatedHours,
-              min: 0,
-              max: 24,
-              divisions: 48,
-              onChanged: (v) => setState(() => _estimatedHours = v),
-            ),
+        );
+      case OnboardingStep.authentication:
+        return _page(
+          icon: PhosphorIcons.lockOpen,
+          title: 'Keep your progress with you',
+          body:
+              'Sign in to save your Commitments and resume after Android settings detours.',
+          action: RevokeButton(
+            label: 'Continue with Google',
+            icon: PhosphorIcons.googleLogo,
+            onPressed: _working ? null : _signIn,
+            loading: _working,
           ),
-          const Spacer(),
-          _buildPrimaryButton(
-            label: "VERIFY THE TRUTH",
-            onPressed: _fetchReality,
+        );
+      case OnboardingStep.identity:
+        return _identityStep();
+      case OnboardingStep.usagePermission:
+        return _permissionStep(
+          icon: PhosphorIcons.chartBar,
+          title: 'Start with what is real',
+          body:
+              'Usage Access lets Revoke measure your current behavior before you choose a Commitment. Revoke does not read your screen content.',
+          granted: _permissions['usage_stats'] == true,
+          buttonLabel: _permissions['usage_stats'] == true
+              ? 'Continue'
+              : 'Allow Usage Access',
+          onPressed: _permissions['usage_stats'] == true
+              ? () => _goTo(OnboardingStep.realityCheck)
+              : _openUsageAccess,
+        );
+      case OnboardingStep.realityCheck:
+        return _realityStep();
+      case OnboardingStep.intent:
+        return _intentStep();
+      case OnboardingStep.firstCommitment:
+        return _page(
+          icon: PhosphorIcons.target,
+          title: 'Make your first Commitment',
+          body:
+              'Choose one behavior to change. Revoke will use the existing enforcement system to carry out the boundary you select.',
+          action: RevokeButton(
+            label: 'Create Commitment',
+            onPressed: _working ? null : _createFirstCommitment,
+          ),
+        );
+      case OnboardingStep.enforcementPermissions:
+        return _enforcementStep();
+      case OnboardingStep.intervention:
+        return _page(
+          icon: PhosphorIcons.shieldCheck,
+          title: 'Know what happens at the boundary',
+          body:
+              'Notice gives you a clear reminder. Resist makes the boundary harder to ignore. Revoke can place an enforcement surface over a restricted app. You stay in control of the Commitment you chose.',
+          action: RevokeButton(
+            label: 'Review my Commitment',
+            onPressed: () => _goTo(OnboardingStep.review),
+          ),
+        );
+      case OnboardingStep.review:
+        return _reviewStep();
+      case OnboardingStep.complete:
+        return _page(
+          icon: PhosphorIcons.check,
+          title: 'You are ready',
+          body: 'Your Revoke space is set up.',
+          action: RevokeButton(
+            label: 'Open Today',
+            onPressed: () => context.go('/home'),
+          ),
+        );
+    }
+  }
+
+  Widget _page({
+    required IconData icon,
+    required String title,
+    required String body,
+    required Widget action,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: RevokeIconSizes.feature, color: context.colors.accent),
+        const SizedBox(height: RevokeSpacing.xl),
+        Text(title, style: context.text.headlineLarge),
+        const SizedBox(height: RevokeSpacing.md),
+        Text(
+          body,
+          style: context.text.bodyLarge?.copyWith(
+            color: context.colors.textSecondary,
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: RevokeSpacing.lg),
+          RevokeSurface(
+            color: context.colors.warning.withValues(alpha: 0.10),
+            child: Text(_error!, style: context.text.bodyMedium),
           ),
         ],
-      ),
+        const Spacer(),
+        action,
+      ],
     );
   }
 
-  Widget _buildStepReality() {
-    if (_realityData == null) return const SizedBox();
+  Widget _identityStep() => _page(
+    icon: PhosphorIcons.user,
+    title: 'How should Revoke address you?',
+    body:
+        'This is only for your account experience. It does not determine whether onboarding is complete.',
+    action: Column(
+      children: [
+        TextField(
+          controller: _nicknameController,
+          textInputAction: TextInputAction.done,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Your name'),
+        ),
+        const SizedBox(height: RevokeSpacing.md),
+        RevokeButton(
+          label: 'Continue',
+          onPressed: _working ? null : _saveIdentity,
+          loading: _working,
+        ),
+      ],
+    ),
+  );
 
-    final fallbackHours = (_realityData!['totalAvgDailyHours'] as num)
-        .toDouble();
-    final filteredTopApps = _filteredTopApps();
-    final actualHours = _calculateFilteredActualHours(
-      topApps: filteredTopApps,
-      fallbackHours: fallbackHours,
-    );
-    final delta = actualHours - _estimatedHours;
-    final isCooked = delta > 0;
+  Widget _permissionStep({
+    required IconData icon,
+    required String title,
+    required String body,
+    required bool granted,
+    required String buttonLabel,
+    required VoidCallback onPressed,
+  }) => _page(
+    icon: icon,
+    title: title,
+    body: body,
+    action: Column(
+      children: [
+        if (granted)
+          RevokeSurface(
+            padding: const EdgeInsets.all(RevokeSpacing.md),
+            color: context.colors.success.withValues(alpha: 0.10),
+            child: Row(
+              children: [
+                Icon(PhosphorIcons.checkCircle, color: context.colors.success),
+                const SizedBox(width: RevokeSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Usage Access is enabled.',
+                    style: context.text.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (granted) const SizedBox(height: RevokeSpacing.md),
+        RevokeButton(
+          label: buttonLabel,
+          onPressed: _working ? null : onPressed,
+          loading: _working,
+        ),
+      ],
+    ),
+  );
 
-    return _buildBaseStep(
-      header: "REALITY\nCHECK.",
-      child: Column(
+  Widget _realityStep() {
+    final average = _reality?['totalAvgDailyHours'];
+    final topApps =
+        (_reality?['topApps'] as List?)?.whereType<Map>().toList() ??
+        const <Map>[];
+    return _page(
+      icon: PhosphorIcons.eye,
+      title: 'Here is your starting point',
+      body: average is num
+          ? 'Your measured average is ${average.toStringAsFixed(1)} hours per day. Use this as context, not a judgment.'
+          : 'Revoke has access to Usage Access, but there is not enough history for a reliable baseline yet.',
+      action: Column(
         children: [
-          const Spacer(),
-          Text(
-            "${actualHours.toStringAsFixed(1)} HOURS DAILY",
-            textAlign: TextAlign.center,
-            style: AppTheme.size5xlMedium.copyWith(
-              color: context.scheme.primary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            isCooked
-                ? "You're over by ${delta.toStringAsFixed(1)} hours.\nLet's tighten the plan."
-                : "You're within your estimate.\nNow keep it consistent.",
-            textAlign: TextAlign.center,
-            style: AppTheme.bodyLarge.copyWith(
-              color: isCooked ? context.colors.danger : context.colors.success,
-            ),
-          ),
-          const Spacer(),
-          _buildSectionHeader("TOP TIME-WASTERS"),
-          const SizedBox(height: 16),
-          ...filteredTopApps.take(3).map((app) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: context.scheme.surface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
+          if (topApps.isNotEmpty)
+            RevokeSurface(
+              padding: const EdgeInsets.all(RevokeSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    PhosphorIcons.squaresFour,
-                    color: context.scheme.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      (app['packageName'] as String)
-                          .split('.')
-                          .last
-                          .toUpperCase(),
-                      style: AppTheme.baseBold.copyWith(
-                        color: context.scheme.onSurface,
+                  Text('Highest-use apps', style: context.text.titleMedium),
+                  const SizedBox(height: RevokeSpacing.sm),
+                  ...topApps
+                      .take(3)
+                      .map(
+                        (app) => Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: RevokeSpacing.xs,
+                          ),
+                          child: Text(
+                            '${app['name'] ?? app['packageName'] ?? 'App'}',
+                            style: context.text.bodyMedium,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
                 ],
               ),
-            );
-          }),
-          const Spacer(),
-          _buildPrimaryButton(
-            label: "I ACCEPT THE TRUTH",
-            onPressed: _nextPage,
+            ),
+          if (topApps.isNotEmpty) const SizedBox(height: RevokeSpacing.md),
+          RevokeButton(
+            label: 'Choose what to change',
+            onPressed: _working ? null : () => _goTo(OnboardingStep.intent),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStepVow() {
-    return _buildBaseStep(
-      header: "THE VOW.",
-      subtext: "How much of your life do you want to reclaim?",
-      child: Column(
-        children: [
-          const Spacer(),
-          Text(
-            "${_goalHours.toStringAsFixed(1)} HOURS",
-            textAlign: TextAlign.center,
-            style: AppTheme.size5xlBold.copyWith(color: context.scheme.primary),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            "DAILY LIMIT",
-            style: AppTheme.labelSmall.copyWith(
-              color: context.colors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 32),
-          SliderTheme(
-            data: AppTheme.vowSliderTheme,
-            child: Slider(
-              value: _goalHours,
-              min: 0.5,
-              max: 12,
-              divisions: 23,
-              onChanged: (v) => setState(() => _goalHours = v),
-            ),
-          ),
-          const Spacer(),
-          _buildPrimaryButton(
-            label: "LOCK IT IN",
-            onPressed: () {
-              // Save goal logic here if needed
-              _nextPage();
-            },
-          ),
-        ],
+  Widget _intentStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(
+        PhosphorIcons.target,
+        size: RevokeIconSizes.feature,
+        color: context.colors.accent,
       ),
-    );
-  }
-
-  Widget _buildStepRecruitment() {
-    return _buildBaseStep(
-      header: _isJoiningMode ? "JOIN A\nSQUAD." : "APPOINT A\nWARDEN.",
-      subtext: _isJoiningMode
-          ? "Enter the code provided by your Squad Leader."
-          : "Revoke is a social contract. You must invite someone to watch you or join a squad.",
-      child: Column(
-        children: [
-          const Spacer(),
-          if (!_isJoiningMode) ...[
-            AnimatedScale(
-              scale: _isSquadCodePressed ? 0.98 : 1,
-              duration: const Duration(milliseconds: 110),
-              curve: Curves.easeOut,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(24),
-                  onTap: _squadCode == null ? null : _copySquadCodeToClipboard,
-                  onHighlightChanged: (isPressed) {
-                    if (!mounted) return;
-                    setState(() => _isSquadCodePressed = isPressed);
-                  },
-                  child: Ink(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: context.scheme.surface,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: context.scheme.primary.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          "YOUR SQUAD CODE",
-                          style: AppTheme.smMedium.copyWith(
-                            color: context.colors.textSecondary,
-                          ),
-                        ),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                            child: Text(
-                              _squadCode ?? "--- ---",
-                              textWidthBasis: TextWidthBasis.parent,
-                              style: AppTheme.squadCodeInput,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          "TAP ANYWHERE TO COPY",
-                          style: AppTheme.xsMedium.copyWith(
-                            color: context.colors.textSecondary.withValues(
-                              alpha: 0.8,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            _buildSecondaryIconButton(
-              onPressed: _squadCode == null
-                  ? null
-                  : () {
-                      SharePlus.instance.share(
-                        ShareParams(
-                          text:
-                              "Join my Revoke Squad and watch my screen time: $_squadCode",
-                        ),
-                      );
-                    },
-              icon: PhosphorIcons.shareNetwork,
-              label: "Share Invite Code",
-            ),
-            const SizedBox(height: 16),
-            _buildSecondaryButton(
-              onPressed: () => setState(() => _isJoiningMode = true),
-              label: "I Have a Code",
-            ),
-          ] else ...[
-            TextField(
-              controller: _joinCodeController,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9-]')),
-                LengthLimitingTextInputFormatter(_squadCodeTotalLength),
-              ],
-              textCapitalization: TextCapitalization.characters,
-              textAlign: TextAlign.center,
-              style: AppTheme.squadCodeInput,
-              decoration: AppTheme.defaultInputDecoration(hintText: "REV-XXX"),
-            ),
-            const SizedBox(height: 32),
-            _buildPrimaryButton(
-              label: "JOIN SQUAD",
-              onPressed: () async {
-                final code = _joinCodeController.text;
-                if (code.length != _squadCodeTotalLength) return;
-
-                setState(() => _isLoading = true);
-                try {
-                  final uid = AuthService.currentUser?.uid;
-                  if (uid != null) {
-                    final joinedSquadId = await SquadService.joinSquad(code);
-                    final userData = await AuthService.getUserData();
-                    final persistedSquadId = (userData?['squadId'] as String?)
-                        ?.trim();
-                    setState(() {
-                      _squadId =
-                          persistedSquadId != null &&
-                              persistedSquadId.isNotEmpty
-                          ? persistedSquadId
-                          : joinedSquadId;
-                      _squadCode = userData?['squadCode'];
-                    });
-                    if (mounted) context.go('/home');
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(e.toString())));
-                  }
-                } finally {
-                  if (mounted) setState(() => _isLoading = false);
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            _buildSecondaryButton(
-              onPressed: () => setState(() => _isJoiningMode = false),
-              label: "BACK TO INVITE",
-            ),
-          ],
-          const Spacer(),
-          if (!_isJoiningMode)
-            _buildPrimaryButton(
-              label: "ENTER THE GAUNTLET",
-              onPressed: _squadId != null ? () => context.go('/home') : null,
-            ),
-        ],
-      ),
-    );
-  }
-
-  // --- HELPERS ---
-
-  Widget _buildBaseStep({
-    required String header,
-    String? subtext,
-    required Widget child,
-  }) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (childWidget, animation) {
-        final offsetAnimation = Tween<Offset>(
-          begin: const Offset(0.03, 0),
-          end: Offset.zero,
-        ).animate(animation);
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(position: offsetAnimation, child: childWidget),
-        );
-      },
-      child: Padding(
-        key: ValueKey<String>(header),
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              header,
-              textAlign: TextAlign.center,
-              style: AppTheme.size4xlBold.copyWith(
-                color: context.scheme.onSurface,
-                height: 1.1,
-              ),
-            ),
-            if (subtext != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                subtext,
-                textAlign: TextAlign.center,
-                style: AppTheme.bodyMedium.copyWith(
-                  color: context.colors.textSecondary,
-                ),
-              ),
-            ],
-            const SizedBox(height: 24),
-            Expanded(child: child),
-          ],
+      const SizedBox(height: RevokeSpacing.xl),
+      Text('What do you want to do?', style: context.text.headlineLarge),
+      const SizedBox(height: RevokeSpacing.md),
+      Text(
+        'Choose the behavioral intent first. Revoke will guide the configuration that follows.',
+        style: context.text.bodyLarge?.copyWith(
+          color: context.colors.textSecondary,
         ),
       ),
-    );
-  }
+      const SizedBox(height: RevokeSpacing.xl),
+      _intentChoice(
+        CommitmentType.reduce,
+        PhosphorIcons.trendDown,
+        'Reduce',
+        'Gradually use selected apps less over a defined plan.',
+      ),
+      const SizedBox(height: RevokeSpacing.md),
+      _intentChoice(
+        CommitmentType.protect,
+        PhosphorIcons.shieldCheck,
+        'Protect',
+        'Create a clear boundary Revoke can enforce.',
+      ),
+    ],
+  );
 
-  Widget _buildPermissionTile(
+  Widget _intentChoice(
+    CommitmentType type,
+    IconData icon,
     String title,
-    String desc,
-    bool isGranted,
-    VoidCallback onTap, {
-    String buttonLabel = "OPEN",
-    bool isOptional = false,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.scheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isGranted
-              ? context.colors.success
-              : context.scheme.outlineVariant,
-        ),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 420;
-          final action = isGranted
-              ? Icon(PhosphorIcons.checkCircle, color: context.colors.success)
-              : ElevatedButton(
-                  onPressed: onTap,
-                  style: AppTheme.secondaryButtonStyle.copyWith(
-                    padding: const WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    ),
-                    backgroundColor: WidgetStatePropertyAll(
-                      Theme.of(context).scaffoldBackgroundColor,
-                    ),
-                  ),
-                  child: Text(buttonLabel),
-                );
-
-          if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppTheme.h3),
-                const SizedBox(height: 8),
-                Text(desc, style: AppTheme.bodySmall),
-                if (isOptional) ...[
-                  const SizedBox(height: 6),
+    String body,
+  ) => Semantics(
+    button: true,
+    label: '$title. $body',
+    child: InkWell(
+      onTap: _working ? null : () => _chooseIntent(type),
+      borderRadius: RevokeRadii.cardRadius,
+      child: RevokeSurface(
+        color: _state.intent == type.name ? context.colors.accentSoft : null,
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: RevokeIconSizes.emphasis,
+              color: context.colors.accent,
+            ),
+            const SizedBox(width: RevokeSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: context.text.titleMedium),
+                  const SizedBox(height: RevokeSpacing.xs),
                   Text(
-                    "Optional, but strongly recommended.",
-                    style: AppTheme.bodySmall.copyWith(
+                    body,
+                    style: context.text.bodyMedium?.copyWith(
                       color: context.colors.textSecondary,
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                Align(alignment: Alignment.centerLeft, child: action),
-              ],
-            );
-          }
+              ),
+            ),
+            Icon(PhosphorIcons.arrowRight, color: context.colors.textMuted),
+          ],
+        ),
+      ),
+    ),
+  );
 
-          return Row(
+  Widget _enforcementStep() {
+    final missing = _nextMissingPermission;
+    return _page(
+      icon: PhosphorIcons.lightning,
+      title: missing == null
+          ? 'Enforcement is ready'
+          : 'Let Revoke enforce your Commitment',
+      body: missing == null
+          ? 'The Android permissions needed for your Commitment are enabled.'
+          : 'Revoke needs a few Android permissions after you choose a Commitment. Each one has a specific role and can be changed later in Android settings.',
+      action: Column(
+        children: [
+          _permissionRow(
+            'Accessibility',
+            'Detect restricted apps as they open',
+            _permissions['accessibility'] == true,
+          ),
+          _permissionRow(
+            'Display over other apps',
+            'Show the native enforcement surface',
+            _permissions['overlay'] == true,
+          ),
+          _permissionRow(
+            'Exact alarms',
+            'Start time-based enforcement on time',
+            _permissions['exact_alarm'] == true,
+          ),
+          const SizedBox(height: RevokeSpacing.md),
+          RevokeButton(
+            label: missing == null ? 'Continue' : 'Open next permission',
+            onPressed: _working ? null : _handleEnforcementPermission,
+            loading: _working,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _permissionRow(String title, String body, bool granted) => Padding(
+    padding: const EdgeInsets.only(bottom: RevokeSpacing.sm),
+    child: Row(
+      children: [
+        Icon(
+          granted ? PhosphorIcons.checkCircle : PhosphorIcons.circle,
+          color: granted ? context.colors.success : context.colors.textMuted,
+        ),
+        const SizedBox(width: RevokeSpacing.sm),
+        Expanded(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: AppTheme.h3),
-                    const SizedBox(height: 8),
-                    Text(desc, style: AppTheme.bodySmall),
-                    if (isOptional) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        "Optional, but strongly recommended.",
-                        style: AppTheme.bodySmall.copyWith(
-                          color: context.colors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ],
+              Text(title, style: context.text.titleSmall),
+              Text(
+                body,
+                style: context.text.bodySmall?.copyWith(
+                  color: context.colors.textSecondary,
                 ),
               ),
-              const SizedBox(width: 16),
-              action,
             ],
-          );
-        },
-      ),
-    );
-  }
+          ),
+        ),
+      ],
+    ),
+  );
 
-  Widget _buildPrimaryButton({
-    required VoidCallback? onPressed,
-    required String label,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: AppTheme.primaryButtonStyle,
-        child: Text(label),
-      ),
-    );
-  }
-
-  Widget _buildSecondaryButton({
-    required VoidCallback? onPressed,
-    required String label,
-    bool fullWidth = false,
-  }) {
-    final button = ElevatedButton(
-      onPressed: onPressed,
-      style: AppTheme.secondaryButtonStyle,
-      child: Text(label),
-    );
-    if (!fullWidth) return button;
-    return SizedBox(width: double.infinity, child: button);
-  }
-
-  Widget _buildSecondaryIconButton({
-    required VoidCallback? onPressed,
-    required IconData icon,
-    required String label,
-    bool fullWidth = false,
-  }) {
-    final button = ElevatedButton.icon(
-      onPressed: onPressed,
-      style: AppTheme.secondaryButtonStyle,
-      icon: Icon(icon),
-      label: Text(label),
-    );
-    if (!fullWidth) return button;
-    return SizedBox(width: double.infinity, child: button);
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: AppTheme.baseBold.copyWith(
-        color: context.scheme.primary.withValues(alpha: 0.7),
-      ),
-    );
-  }
+  Widget _reviewStep() => _page(
+    icon: PhosphorIcons.checkCircle,
+    title: 'Your first Commitment is ready',
+    body: _firstCommitment == null
+        ? 'Your Commitment was saved locally. Revoke will keep it synchronized with the existing enforcement system.'
+        : '${_firstCommitment!.typeLabel} · ${_firstCommitment!.name}\n${_firstCommitment!.summary}',
+    action: RevokeButton(
+      label: 'Start using Revoke',
+      onPressed: _working ? null : _complete,
+    ),
+  );
 }

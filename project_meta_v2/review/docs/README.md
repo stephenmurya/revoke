@@ -1,8 +1,8 @@
 # Revoke 2.0 Documentation Review Packet
 
-Review date: 2026-09-04
+Review date: 2026-09-05
 
-This directory is a review artifact for the Revoke 2.0 documentation audit and Phase 1 mobile implementation. It is not canonical product documentation. Canonical sources live under ../.. and are indexed by ../../README.md.
+This directory is a cumulative review artifact for Revoke 2.0 documentation audits and implementation phases. It is not canonical product documentation. Canonical sources live under ../.. and are indexed by ../../README.md.
 
 The Markdown files in this directory are the current review packet. The retained `docs.zip` is a prior generated export and was not regenerated during this pass; it is not an authority over the Markdown packet.
 
@@ -20,6 +20,7 @@ The Markdown files in this directory are the current review packet. The retained
 - [Phase 1 Implementation](phase-1-implementation.md): source implementation review for the design-system foundation and global mobile shell.
 - [Phase 2 Today Implementation](phase-2-today-implementation.md): source implementation review for the Today experience and its data provenance.
 - [Phase 3 Commitments Implementation](phase-3-commitments-implementation.md): source implementation review for the user-facing Commitment layer, Reduce/Protect flows, persistence, and native compatibility mapping.
+- [Phase 5 Circle and Override Authority](phase-5-circle-override-implementation.md): source implementation review for Circle permissions, privacy boundaries, explicit authority, quorum, and native approval delivery.
 
 ## Authority reminder
 

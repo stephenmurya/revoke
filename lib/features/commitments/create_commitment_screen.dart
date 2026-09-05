@@ -22,10 +22,16 @@ class CreateCommitmentScreen extends StatefulWidget {
     super.key,
     this.existingSchedule,
     this.existingPlan,
+    this.onboardingMode = false,
+    this.initialType,
   });
 
   final ScheduleModel? existingSchedule;
   final TaperPlanModel? existingPlan;
+
+  /// Keeps the shared creation engine usable from the first-Commitment flow.
+  final bool onboardingMode;
+  final CommitmentType? initialType;
 
   @override
   State<CreateCommitmentScreen> createState() => _CreateCommitmentScreenState();
@@ -61,6 +67,10 @@ class _CreateCommitmentScreenState extends State<CreateCommitmentScreen> {
     super.initState();
     final existing = widget.existingSchedule;
     _nameController = TextEditingController(text: existing?.name ?? '');
+    if (widget.initialType != null) {
+      _type = widget.initialType;
+      _step = 1;
+    }
     if (existing != null) {
       _type = widget.existingPlan == null
           ? CommitmentType.protect
@@ -751,6 +761,7 @@ class _CreateCommitmentScreenState extends State<CreateCommitmentScreen> {
       _saving = true;
       _error = null;
     });
+    String? savedId;
     try {
       if (_isReduce) {
         final existing = widget.existingPlan;
@@ -771,6 +782,7 @@ class _CreateCommitmentScreenState extends State<CreateCommitmentScreen> {
                 updatedAt: DateTime.now(),
               );
         await TaperPlanService.savePlanLocalFirst(plan);
+        savedId = plan.scheduleId;
       } else {
         final existing = widget.existingSchedule;
         final isTime = _protectMode == _ProtectMode.period;
@@ -791,8 +803,9 @@ class _CreateCommitmentScreenState extends State<CreateCommitmentScreen> {
           activatedAt: existing?.activatedAt,
         );
         await ScheduleService.saveSchedule(schedule);
+        savedId = schedule.id;
       }
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, savedId);
     } catch (_) {
       if (mounted) {
         setState(
