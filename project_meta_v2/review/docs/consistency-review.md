@@ -28,6 +28,10 @@ Every Credit purchase requires a fresh disclosure and explicit confirmation befo
 
 ## Design consistency
 
+### Phase 10 visual contract
+
+The active shell, Today, Commitments, Circle, Insights, Credits, Premium, onboarding, Profile, and permission-repair surfaces continue to use the v2 navigation and semantic vocabulary. Phase 10 changed theme defaults and selected surfaces without introducing new product behavior. Native blocking remains native-owned and now consumes the documented Android semantic resource map. Legacy Home/Regime, Squad/Plea, Focus Score, and admin surfaces remain explicitly compatibility or internal paths.
+
 ### Home versus Today
 
 The current shell routes `/home` to `TodayScreen` and `/commitments` to `CommitmentsScreen`. Legacy `HomeScreen` and `RegimesScreen` remain compatibility implementations/routes where referenced, but they no longer define the primary v2 shell experience. Canonical v2 names the daily surface Today and the management surface Commitments.
@@ -95,3 +99,19 @@ The dated revival audit may describe implementation names and historical product
 - The accepted 24-hour post-end reconciliation default is implemented in the resolver and is not an open product question.
 - `UNVERIFIABLE` releases locked Credits without forfeiture or grace consumption.
 - Credit-backed Commitments remain a compatibility layer over `users/{uid}/regimes`; this does not claim native/server Commitment persistence.
+
+## Phase 8 commercial onboarding consistency
+
+- Current onboarding is draft-first. The old Phase 4 description of saving an active first Commitment before the commercial/authority decisions is a historical compatibility description, superseded by `product/onboarding.md` and ADR 016.
+- The implemented first-run order is Reality Check -> semantic Commitment draft -> enforcement permissions -> intervention explanation -> Override Authority -> optional Circle setup -> Commitment review -> required Premium when applicable -> optional Credit backing -> coordinated activation -> Today.
+- The persisted draft is device-local onboarding state. It preserves the semantic intent and configuration across normal process death but is not a server-native Commitment object and is not a global ledger authority.
+- Premium decline is an explicit path: a valid Free Protect/Self fallback is offered rather than a dead end. Credit backing is never silently enabled and a failed hold leaves the behavioral Commitment recoverable.
+- Phase 4 users with an existing `firstCommitmentId` are not duplicated; completed users are not returned to onboarding. Permissions, Premium, Circle membership, and Credit state are revalidated when each branch needs them.
+
+## Phase 9 Insights consistency
+
+- `/insights` now has one direct-evidence experience. The old Today/This Week/Trend dashboard and Focus Score-oriented cards are not maintained as a second live Insights surface.
+- Free receives a useful 7-day complete-period usage view. Premium can select 30 days and receives Reduce analysis and recorded override analysis when those sources are available. 90 days is not exposed because the current native contract does not establish it as reliable.
+- Daily trend and top-app values come from `UsageInsightsCalculator` through `UsageInsightsService` and `InsightsRepository`; they are not inferred from Commitment configuration. Reduce allowance comes from `TaperPlanModel`. Override counts come from the current user's recorded `pleas` history.
+- Focus Score remains in legacy Home/admin/storage and `/focus-score` compatibility paths, but is absent from `/insights` and the Appearance preview. No composite replacement was added.
+- Verified Commitment outcomes, universal adherence, recovery, grace, and time-of-day patterns are omitted because the current repository does not provide authoritative history for them. This does not contradict the product target metrics.

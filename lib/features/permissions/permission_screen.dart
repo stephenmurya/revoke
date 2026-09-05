@@ -7,6 +7,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../core/native_bridge.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/theme_extensions.dart';
+import '../../core/theme/revoke_tokens.dart';
 import '../../core/widgets/revoke_progress_bar.dart';
 
 enum _PermissionKey { accessibility, usageAccess, overlay, exactAlarm }
@@ -132,6 +133,7 @@ class _PermissionScreenState extends State<PermissionScreen>
         nextOverlay != _hasOverlay ||
         nextExactAlarm != _hasExactAlarm;
 
+    if (!changed) return;
     setState(() {
       _hasAccessibility = nextAccessibility;
       _hasUsageStats = nextUsage;
@@ -139,8 +141,6 @@ class _PermissionScreenState extends State<PermissionScreen>
       _hasExactAlarm = nextExactAlarm;
       _currentStep = _nextIncompleteStep();
     });
-
-    if (changed) {}
   }
 
   int _nextIncompleteStep() {
@@ -198,21 +198,21 @@ class _PermissionScreenState extends State<PermissionScreen>
         body: SafeArea(
           child: Padding(
             padding: EdgeInsets.fromLTRB(
-              24,
-              20,
-              24,
-              16 + MediaQuery.of(context).padding.bottom,
+              RevokeSpacing.xl,
+              RevokeSpacing.lg,
+              RevokeSpacing.xl,
+              RevokeSpacing.lg + MediaQuery.of(context).padding.bottom,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(),
-                const SizedBox(height: 20),
+                const SizedBox(height: RevokeSpacing.lg),
                 _buildStageProgress(),
-                const SizedBox(height: 20),
+                const SizedBox(height: RevokeSpacing.lg),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.only(bottom: RevokeSpacing.lg),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -220,7 +220,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                           duration: const Duration(milliseconds: 240),
                           child: _buildDisclosureCard(disclosure, isGranted),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: RevokeSpacing.lg),
                         Text(
                           isGranted
                               ? (_allGranted
@@ -235,7 +235,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: RevokeSpacing.md),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -244,7 +244,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                   ),
                 ),
                 if (!isGranted) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: RevokeSpacing.md),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
@@ -289,7 +289,7 @@ class _PermissionScreenState extends State<PermissionScreen>
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: RevokeSpacing.sm),
         RevokeProgressBar(
           totalSteps: _disclosures.length,
           currentStep: _allGranted ? _disclosures.length - 1 : _currentStep,
@@ -304,12 +304,12 @@ class _PermissionScreenState extends State<PermissionScreen>
       children: [
         Text(
           'Grant Revoke Permissions',
-          style: AppTheme.h2.copyWith(
+          style: context.text.pageTitle.copyWith(
             color: context.scheme.onSurface,
             letterSpacing: -0.2,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: RevokeSpacing.sm),
         Text(
           'Before Revoke can enforce anything, Android needs four core permissions.',
           style: AppTheme.baseRegular.copyWith(
@@ -327,10 +327,10 @@ class _PermissionScreenState extends State<PermissionScreen>
     return Container(
       key: ValueKey<_PermissionKey>(disclosure.key),
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(RevokeSpacing.xl),
       decoration: BoxDecoration(
         color: context.scheme.surface,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: RevokeRadii.largeRadius,
         border: Border.all(
           color: isGranted
               ? context.colors.success
@@ -353,7 +353,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                     _buildStatusPill(isGranted),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: RevokeSpacing.lg),
                 Text(
                   'Prominent disclosure',
                   style: AppTheme.xsMedium.copyWith(
@@ -389,13 +389,13 @@ class _PermissionScreenState extends State<PermissionScreen>
                     _buildStatusPill(isGranted),
                   ],
                 ),
-              const SizedBox(height: 24),
+              const SizedBox(height: RevokeSpacing.xl),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(18),
+                padding: const EdgeInsets.all(RevokeSpacing.lg),
                 decoration: BoxDecoration(
                   color: context.scheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: RevokeRadii.controlRadius,
                 ),
                 child: Text(
                   disclosure.prominentDisclosure,
@@ -405,7 +405,7 @@ class _PermissionScreenState extends State<PermissionScreen>
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: RevokeSpacing.lg),
               _buildSection(
                 title: 'Why Revoke needs it',
                 body: disclosure.whyNeeded,
@@ -422,30 +422,33 @@ class _PermissionScreenState extends State<PermissionScreen>
     bool isGranted,
   ) {
     return Container(
-      width: 56,
-      height: 56,
+      width: RevokeTouchTargets.minimum,
+      height: RevokeTouchTargets.minimum,
       decoration: BoxDecoration(
         color: isGranted
             ? context.colors.success.withValues(alpha: 0.12)
             : context.scheme.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: RevokeRadii.cardRadius,
       ),
       child: Icon(
         isGranted ? PhosphorIcons.checkCircle : disclosure.icon,
         color: isGranted ? context.colors.success : context.scheme.primary,
-        size: 28,
+        size: RevokeIconSizes.feature,
       ),
     );
   }
 
   Widget _buildStatusPill(bool isGranted) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: RevokeSpacing.md,
+        vertical: RevokeSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: isGranted
             ? context.colors.success.withValues(alpha: 0.14)
             : context.colors.warning.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: RevokeRadii.pillRadius,
       ),
       child: Text(
         isGranted ? 'Granted' : 'Required',
@@ -468,7 +471,7 @@ class _PermissionScreenState extends State<PermissionScreen>
             letterSpacing: 0.7,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: RevokeSpacing.xs),
         Text(
           body,
           style: AppTheme.baseRegular.copyWith(

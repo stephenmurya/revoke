@@ -13,7 +13,11 @@ import '../native_bridge.dart';
 import 'premium_billing_service.dart';
 
 class CreditPurchaseState {
-  const CreditPurchaseState({this.isPurchasing = false, this.message, this.error});
+  const CreditPurchaseState({
+    this.isPurchasing = false,
+    this.message,
+    this.error,
+  });
 
   final bool isPurchasing;
   final String? message;
@@ -31,10 +35,17 @@ class CreditService {
   static const String _pendingLocalPrefix = 'pending_credit_forfeiture_v2_';
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
-  final ValueNotifier<CreditWallet> wallet = ValueNotifier(const CreditWallet.empty());
-  final ValueNotifier<CreditPurchaseState> purchaseState = ValueNotifier(const CreditPurchaseState());
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _walletSubscription;
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+    region: 'us-central1',
+  );
+  final ValueNotifier<CreditWallet> wallet = ValueNotifier(
+    const CreditWallet.empty(),
+  );
+  final ValueNotifier<CreditPurchaseState> purchaseState = ValueNotifier(
+    const CreditPurchaseState(),
+  );
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _walletSubscription;
   String? _uid;
   bool _initialized = false;
   CreditWallet _serverWallet = const CreditWallet.empty();
@@ -49,7 +60,11 @@ class CreditService {
     wallet.value = const CreditWallet.empty();
     _initialized = nextUid != null;
     if (nextUid == null) return;
-    final ref = _firestore.collection('users').doc(nextUid).collection('creditWallet').doc('current');
+    final ref = _firestore
+        .collection('users')
+        .doc(nextUid)
+        .collection('creditWallet')
+        .doc('current');
     _walletSubscription = ref.snapshots().listen((snapshot) {
       _serverWallet = CreditWallet.fromFirestore(snapshot.data());
       _applyLocalProjection();
@@ -61,7 +76,9 @@ class CreditService {
 
   Stream<List<CreditLedgerEntry>> historyStream() {
     final uid = _uid ?? FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || uid.isEmpty) return Stream.value(const <CreditLedgerEntry>[]);
+    if (uid == null || uid.isEmpty) {
+      return Stream.value(const <CreditLedgerEntry>[]);
+    }
     return _firestore
         .collection('users')
         .doc(uid)
@@ -69,69 +86,100 @@ class CreditService {
         .orderBy('createdAt', descending: true)
         .limit(50)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => CreditLedgerEntry.fromFirestore(doc.id, doc.data()))
-            .toList(growable: false));
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => CreditLedgerEntry.fromFirestore(doc.id, doc.data()))
+              .toList(growable: false),
+        );
   }
 
   Stream<List<CreditBackingSummary>> backingsStream() {
     final uid = _uid ?? FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || uid.isEmpty) return Stream.value(const <CreditBackingSummary>[]);
+    if (uid == null || uid.isEmpty) {
+      return Stream.value(const <CreditBackingSummary>[]);
+    }
     return _firestore
         .collection('users')
         .doc(uid)
         .collection('creditBackings')
         .where('status', whereIn: const ['LOCKED', 'GRACE'])
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => CreditBackingSummary.fromFirestore(doc.id, doc.data()))
-            .toList(growable: false));
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) => CreditBackingSummary.fromFirestore(doc.id, doc.data()),
+              )
+              .toList(growable: false),
+        );
   }
 
   Future<bool> purchase(CreditPurchaseProduct product) async {
     final uid = _uid ?? FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
-      purchaseState.value = const CreditPurchaseState(error: 'Sign in before buying Credits.');
+      purchaseState.value = const CreditPurchaseState(
+        error: 'Sign in before buying Credits.',
+      );
       return false;
     }
     final flowId = 'credit_${DateTime.now().microsecondsSinceEpoch}';
     try {
-      final response = await _functions.httpsCallable('recordCreditPurchaseDisclosure').call({
-        'purchaseFlowId': flowId,
-        'productId': product.productId,
-        'disclosureVersion': disclosureVersion,
-      });
-      if ((response.data as Map?)?['success'] != true) throw StateError('Disclosure was not recorded.');
+      final response = await _functions
+          .httpsCallable('recordCreditPurchaseDisclosure')
+          .call({
+            'purchaseFlowId': flowId,
+            'productId': product.productId,
+            'disclosureVersion': disclosureVersion,
+          });
+      if ((response.data as Map?)?['success'] != true) {
+        throw StateError('Disclosure was not recorded.');
+      }
       await _writePendingFlow(uid, flowId);
-      final started = await PremiumBillingService.instance.purchaseCredits(product.productId);
+      final started = await PremiumBillingService.instance.purchaseCredits(
+        product.productId,
+      );
       if (!started) await _clearPendingFlow(uid);
       return started;
     } on FirebaseFunctionsException catch (error) {
-      purchaseState.value = CreditPurchaseState(error: error.message ?? 'Credit purchase could not start.');
+      purchaseState.value = CreditPurchaseState(
+        error: error.message ?? 'Credit purchase could not start.',
+      );
       return false;
     } catch (_) {
-      purchaseState.value = const CreditPurchaseState(error: 'Credit purchase could not start.');
+      purchaseState.value = const CreditPurchaseState(
+        error: 'Credit purchase could not start.',
+      );
       return false;
     }
   }
 
   Future<void> handlePurchase(PurchaseDetails purchase) async {
     if (purchase.status == PurchaseStatus.pending) {
-      purchaseState.value = const CreditPurchaseState(isPurchasing: true, message: 'Purchase pending in Google Play…');
+      purchaseState.value = const CreditPurchaseState(
+        isPurchasing: true,
+        message: 'Purchase pending in Google Play…',
+      );
       return;
     }
-    if (purchase.status == PurchaseStatus.error || purchase.status == PurchaseStatus.canceled) {
+    if (purchase.status == PurchaseStatus.error ||
+        purchase.status == PurchaseStatus.canceled) {
       await _clearPendingFlowForCurrentUser();
-      purchaseState.value = CreditPurchaseState(error: purchase.error?.message ?? 'Credit purchase was canceled.');
+      purchaseState.value = CreditPurchaseState(
+        error: purchase.error?.message ?? 'Credit purchase was canceled.',
+      );
       return;
     }
     final uid = _uid ?? FirebaseAuth.instance.currentUser?.uid;
     final token = purchase.verificationData.serverVerificationData.trim();
     if (uid == null || uid.isEmpty || token.isEmpty) {
-      purchaseState.value = const CreditPurchaseState(error: 'Credit verification is unavailable.');
+      purchaseState.value = const CreditPurchaseState(
+        error: 'Credit verification is unavailable.',
+      );
       return;
     }
-    purchaseState.value = const CreditPurchaseState(isPurchasing: true, message: 'Verifying Credits…');
+    purchaseState.value = const CreditPurchaseState(
+      isPurchasing: true,
+      message: 'Verifying Credits…',
+    );
     try {
       final flowId = await _readPendingFlow(uid);
       final payload = <String, dynamic>{
@@ -142,11 +190,17 @@ class CreditService {
       await _functions.httpsCallable('verifyCreditPurchase').call(payload);
       await PremiumBillingService.instance.completePurchase(purchase);
       await _clearPendingFlow(uid);
-      purchaseState.value = const CreditPurchaseState(message: 'Credits are available.');
+      purchaseState.value = const CreditPurchaseState(
+        message: 'Credits are available.',
+      );
     } on FirebaseFunctionsException catch (error) {
-      purchaseState.value = CreditPurchaseState(error: error.message ?? 'Credits could not be verified yet.');
+      purchaseState.value = CreditPurchaseState(
+        error: error.message ?? 'Credits could not be verified yet.',
+      );
     } catch (_) {
-      purchaseState.value = const CreditPurchaseState(error: 'Credits could not be verified yet.');
+      purchaseState.value = const CreditPurchaseState(
+        error: 'Credits could not be verified yet.',
+      );
     }
   }
 
@@ -158,40 +212,55 @@ class CreditService {
     String termsAcceptedVersion = 'credit-backing-v1',
   }) async {
     final health = await NativeBridge.checkPermissions();
-    final response = await _functions.httpsCallable('createCreditBacking').call({
-      'commitmentId': commitmentId,
-      'amount': amount,
-      'gracePolicy': gracePolicy,
-      'retryPolicy': retryPolicy,
-      'termsAcceptedVersion': termsAcceptedVersion,
-      'monitoringHealth': {
-        'accessibility': health['accessibility'] == true,
-        'usageStats': health['usage_stats'] == true,
-        'overlay': health['overlay'] == true,
+    final response = await _functions.httpsCallable('createCreditBacking').call(
+      {
+        'commitmentId': commitmentId,
+        'amount': amount,
+        'gracePolicy': gracePolicy,
+        'retryPolicy': retryPolicy,
+        'termsAcceptedVersion': termsAcceptedVersion,
+        'monitoringHealth': {
+          'accessibility': health['accessibility'] == true,
+          'usageStats': health['usage_stats'] == true,
+          'overlay': health['overlay'] == true,
+        },
       },
-    });
+    );
     final data = Map<String, dynamic>.from(response.data as Map? ?? const {});
     final backing = data['backing'];
-    if (backing is Map) await NativeBridge.syncCreditBacking(Map<String, dynamic>.from(backing));
+    if (backing is Map) {
+      await NativeBridge.syncCreditBacking(Map<String, dynamic>.from(backing));
+    }
     return data;
   }
 
   Future<Map<String, dynamic>> redeem(int amount) async {
-    final response = await _functions.httpsCallable('redeemCreditsForPremium').call({'amount': amount});
+    final response = await _functions
+        .httpsCallable('redeemCreditsForPremium')
+        .call({'amount': amount});
     return Map<String, dynamic>.from(response.data as Map? ?? const {});
   }
 
-  Future<void> recordOfflineVerifiedFailure({required String backingId, required int amount}) async {
+  Future<void> recordOfflineVerifiedFailure({
+    required String backingId,
+    required int amount,
+  }) async {
     if (amount <= 0) return;
     final uid = _uid ?? FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || uid.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final key = '$_pendingLocalPrefix$uid';
     final values = prefs.getStringList(key) ?? <String>[];
-    final event = jsonEncode({'eventId': 'local_${DateTime.now().microsecondsSinceEpoch}', 'backingId': backingId, 'amount': amount});
+    final event = jsonEncode({
+      'eventId': 'local_${DateTime.now().microsecondsSinceEpoch}',
+      'backingId': backingId,
+      'amount': amount,
+    });
     values.add(event);
     await prefs.setStringList(key, values);
-    wallet.value = wallet.value.copyWith(lockedCredits: wallet.value.lockedCredits - amount);
+    wallet.value = wallet.value.copyWith(
+      lockedCredits: wallet.value.lockedCredits - amount,
+    );
   }
 
   Future<void> syncPendingLocalForfeitures() async {
@@ -205,7 +274,9 @@ class CreditService {
       try {
         final event = jsonDecode(raw);
         if (event is! Map) continue;
-        await _functions.httpsCallable('submitPendingLocalForfeiture').call(Map<String, dynamic>.from(event));
+        await _functions
+            .httpsCallable('submitPendingLocalForfeiture')
+            .call(Map<String, dynamic>.from(event));
       } catch (_) {
         remaining.add(raw);
       }
@@ -220,7 +291,9 @@ class CreditService {
       for (final entry in pending) {
         final backingId = (entry['backingId'] as String?)?.trim() ?? '';
         if (backingId.isEmpty) continue;
-        grouped.putIfAbsent(backingId, () => <Map<String, dynamic>>[]).add(entry);
+        grouped
+            .putIfAbsent(backingId, () => <Map<String, dynamic>>[])
+            .add(entry);
       }
       final uploaded = <String>[];
       for (final group in grouped.entries) {
@@ -228,9 +301,13 @@ class CreditService {
           'backingId': group.key,
           'entries': group.value,
         });
-        uploaded.addAll(group.value.map((entry) => entry['eventId'].toString()));
+        uploaded.addAll(
+          group.value.map((entry) => entry['eventId'].toString()),
+        );
       }
-      if (uploaded.isNotEmpty) await NativeBridge.markCreditEvidenceUploaded(uploaded);
+      if (uploaded.isNotEmpty) {
+        await NativeBridge.markCreditEvidenceUploaded(uploaded);
+      }
     } catch (_) {
       // Native evidence stays durable and is retried on the next auth/app pass.
     }
@@ -256,7 +333,9 @@ class CreditService {
           settled.add(event['eventId'].toString());
           continue;
         }
-        await _functions.httpsCallable('submitPendingLocalForfeiture').call(event);
+        await _functions
+            .httpsCallable('submitPendingLocalForfeiture')
+            .call(event);
         unresolved.add(event);
       }
       if (settled.isNotEmpty) {

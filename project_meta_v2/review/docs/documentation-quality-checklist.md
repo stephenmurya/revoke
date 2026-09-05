@@ -33,6 +33,10 @@ Review date: 2026-09-05
 - [x] Protect daily limits, Protect periods, and Reduce taper plans have explicit native-compatible mappings.
 - [x] Launch Count is not exposed by the v2 Commitment creation flow.
 - [x] Every Today metric/state has an implementation data source or is explicitly omitted as unsupported.
+- [x] Phase 10 visual changes are recorded separately from target design intent in a dated audit and implementation review.
+- [x] Flutter semantic theme defaults and shared state primitives are documented without claiming repository-wide literal cleanup.
+- [x] Native blocker palette mapping is documented as resource-backed while native enforcement ownership remains unchanged.
+- [x] Device-level screenshot, large-text, TalkBack, OEM, and physical-device checks are not claimed as verified.
 - [x] Focus Score is absent from Today while legacy compatibility remains documented.
 - [x] Browser, desktop, cross-device, browser Firebase/licensing, and iOS work are explicitly out of scope.
 - [x] Phase 5 distinguishes Circle semantics from retained `squads`/`pleas` compatibility storage.
@@ -44,3 +48,14 @@ Review date: 2026-09-05
 - [x] Phase 6 documents Premium code completion separately from Play Console, licensed-device, RTDN, refund, and production readiness.
 - [x] Raw Play purchase tokens and grant lineage are server-only; the Flutter entitlement projection is sanitized and expiry-bound.
 - [x] Free/Premium capability gates preserve free Circle participation and grandfather existing v1-v5 behavior.
+- [x] Phase 8 onboarding is draft-first and does not create an active first Commitment before the required authority/commercial decisions.
+- [x] Reduce and Protect first-run branches are represented by a persisted semantic draft and map to retained schedule/taper compatibility objects only at activation.
+- [x] Required Premium, optional Circle, optional Credit backing, and explicit Free Protect/Self fallback paths are documented separately and revalidated at their decision points.
+- [x] Phase 8 activation is documented as coordinated rather than globally atomic, with recovery when Credit backing is incomplete.
+- [x] Phase 4 users with an existing first Commitment are migrated without duplication, and completed users are not sent back through onboarding.
+- [x] Phase 9 Insights has one direct-evidence destination and does not introduce a replacement composite score.
+- [x] Free Insights remains useful with a 7-day view; Premium longer-range/advanced sections use the existing entitlement service.
+- [x] Every implemented Insights metric has documented native, local, or server-backed provenance and an explicit definition.
+- [x] Unsupported adherence, outcome, recovery, grace, and pattern metrics are omitted rather than represented by assumed values.
+- [x] Focus Score is absent from Insights and Appearance while historical compatibility storage/routes remain documented.
+- [x] The Insights range selector exposes only 7 and 30 days; unsupported 90-day analysis is not implied.

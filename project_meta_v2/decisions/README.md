@@ -21,5 +21,6 @@ Decision records capture choices that materially shape Revoke 2.0. Status values
 | 013 | Override authority is explicit, Circle quorum is fixed, and approved access delivery is durable |
 | 014 | Premium entitlement is server-verified and capability-gated |
 | 015 | Credit-backed Commitment activation uses a compatibility lease boundary |
+| 016 | Commercial onboarding uses draft-first coordinated activation |
 
 Open product/policy questions remain in ../product/open-questions.md. These records do not claim that Google Play or legal review is complete.

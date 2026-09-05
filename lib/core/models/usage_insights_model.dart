@@ -83,6 +83,8 @@ class UsageInsightsSnapshot {
   final int trendDeltaMinutes;
   final int trendPercent;
   final String trendDirection;
+  final bool comparisonAvailable;
+  final int observedDays;
   final List<UsageInsightBucket> buckets;
   final Map<String, dynamic> peak;
   final List<UsageInsightApp> topApps;
@@ -106,6 +108,8 @@ class UsageInsightsSnapshot {
     required this.trendDeltaMinutes,
     required this.trendPercent,
     required this.trendDirection,
+    required this.comparisonAvailable,
+    required this.observedDays,
     required this.buckets,
     required this.peak,
     required this.topApps,
@@ -135,6 +139,8 @@ class UsageInsightsSnapshot {
       trendDeltaMinutes: 0,
       trendPercent: 0,
       trendDirection: 'flat',
+      comparisonAvailable: false,
+      observedDays: 0,
       buckets: const <UsageInsightBucket>[],
       peak: const <String, dynamic>{},
       topApps: const <UsageInsightApp>[],
@@ -164,6 +170,8 @@ class UsageInsightsSnapshot {
       trendDeltaMinutes: _intFromJson(json['trendDeltaMinutes']),
       trendPercent: _intFromJson(json['trendPercent']),
       trendDirection: (json['trendDirection'] as String?)?.trim() ?? 'flat',
+      comparisonAvailable: json['comparisonAvailable'] == true,
+      observedDays: _intFromJson(json['observedDays']),
       buckets: rawBuckets is List
           ? rawBuckets
                 .whereType<Map>()
@@ -210,6 +218,8 @@ class UsageInsightsSnapshot {
       'trendDeltaMinutes': trendDeltaMinutes,
       'trendPercent': trendPercent,
       'trendDirection': trendDirection,
+      'comparisonAvailable': comparisonAvailable,
+      'observedDays': observedDays,
       'buckets': buckets.map((bucket) => bucket.toJson()).toList(),
       'peak': peak,
       'topApps': topApps.map((app) => app.toJson()).toList(),

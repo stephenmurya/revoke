@@ -34,6 +34,7 @@ object UsageInsightsCalculator {
         mode: String,
         anchorDateMs: Long,
         packageName: String?,
+        packageNames: Set<String>?,
         periodDays: Int,
     ): Map<String, Any> {
         val nowMs = System.currentTimeMillis()
@@ -45,6 +46,12 @@ object UsageInsightsCalculator {
             }
         val safeAnchor = if (anchorDateMs > 0L) anchorDateMs else nowMs
         val safePackage = packageName?.trim()?.takeIf { it.isNotEmpty() }
+        val safePackages = packageNames
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.toSet()
+            ?.takeIf { it.isNotEmpty() }
+        val packageFilter = safePackages ?: safePackage?.let { setOf(it) }
         val hasUsageAccess =
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP &&
                 UsageEventsSessionCalculator.hasUsageStatsPermission(context)
@@ -61,9 +68,9 @@ object UsageInsightsCalculator {
         }
 
         return when (safeMode) {
-            "week" -> buildWeekResult(context, safeAnchor, safePackage, nowMs)
-            "trend" -> buildTrendResult(context, safeAnchor, safePackage, periodDays, nowMs)
-            else -> buildDayResult(context, safeAnchor, safePackage, nowMs)
+            "week" -> buildWeekResult(context, safeAnchor, safePackage, packageFilter, nowMs)
+            "trend" -> buildTrendResult(context, safeAnchor, safePackage, packageFilter, periodDays, nowMs)
+            else -> buildDayResult(context, safeAnchor, safePackage, packageFilter, nowMs)
         }
     }
 
@@ -71,12 +78,13 @@ object UsageInsightsCalculator {
         context: Context,
         anchorDateMs: Long,
         packageName: String?,
+        packageFilter: Set<String>?,
         nowMs: Long,
     ): Map<String, Any> {
         val rangeStart = startOfDay(anchorDateMs)
         val rangeEnd = addDays(rangeStart, 1)
         val queryEnd = minOf(rangeEnd, nowMs).coerceAtLeast(rangeStart)
-        val sessions = collectSessions(context, rangeStart, queryEnd, packageName)
+        val sessions = collectSessions(context, rangeStart, queryEnd, packageFilter)
         val buckets =
             List(48) { index ->
                 val start = rangeStart + (index * THIRTY_MINUTES_MS)
@@ -108,12 +116,13 @@ object UsageInsightsCalculator {
         context: Context,
         anchorDateMs: Long,
         packageName: String?,
+        packageFilter: Set<String>?,
         nowMs: Long,
     ): Map<String, Any> {
         val rangeStart = startOfWeek(anchorDateMs)
         val rangeEnd = addDays(rangeStart, 7)
         val queryEnd = minOf(rangeEnd, nowMs).coerceAtLeast(rangeStart)
-        val sessions = collectSessions(context, rangeStart, queryEnd, packageName)
+        val sessions = collectSessions(context, rangeStart, queryEnd, packageFilter)
         val todayStart = startOfDay(nowMs)
         val buckets =
             List(7) { index ->
@@ -148,17 +157,18 @@ object UsageInsightsCalculator {
         context: Context,
         anchorDateMs: Long,
         packageName: String?,
+        packageFilter: Set<String>?,
         periodDays: Int,
         nowMs: Long,
     ): Map<String, Any> {
-        val safeDays = if (periodDays <= 14) 14 else 30
+        val safeDays = if (periodDays <= 7) 7 else 30
         val todayStart = startOfDay(anchorDateMs)
         val rangeStart = addDays(todayStart, -(safeDays - 1))
         val rangeEnd = minOf(addDays(todayStart, 1), nowMs).coerceAtLeast(rangeStart)
         val previousStart = addDays(rangeStart, -safeDays)
         val previousEnd = rangeStart
-        val sessions = collectSessions(context, rangeStart, rangeEnd, packageName)
-        val previousSessions = collectSessions(context, previousStart, previousEnd, packageName)
+        val sessions = collectSessions(context, rangeStart, rangeEnd, packageFilter)
+        val previousSessions = collectSessions(context, previousStart, previousEnd, packageFilter)
         val buckets =
             List(safeDays) { index ->
                 val start = addDays(rangeStart, index)
@@ -194,6 +204,7 @@ object UsageInsightsCalculator {
             averageDailyUsageMs = currentAverage,
             trendDeltaMs = delta,
             trendPercent = percent,
+            comparisonAvailable = previousSessions.isNotEmpty(),
         )
     }
 
@@ -210,6 +221,7 @@ object UsageInsightsCalculator {
         averageDailyUsageMs: Long,
         trendDeltaMs: Long,
         trendPercent: Int,
+        comparisonAvailable: Boolean = false,
     ): Map<String, Any> {
         val bucketUsage = usageByBucket(sessions, buckets)
         val bucketMaps =
@@ -272,6 +284,8 @@ object UsageInsightsCalculator {
             "trendDeltaMinutes" to minutesRounded(abs(trendDeltaMs)) * if (trendDeltaMs < 0L) -1 else 1,
             "trendPercent" to trendPercent,
             "trendDirection" to trendDirection,
+            "comparisonAvailable" to comparisonAvailable,
+            "observedDays" to buckets.count { !it.isFuture },
             "buckets" to bucketMaps,
             "bucketMinutes" to bucketMaps.map { (it["minutes"] as? Int) ?: 0 },
             "peak" to peak,
@@ -285,7 +299,7 @@ object UsageInsightsCalculator {
         context: Context,
         rangeStart: Long,
         rangeEnd: Long,
-        packageFilter: String?,
+        packageFilter: Set<String>?,
     ): List<Session> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return emptyList()
         if (rangeEnd <= rangeStart) return emptyList()
@@ -296,7 +310,6 @@ object UsageInsightsCalculator {
         val events = usageStatsManager.queryEvents((rangeStart - LOOKBACK_PADDING_MS).coerceAtLeast(0L), rangeEnd)
         val event = UsageEvents.Event()
         val sessions = mutableListOf<Session>()
-        val filter = packageFilter?.trim()?.takeIf { it.isNotEmpty() }
         var activePackage: String? = null
         var activeStartMs = -1L
 
@@ -324,7 +337,7 @@ object UsageInsightsCalculator {
                     if (activePackage != pkg || activeStartMs <= 0L) {
                         closeActive(eventTime)
                     }
-                    if (isTrackablePackage(context, pkg, filter)) {
+            if (isTrackablePackage(context, pkg, packageFilter)) {
                         activePackage = pkg
                         activeStartMs = eventTime
                     }
@@ -347,7 +360,7 @@ object UsageInsightsCalculator {
     private fun isTrackablePackage(
         context: Context,
         packageName: String,
-        packageFilter: String?,
+        packageFilter: Set<String>?,
     ): Boolean {
         val normalized = packageName.trim().lowercase(Locale.US)
         if (normalized.isEmpty()) return false
@@ -356,7 +369,7 @@ object UsageInsightsCalculator {
         if (normalized.contains("systemui")) return false
         if (normalized.contains("launcher")) return false
         if (EnforcementEngine.isWhitelistedPackage(context, packageName.trim())) return false
-        return packageFilter == null || packageName.trim() == packageFilter
+        return packageFilter == null || packageFilter.contains(packageName.trim())
     }
 
     private fun usageByBucket(sessions: List<Session>, buckets: List<Bucket>): LongArray {

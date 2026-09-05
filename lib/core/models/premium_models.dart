@@ -61,7 +61,8 @@ class PremiumEntitlement {
   final PremiumPlan? plan;
   final String? sourceSummary;
 
-  bool get isExpired => premiumUntil == null || !premiumUntil!.isAfter(DateTime.now());
+  bool get isExpired =>
+      premiumUntil == null || !premiumUntil!.isAfter(DateTime.now());
 
   factory PremiumEntitlement.fromFirestore(Map<String, dynamic> data) {
     DateTime? readDate(Object? value) {
@@ -74,7 +75,8 @@ class PremiumEntitlement {
 
     final until = readDate(data['premiumUntil']);
     final serverActive = data['active'] == true;
-    final active = serverActive && until != null && until.isAfter(DateTime.now());
+    final active =
+        serverActive && until != null && until.isAfter(DateTime.now());
     return PremiumEntitlement(
       active: active,
       premiumUntil: until,
@@ -100,7 +102,10 @@ class PremiumEntitlement {
 
   factory PremiumEntitlement.fromCacheJson(Map<String, dynamic> data) {
     final until = DateTime.tryParse(data['premiumUntil'] as String? ?? '');
-    final active = data['active'] == true && until != null && until.isAfter(DateTime.now());
+    final active =
+        data['active'] == true &&
+        until != null &&
+        until.isAfter(DateTime.now());
     return PremiumEntitlement(
       active: active,
       premiumUntil: until,

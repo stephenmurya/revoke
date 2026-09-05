@@ -69,14 +69,31 @@ class _CreditBackingScreenState extends State<CreditBackingScreen> {
               ],
             ),
           ),
+          ValueListenableBuilder(
+            valueListenable: CreditService.instance.wallet,
+            builder: (context, wallet, _) {
+              if (wallet.availableCredits >= 10) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: RevokeSpacing.sm),
+                child: RevokeButton(
+                  label: 'Buy Credits',
+                  variant: RevokeButtonVariant.secondary,
+                  onPressed: () => context.push('/credits'),
+                ),
+              );
+            },
+          ),
           const SizedBox(height: RevokeSpacing.lg),
           const RevokeSectionHeader(title: 'Recovery policy'),
           RadioListTile<String>(
             value: 'STRICT',
             groupValue: _gracePolicy,
-            onChanged: (value) => setState(() => _gracePolicy = value ?? 'STRICT'),
+            onChanged: (value) =>
+                setState(() => _gracePolicy = value ?? 'STRICT'),
             title: const Text('Strict'),
-            subtitle: const Text('A verified failure can forfeit the locked Credits.'),
+            subtitle: const Text(
+              'A verified failure can forfeit the locked Credits.',
+            ),
           ),
           RadioListTile<String>(
             value: 'ONE',
@@ -87,7 +104,8 @@ class _CreditBackingScreenState extends State<CreditBackingScreen> {
           RadioListTile<String>(
             value: 'THREE',
             groupValue: _gracePolicy,
-            onChanged: (value) => setState(() => _gracePolicy = value ?? 'THREE'),
+            onChanged: (value) =>
+                setState(() => _gracePolicy = value ?? 'THREE'),
             title: const Text('Three recovery checkpoints'),
           ),
           if (_error != null) ...[

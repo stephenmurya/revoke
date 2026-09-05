@@ -140,7 +140,7 @@ class RevokeButton extends StatelessWidget {
       case RevokeButtonVariant.destructive:
         return base.copyWith(
           backgroundColor: WidgetStatePropertyAll(colors.destructive),
-          foregroundColor: WidgetStatePropertyAll(colors.textPrimary),
+          foregroundColor: WidgetStatePropertyAll(context.scheme.onError),
           elevation: const WidgetStatePropertyAll(RevokeElevation.none),
         );
     }
@@ -148,7 +148,7 @@ class RevokeButton extends StatelessWidget {
 
   Color _foregroundColor(BuildContext context) {
     if (variant == RevokeButtonVariant.destructive) {
-      return context.colors.textPrimary;
+      return context.scheme.onError;
     }
     if (variant == RevokeButtonVariant.secondary ||
         variant == RevokeButtonVariant.tertiary) {
@@ -247,6 +247,148 @@ class RevokeSectionHeader extends StatelessWidget {
         ),
         ?action,
       ],
+    );
+  }
+}
+
+class RevokeSettingRow extends StatelessWidget {
+  const RevokeSettingRow({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.leading,
+    this.trailing,
+    this.onTap,
+    this.destructive = false,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final titleColor = destructive ? colors.destructive : colors.textPrimary;
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: RevokeSpacing.lg,
+        vertical: RevokeSpacing.md,
+      ),
+      child: Row(
+        children: [
+          if (leading != null) ...[
+            leading!,
+            const SizedBox(width: RevokeSpacing.md),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: context.text.cardTitle.copyWith(color: titleColor),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: RevokeSpacing.xs),
+                  Text(
+                    subtitle!,
+                    style: context.text.bodySecondary.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: RevokeSpacing.sm),
+            trailing!,
+          ],
+        ],
+      ),
+    );
+
+    final child = Semantics(
+      button: onTap != null,
+      enabled: onTap != null,
+      label: subtitle == null ? title : '$title, $subtitle',
+      child: content,
+    );
+    if (onTap == null) return child;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: RevokeRadii.controlRadius,
+      child: child,
+    );
+  }
+}
+
+enum RevokeStatusTone { neutral, accent, success, warning, destructive }
+
+class RevokeStatusBanner extends StatelessWidget {
+  const RevokeStatusBanner({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.icon,
+    this.tone = RevokeStatusTone.neutral,
+    this.action,
+  });
+
+  final String title;
+  final String message;
+  final IconData icon;
+  final RevokeStatusTone tone;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final color = switch (tone) {
+      RevokeStatusTone.neutral => colors.textSecondary,
+      RevokeStatusTone.accent => colors.accent,
+      RevokeStatusTone.success => colors.success,
+      RevokeStatusTone.warning => colors.warning,
+      RevokeStatusTone.destructive => colors.destructive,
+    };
+    return RevokeSurface(
+      color: color.withValues(alpha: 0.08),
+      padding: const EdgeInsets.all(RevokeSpacing.lg),
+      bordered: false,
+      radius: RevokeRadii.controlRadius,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: RevokeIconSizes.emphasis, color: color),
+          const SizedBox(width: RevokeSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: context.text.cardTitle.copyWith(color: color),
+                ),
+                const SizedBox(height: RevokeSpacing.xs),
+                Text(
+                  message,
+                  style: context.text.bodySecondary.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+                if (action != null) ...[
+                  const SizedBox(height: RevokeSpacing.sm),
+                  Align(alignment: Alignment.centerLeft, child: action!),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

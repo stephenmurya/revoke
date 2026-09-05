@@ -8,6 +8,12 @@ Phase 7 adds the Commitment Credits repository boundary over existing Premium, s
 
 The Phase 7 implementation review is [Phase 7 Commitment Credits](phase-7-credit-implementation.md). It records the shared Play purchase listener, server ledger and wallet, per-Commitment holds, native journal, offline provisional state, 24-hour resolver, redemption, reversal boundary, and release gates.
 
+The Phase 8 implementation review is [Phase 8 Commercial Onboarding](phase-8-commercial-onboarding.md). It records the persisted semantic draft, commercial/authority branches, coordinated activation, Phase 4 migration, process-death resume behavior, and the remaining production gates.
+
+The Phase 9 implementation review is [Phase 9 Insights](phase-9-insights-implementation.md). It records the direct-evidence hierarchy, 7/30-day range boundary, native package-group aggregation, Premium Reduce/override analysis, Focus Score cleanup, and deferred metrics.
+
+The Phase 10 implementation review is [Phase 10 visual alignment and app-wide polish](phase-10-implementation.md). It records semantic Flutter theme refinement, shared state primitives, resource-backed native enforcement styling, accessibility/code review, and intentionally deferred device-level visual verification.
+
 ## Phase 1 implementation
 
 The implementation-specific review is [Phase 1 Implementation](phase-1-implementation.md). It records the source changes, retained foundations, shell migration, test evidence, and intentionally deferred UI debt.
@@ -52,6 +58,16 @@ The Premium implementation review is [Phase 6 Premium](phase-6-premium-implement
 
 The correction pass preserves the prior v2 decisions: Commitments are primary; Focus Score is retired; Circles are optional; Premium is prepaid; Launch Count is outside initial scope; and the current implementation remains distinct from the target architecture.
 
+## Phase 8 implementation
+
+| Area | Implementation | Canonical sources |
+|---|---|---|
+| First-run state | Persisted semantic onboarding states and nested `CommitmentDraft`, with Phase 4 `firstCommitmentId` migration and no duplicate activation | product/onboarding.md; decisions/016; engineering/status.md |
+| Commitment drafting | Reduce and Protect intent flows collect apps, measured baseline/goal/duration or daily-limit/protected-period details and defer active persistence until activation | lib/core/models/commitment_draft.dart; lib/features/auth/onboarding_screen.dart; lib/features/commitments/create_commitment_screen.dart |
+| Capability resolution | Free users can complete one Protect/Self path; Reduce, AI, Circle, additional Protect, and Credit backing resolve through the existing Premium entitlement boundary | lib/core/services/onboarding_capability_resolver.dart; lib/features/auth/onboarding_screen.dart |
+| Coordinated activation | `OnboardingActivationCoordinator` persists retained schedule/taper compatibility objects, synchronizes native enforcement, persists non-Self authority, and leaves explicit recovery when Credit backing is not completed | lib/core/services/onboarding_activation_coordinator.dart; decisions/016 |
+| Commercial branches | Existing Premium paywall and Credit backing screen are reused; no billing or new Credit ledger behavior is introduced by onboarding | lib/features/premium/premium_paywall_screen.dart; lib/features/credits/credit_backing_screen.dart |
+
 ## Files changed across the documented v2 passes
 
 - `architecture/credit-ledger-and-billing.md`
@@ -68,6 +84,18 @@ The correction pass preserves the prior v2 decisions: Commitments are primary; F
 - `architecture/premium-entitlement-and-billing.md`
 - `engineering/google-play-setup.md`
 - `review/docs/phase-6-premium-implementation.md`
+- `product/insights.md`
+- `review/docs/phase-9-insights-implementation.md`
+- `lib/core/models/usage_insights_model.dart`
+- `lib/core/native_bridge.dart`
+- `lib/core/services/usage_insights_service.dart`
+- `lib/core/services/insights_repository.dart`
+- `lib/features/insights/insights_screen.dart`
+- `lib/features/insights/widgets/usage_trend_chart.dart`
+- `lib/features/settings/appearance_screen.dart`
+- `android/app/src/main/kotlin/com/crescence/revoke/MainActivity.kt`
+- `android/app/src/main/kotlin/com/crescence/revoke/UsageInsightsCalculator.kt`
+- `test/core/usage_insights_model_test.dart`
 - `README.md`
 - `design/overview.md`
 - `design/design-system.md`

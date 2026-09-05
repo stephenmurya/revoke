@@ -4,7 +4,7 @@ class NativeBridge {
   static const MethodChannel _channel = MethodChannel('com.revoke.app/overlay');
   static Function()? onOpenSquadSetup;
   static Function(String appName, String packageName, String commitmentId)?
-      onRequestPlea;
+  onRequestPlea;
   static Function(String appName, String packageName, int blockedAtMs)?
   onBlockedAttempt;
 
@@ -107,9 +107,7 @@ class NativeBridge {
   /// Lets the native FCM fallback bind an approval to the signed-in device
   /// session before Flutter is available. No access decision is made here.
   static Future<void> syncNativeUserId(String? uid) async {
-    await _channel.invokeMethod('syncNativeUserId', {
-      'uid': uid?.trim() ?? '',
-    });
+    await _channel.invokeMethod('syncNativeUserId', {'uid': uid?.trim() ?? ''});
   }
 
   /// Returns whether the Accessibility fast path is currently enabled.
@@ -165,13 +163,18 @@ class NativeBridge {
   }
 
   static Future<void> removeCreditBacking(String backingId) async {
-    await _channel.invokeMethod('removeCreditBacking', {'backingId': backingId});
+    await _channel.invokeMethod('removeCreditBacking', {
+      'backingId': backingId,
+    });
   }
 
   static Future<Map<String, dynamic>> appendCreditEvidence(
     Map<String, dynamic> evidence,
   ) async {
-    final result = await _channel.invokeMethod('appendCreditEvidence', evidence);
+    final result = await _channel.invokeMethod(
+      'appendCreditEvidence',
+      evidence,
+    );
     return Map<String, dynamic>.from(result as Map? ?? const {});
   }
 
@@ -189,14 +192,19 @@ class NativeBridge {
     return (result as num?)?.toInt() ?? 0;
   }
 
-  static Future<List<Map<String, dynamic>>> getPendingLocalCreditForfeitures() async {
-    final result = await _channel.invokeMethod('getPendingLocalCreditForfeitures');
+  static Future<List<Map<String, dynamic>>>
+  getPendingLocalCreditForfeitures() async {
+    final result = await _channel.invokeMethod(
+      'getPendingLocalCreditForfeitures',
+    );
     return (result as List? ?? const [])
         .map((entry) => Map<String, dynamic>.from(entry as Map))
         .toList(growable: false);
   }
 
-  static Future<void> clearPendingLocalCreditForfeitures(List<String> eventIds) async {
+  static Future<void> clearPendingLocalCreditForfeitures(
+    List<String> eventIds,
+  ) async {
     await _channel.invokeMethod('clearPendingLocalCreditForfeitures', {
       'eventIds': eventIds,
     });
@@ -257,6 +265,7 @@ class NativeBridge {
     required String mode,
     required int anchorDateMs,
     String? packageName,
+    List<String>? packageNames,
     int? periodDays,
   }) async {
     final normalizedPackageName = packageName?.trim();
@@ -266,6 +275,14 @@ class NativeBridge {
     };
     if (normalizedPackageName != null && normalizedPackageName.isNotEmpty) {
       arguments['packageName'] = normalizedPackageName;
+    }
+    final normalizedPackageNames = packageNames
+        ?.map((packageName) => packageName.trim())
+        .where((packageName) => packageName.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedPackageNames != null && normalizedPackageNames.isNotEmpty) {
+      arguments['packageNames'] = normalizedPackageNames;
     }
     if (periodDays != null) {
       arguments['periodDays'] = periodDays;

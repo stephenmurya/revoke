@@ -10,6 +10,7 @@ import '../../core/services/premium_entitlement_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/revoke_tokens.dart';
 import '../../core/utils/theme_extensions.dart';
+import '../../core/widgets/revoke_components.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -73,7 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: context.colors.background,
       appBar: AppBar(
         backgroundColor: context.colors.background,
-        elevation: 0,
+        elevation: RevokeElevation.none,
         leading: IconButton(
           icon: Icon(
             PhosphorIcons.arrowLeft,
@@ -81,7 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           onPressed: () => context.pop(),
         ),
-        title: Text("Account & Profile", style: context.text.titleLarge),
+        title: Text('Profile', style: context.text.pageTitle),
       ),
       body: FutureBuilder<Map<String, dynamic>?>(
         future: _userDataFuture,
@@ -95,7 +96,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           final userData = snapshot.data;
           if (userData == null) {
             return Center(
-              child: Text("USER NOT FOUND", style: context.text.titleMedium),
+              child: Text(
+                'Profile unavailable',
+                style: context.text.sectionTitle,
+              ),
             );
           }
 
@@ -104,7 +108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 20),
+                const SizedBox(height: RevokeSpacing.lg),
                 // Avatar
                 Container(
                   padding: const EdgeInsets.all(4),
@@ -126,19 +130,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         : null,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: RevokeSpacing.sm),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     if (_isGodMode)
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
+                          horizontal: RevokeSpacing.md,
+                          vertical: RevokeSpacing.sm,
                         ),
                         decoration: BoxDecoration(
                           color: context.colors.danger,
-                          borderRadius: BorderRadius.circular(999),
+                          borderRadius: RevokeRadii.pillRadius,
                         ),
                         child: Text(
                           'GOD MODE',
@@ -151,18 +155,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: RevokeSpacing.xxl),
 
                 // Info Cards
-                _buildInfoCard("FULL NAME", userData['fullName'] ?? "Not Set"),
-                const SizedBox(height: 16),
-                _buildInfoCard("EMAIL", userData['email'] ?? "Not Set"),
-                const SizedBox(height: 16),
+                _buildInfoCard('Full name', userData['fullName'] ?? 'Not set'),
+                const SizedBox(height: RevokeSpacing.lg),
+                _buildInfoCard('Email', userData['email'] ?? 'Not set'),
+                const SizedBox(height: RevokeSpacing.lg),
                 _buildNicknameCard(
-                  "SQUAD NICKNAME",
-                  userData['nickname'] ?? "No Nickname",
+                  'Circle name',
+                  userData['nickname'] ?? 'No name set',
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: RevokeSpacing.lg),
                 ValueListenableBuilder(
                   valueListenable: PremiumEntitlementService.instance.state,
                   builder: (context, entitlementState, _) {
@@ -178,11 +182,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onTap: () => context.push('/premium'),
                         child: Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(RevokeSpacing.lg),
                           decoration: BoxDecoration(
                             color: context.colors.surface,
                             borderRadius: RevokeRadii.cardRadius,
-                            border: Border.all(color: context.colors.borderSubtle),
+                            border: Border.all(
+                              color: context.colors.borderSubtle,
+                            ),
                           ),
                           child: Row(
                             children: [
@@ -196,9 +202,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('PREMIUM', style: context.text.label),
+                                    Text('Premium', style: context.text.label),
                                     const SizedBox(height: RevokeSpacing.xs),
-                                    Text(detail, style: context.text.bodySecondary),
+                                    Text(
+                                      detail,
+                                      style: context.text.bodySecondary,
+                                    ),
                                   ],
                                 ),
                               ),
@@ -215,7 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
 
                 if (_isGodMode) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: RevokeSpacing.lg),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -227,27 +236,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
 
-                const SizedBox(height: 60),
+                const SizedBox(height: RevokeSpacing.xxl),
 
                 // Actions
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => _handleLogout(context),
-                    style: AppTheme.secondaryButtonStyle,
-                    child: const Text("LOGOUT"),
-                  ),
+                RevokeButton(
+                  label: 'Log out',
+                  onPressed: () => _handleLogout(context),
+                  variant: RevokeButtonVariant.secondary,
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => _showDeleteConfirmation(context),
-                    style: AppTheme.dangerButtonStyle,
-                    child: const Text("DELETE ACCOUNT"),
-                  ),
+                const SizedBox(height: RevokeSpacing.sm),
+                RevokeButton(
+                  label: 'Delete account',
+                  onPressed: () => _showDeleteConfirmation(context),
+                  variant: RevokeButtonVariant.destructive,
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: RevokeSpacing.xl),
               ],
             ),
           );
@@ -259,23 +262,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildInfoCard(String label, String value) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(RevokeSpacing.lg),
       decoration: BoxDecoration(
         color: context.colors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: context.colors.textPrimary.withValues(alpha: 0.05),
-        ),
+        borderRadius: RevokeRadii.cardRadius,
+        border: Border.all(color: context.colors.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: (context.text.labelSmall ?? AppTheme.labelSmall).copyWith(
-              letterSpacing: 1.5,
-            ),
-          ),
+          Text(label, style: context.text.label),
           const SizedBox(height: 8),
           Text(value, style: context.text.titleMedium),
         ],
@@ -287,26 +283,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: RevokeRadii.cardRadius,
         onTap: _isSavingNickname ? null : () => _showNicknameEditor(value),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(RevokeSpacing.lg),
           decoration: BoxDecoration(
             color: context.colors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: context.colors.textPrimary.withValues(alpha: 0.05),
-            ),
+            borderRadius: RevokeRadii.cardRadius,
+            border: Border.all(color: context.colors.borderSubtle),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: (context.text.labelSmall ?? AppTheme.labelSmall)
-                    .copyWith(letterSpacing: 1.5),
-              ),
+              Text(label, style: context.text.label),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -322,7 +312,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: RevokeSpacing.sm),
                   Icon(
                     PhosphorIcons.pencilSimple,
                     color: context.colors.accent,
@@ -343,18 +333,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       isScrollControlled: true,
       backgroundColor: context.colors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(RevokeRadii.large),
+        ),
       ),
       builder: (sheetContext) {
         final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
         return Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, bottomInset + 24),
+          padding: EdgeInsets.fromLTRB(
+            RevokeSpacing.lg,
+            RevokeSpacing.lg,
+            RevokeSpacing.lg,
+            bottomInset + RevokeSpacing.lg,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('EDIT NICKNAME', style: sheetContext.text.titleLarge),
-              const SizedBox(height: 16),
+              Text('Edit Circle name', style: sheetContext.text.sectionTitle),
+              const SizedBox(height: RevokeSpacing.lg),
               TextField(
                 controller: controller,
                 textCapitalization: TextCapitalization.characters,
@@ -362,21 +359,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 maxLength: 24,
                 style: sheetContext.text.bodyLarge,
                 decoration: AppTheme.defaultInputDecoration(
-                  hintText: 'ENTER NEW NICKNAME',
+                  hintText: 'Enter a name',
                 ),
                 onSubmitted: (value) {
                   Navigator.of(sheetContext).pop(value.trim());
                 },
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: RevokeSpacing.sm),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: AppTheme.primaryButtonStyle,
                   onPressed: () {
                     Navigator.of(sheetContext).pop(controller.text.trim());
                   },
-                  child: const Text('SAVE'),
+                  child: const Text('Save'),
                 ),
               ),
             ],
@@ -395,12 +391,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Nickname updated')));
+      ).showSnackBar(const SnackBar(content: Text('Circle name updated')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to update nickname: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update Circle name')),
+      );
     } finally {
       if (mounted) {
         setState(() => _isSavingNickname = false);
@@ -416,32 +412,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: context.colors.background,
+        backgroundColor: context.colors.surfaceElevated,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: context.colors.danger, width: 2),
+          borderRadius: RevokeRadii.largeRadius,
+          side: BorderSide(color: context.colors.destructive),
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(RevokeSpacing.xl),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   PhosphorIcons.warning,
-                  color: context.colors.danger,
-                  size: 64,
+                  color: context.colors.destructive,
+                  size: RevokeIconSizes.feature,
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  "EXTERMINATE ACCOUNT?",
+                  'Delete account?',
                   textAlign: TextAlign.center,
                   style: context.text.headlineMedium,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "This action is irreversible. Your focus scores, squad history, and presence will be purged from the archives.",
+                  'This permanently removes your Revoke account and its stored data.',
                   textAlign: TextAlign.center,
                   style: (context.text.bodyMedium ?? AppTheme.bodyMedium)
                       .copyWith(
@@ -449,17 +445,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         height: 1.5,
                       ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: RevokeSpacing.xl),
                 Row(
                   children: [
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () => Navigator.pop(context),
                         style: AppTheme.secondaryButtonStyle,
-                        child: const Text("CANCEL"),
+                        child: const Text('Cancel'),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: RevokeSpacing.md),
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () async {
@@ -469,7 +465,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           );
                         },
                         style: AppTheme.dangerButtonStyle,
-                        child: const Text("PURGE"),
+                        child: const Text('Delete'),
                       ),
                     ),
                   ],

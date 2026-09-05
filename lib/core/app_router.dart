@@ -237,7 +237,8 @@ class AppRouter {
               packageName.isEmpty) {
             return const TodayScreen();
           }
-          final commitmentId = (extra?['commitmentId'] as String?)?.trim() ?? '';
+          final commitmentId =
+              (extra?['commitmentId'] as String?)?.trim() ?? '';
           return OverrideRequestScreen(
             appName: appName,
             packageName: packageName,
@@ -255,9 +256,8 @@ class AppRouter {
       ),
       GoRoute(
         path: '/premium',
-        builder: (context, state) => PremiumPaywallScreen(
-          reason: (state.extra as String?)?.trim(),
-        ),
+        builder: (context, state) =>
+            PremiumPaywallScreen(reason: (state.extra as String?)?.trim()),
       ),
       GoRoute(
         path: '/credits',

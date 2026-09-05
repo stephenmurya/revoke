@@ -23,6 +23,9 @@ The Markdown files in this directory are the current review packet. The retained
 - [Phase 5 Circle and Override Authority](phase-5-circle-override-implementation.md): source implementation review for Circle permissions, privacy boundaries, explicit authority, quorum, and native approval delivery.
 - [Phase 6 Premium](phase-6-premium-implementation.md): source implementation review for prepaid Premium, Play verification, disclosure, grants, entitlement projection, and capability gates.
 - [Phase 7 Commitment Credits](phase-7-credit-implementation.md): source implementation review for Credit purchases, ledger, wallet, holds, evidence, settlement, redemption, and production gates.
+- [Phase 8 Commercial Onboarding](phase-8-commercial-onboarding.md): source implementation review for the coordinated first-run journey across Commitment drafting, authority, Circle, Premium, Credit backing, activation, migration, and resume behavior.
+- [Phase 9 Insights](phase-9-insights-implementation.md): source implementation review for direct usage evidence, supported ranges, Premium analysis, chart architecture, Focus Score cleanup, and deferred metrics.
+- [Phase 10 visual alignment and app-wide polish](phase-10-implementation.md): semantic Flutter refinement, native resource mapping, accessibility/code review, and deferred device verification.
 
 ## Authority reminder
 

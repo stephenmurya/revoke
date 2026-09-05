@@ -43,7 +43,26 @@ class OnboardingStateService {
 
   static Future<OnboardingState> loadOrCreate() async {
     final existing = await read();
-    if (existing != null && existing.version >= 2) return existing;
+    if (existing != null && existing.version >= 2) {
+      // Phase 4 called the configuration step firstCommitment and persisted
+      // the schedule immediately. Preserve those users without creating a
+      // second Commitment in the commercial journey.
+      if (existing.step == OnboardingStep.firstCommitment &&
+          existing.firstCommitmentId != null) {
+        final migrated = existing.copyWith(
+          version: 3,
+          step: OnboardingStep.enforcementPermissions,
+        );
+        await save(migrated);
+        return migrated;
+      }
+      if (existing.version < 3) {
+        final migrated = existing.copyWith(version: 3);
+        await save(migrated);
+        return migrated;
+      }
+      return existing;
+    }
 
     // A schedule is concrete evidence of an already configured product. It
     // is the only legacy migration signal used here; nickname, Circle, and
@@ -58,11 +77,12 @@ class OnboardingStateService {
     final now = DateTime.now();
     final migrated = schedules.isNotEmpty
         ? OnboardingState(
+            version: 3,
             step: OnboardingStep.complete,
             createdAt: now,
             updatedAt: now,
           )
-        : OnboardingState(createdAt: now, updatedAt: now);
+        : OnboardingState(version: 3, createdAt: now, updatedAt: now);
     await save(migrated);
     return migrated;
   }

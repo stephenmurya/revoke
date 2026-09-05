@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/schedule_model.dart';
 import '../../core/models/taper_plan_model.dart';
+import '../../core/models/commitment_draft.dart';
 import '../../core/native_bridge.dart';
 import '../../core/services/app_discovery_service.dart';
 import '../../core/services/schedule_service.dart';
@@ -756,6 +757,18 @@ class _CreateCommitmentScreenState extends State<CreateCommitmentScreen> {
   Future<void> _save() async {
     if (_saving) return;
     if (!_validateConfiguration()) return;
+    final name = _nameController.text.trim().isEmpty
+        ? _defaultName
+        : _nameController.text.trim();
+
+    // Onboarding owns commercial, authority, and final activation sequencing.
+    // Return a durable configuration draft instead of creating an active
+    // schedule that could exist while the user is still deciding.
+    if (widget.onboardingMode && !_isEditing) {
+      if (mounted) Navigator.pop(context, _buildDraft(name));
+      return;
+    }
+
     if (!_isEditing) {
       final entitlement = PremiumEntitlementService.instance;
       if (entitlement.state.value.isLoading) await entitlement.refresh();
@@ -798,9 +811,7 @@ class _CreateCommitmentScreenState extends State<CreateCommitmentScreen> {
       if (_isReduce || entitlement.hasPremium) {
         try {
           final allowed = await entitlement.assertServerCapability(
-            _isReduce
-                ? 'reduce_commitment'
-                : 'additional_protect_commitment',
+            _isReduce ? 'reduce_commitment' : 'additional_protect_commitment',
           );
           if (!allowed) {
             if (mounted) {
@@ -813,16 +824,15 @@ class _CreateCommitmentScreenState extends State<CreateCommitmentScreen> {
           }
         } catch (_) {
           if (mounted) {
-            setState(() => _error =
-                'Premium access could not be verified. Check your connection and try again.');
+            setState(
+              () => _error =
+                  'Premium access could not be verified. Check your connection and try again.',
+            );
           }
           return;
         }
       }
     }
-    final name = _nameController.text.trim().isEmpty
-        ? _defaultName
-        : _nameController.text.trim();
     setState(() {
       _saving = true;
       _error = null;
@@ -881,6 +891,36 @@ class _CreateCommitmentScreenState extends State<CreateCommitmentScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  CommitmentDraft _buildDraft(String name) {
+    if (_isReduce) {
+      final planId = const Uuid().v4();
+      return CommitmentDraft(
+        type: CommitmentType.reduce.name,
+        name: name,
+        targetApps: _selectedPackages.toList(),
+        days: List<int>.from(_days)..sort(),
+        scheduleId: 'taper_schedule_$planId',
+        planId: planId,
+        baselineDailyMinutes: _baselineMinutes,
+        targetDailyMinutes: int.parse(_targetController.text.trim()),
+        durationDays: _durationDays,
+      );
+    }
+    return CommitmentDraft(
+      type: CommitmentType.protect.name,
+      name: name,
+      targetApps: _selectedPackages.toList(),
+      days: List<int>.from(_days)..sort(),
+      scheduleId: const Uuid().v4(),
+      protectMode: _protectMode == _ProtectMode.period ? 'period' : 'limit',
+      durationLimitMinutes: _protectMode == _ProtectMode.limit
+          ? _limitMinutes
+          : null,
+      startMinute: _startTime.hour * 60 + _startTime.minute,
+      endMinute: _endTime.hour * 60 + _endTime.minute,
+    );
   }
 
   void _goBack() {

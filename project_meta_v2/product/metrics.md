@@ -1,5 +1,9 @@
 # Metrics and Today Cards
 
+## Phase 9 Insights implementation
+
+The `/insights` destination now uses direct UsageStats/UsageEvents evidence rather than Focus Score. Free users receive the latest 7 complete days; Premium users may select 7 or 30 complete days. The exact metric definitions and provenance are canonical in [insights.md](insights.md). Reduce analysis and recorded override analysis are Premium-only and are omitted when their source data is unavailable. Universal adherence, verified outcomes, recovery, grace, and time-of-day pattern metrics are not currently claimed.
+
 ## Focus Score retirement
 
 Focus Score is retired from Revoke 2.0. Legacy storage/UI may remain temporarily for migration, but no opaque composite score should replace it or drive the v2 information architecture.
@@ -10,7 +14,7 @@ The current Today surface uses only existing truthful proxies: native daily usag
 
 ## Today goal
 
-Home answers: “Am I keeping the Commitments I made, and where am I struggling?” Cards should be direct and understandable.
+Today answers: “Am I keeping the Commitments I made, and where am I struggling?” Cards should be direct and understandable. Insights separately explains historical usage evidence and trends.
 
 ### Active Commitment
 

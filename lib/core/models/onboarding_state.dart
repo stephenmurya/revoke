@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'commitment_draft.dart';
+
 /// Versioned, explicit progress for the v2 onboarding journey.
 ///
 /// This record is intentionally independent of nickname, Circle membership,
@@ -12,9 +14,18 @@ enum OnboardingStep {
   usagePermission,
   realityCheck,
   intent,
+
+  /// Retained for migration of Phase 4 records. New users use commitmentDraft.
   firstCommitment,
+  commitmentDraft,
   enforcementPermissions,
   intervention,
+  overrideAuthority,
+  circleSetup,
+  commitmentReview,
+  premium,
+  creditBacking,
+  readyToActivate,
   review,
   complete,
 }
@@ -22,11 +33,18 @@ enum OnboardingStep {
 @immutable
 class OnboardingState {
   const OnboardingState({
-    this.version = 2,
+    this.version = 3,
     this.step = OnboardingStep.welcome,
     this.nickname,
     this.intent,
     this.firstCommitmentId,
+    this.commitmentDraft,
+    this.overrideAuthority = 'self',
+    this.circleId,
+    this.selectedCircleMemberIds = const <String>[],
+    this.creditBackingSelected = false,
+    this.creditBackingAmount,
+    this.creditGracePolicy,
     this.createdAt,
     this.updatedAt,
   });
@@ -36,6 +54,13 @@ class OnboardingState {
   final String? nickname;
   final String? intent;
   final String? firstCommitmentId;
+  final CommitmentDraft? commitmentDraft;
+  final String overrideAuthority;
+  final String? circleId;
+  final List<String> selectedCircleMemberIds;
+  final bool creditBackingSelected;
+  final int? creditBackingAmount;
+  final String? creditGracePolicy;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -47,6 +72,13 @@ class OnboardingState {
     String? nickname,
     String? intent,
     String? firstCommitmentId,
+    CommitmentDraft? commitmentDraft,
+    String? overrideAuthority,
+    String? circleId,
+    List<String>? selectedCircleMemberIds,
+    bool? creditBackingSelected,
+    int? creditBackingAmount,
+    String? creditGracePolicy,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -56,6 +88,15 @@ class OnboardingState {
       nickname: nickname ?? this.nickname,
       intent: intent ?? this.intent,
       firstCommitmentId: firstCommitmentId ?? this.firstCommitmentId,
+      commitmentDraft: commitmentDraft ?? this.commitmentDraft,
+      overrideAuthority: overrideAuthority ?? this.overrideAuthority,
+      circleId: circleId ?? this.circleId,
+      selectedCircleMemberIds:
+          selectedCircleMemberIds ?? this.selectedCircleMemberIds,
+      creditBackingSelected:
+          creditBackingSelected ?? this.creditBackingSelected,
+      creditBackingAmount: creditBackingAmount ?? this.creditBackingAmount,
+      creditGracePolicy: creditGracePolicy ?? this.creditGracePolicy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -67,6 +108,13 @@ class OnboardingState {
     'nickname': nickname,
     'intent': intent,
     'firstCommitmentId': firstCommitmentId,
+    'commitmentDraft': commitmentDraft?.toJson(),
+    'overrideAuthority': overrideAuthority,
+    'circleId': circleId,
+    'selectedCircleMemberIds': selectedCircleMemberIds,
+    'creditBackingSelected': creditBackingSelected,
+    'creditBackingAmount': creditBackingAmount,
+    'creditGracePolicy': creditGracePolicy,
     'createdAtMs': createdAt?.millisecondsSinceEpoch,
     'updatedAtMs': updatedAt?.millisecondsSinceEpoch,
   };
@@ -83,6 +131,13 @@ class OnboardingState {
       nickname: _string(json['nickname']),
       intent: _string(json['intent']),
       firstCommitmentId: _string(json['firstCommitmentId']),
+      commitmentDraft: _draft(json['commitmentDraft']),
+      overrideAuthority: _string(json['overrideAuthority']) ?? 'self',
+      circleId: _string(json['circleId']),
+      selectedCircleMemberIds: _strings(json['selectedCircleMemberIds']),
+      creditBackingSelected: json['creditBackingSelected'] == true,
+      creditBackingAmount: _integer(json['creditBackingAmount']),
+      creditGracePolicy: _string(json['creditGracePolicy']),
       createdAt: _date(json['createdAtMs']),
       updatedAt: _date(json['updatedAtMs']),
     );
@@ -96,6 +151,30 @@ class OnboardingState {
   static DateTime? _date(dynamic value) {
     if (value is! num || value <= 0) return null;
     return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+  }
+
+  static int? _integer(dynamic value) {
+    return switch (value) {
+      num() => value.toInt(),
+      String() => int.tryParse(value),
+      _ => null,
+    };
+  }
+
+  static List<String> _strings(dynamic value) =>
+      (value is List ? value : const [])
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+
+  static CommitmentDraft? _draft(dynamic value) {
+    if (value is! Map) return null;
+    try {
+      return CommitmentDraft.fromJson(Map<String, dynamic>.from(value));
+    } catch (_) {
+      return null;
+    }
   }
 }
 

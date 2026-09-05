@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="revoke_space_xs">4dp</dimen>
+    <dimen name="revoke_space_sm">8dp</dimen>
+    <dimen name="revoke_space_md">12dp</dimen>
+    <dimen name="revoke_space_lg">16dp</dimen>
+    <dimen name="revoke_space_xl">24dp</dimen>
+    <dimen name="revoke_space_xxl">32dp</dimen>
+    <dimen name="revoke_radius_control">8dp</dimen>
+    <dimen name="revoke_radius_card">12dp</dimen>
+    <dimen name="revoke_radius_large">16dp</dimen>
+    <dimen name="revoke_button_height">56dp</dimen>
+    <dimen name="revoke_icon_standard">24dp</dimen>
+</resources>

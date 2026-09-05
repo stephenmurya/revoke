@@ -72,11 +72,12 @@ class AppTheme {
     final brightness = _resolveEffectiveBrightness();
     final accent = _resolveEffectiveAccent();
     final isDark = brightness == Brightness.dark;
-    final surface = isDark ? const Color(0xFF10131A) : const Color(0xFFFFFFFF);
-    final onSurface = isDark
-        ? const Color(0xFFFFFFFF)
-        : const Color(0xFF000000);
-    final muted = onSurface.withValues(alpha: 0.65);
+    final surface = isDark
+        ? RevokePalette.surfaceDark
+        : RevokePalette.surfaceLight;
+    final muted = isDark
+        ? RevokePalette.textSecondaryDark
+        : RevokePalette.textSecondaryLight;
 
     return InputDecoration(
       hintText: hintText,
@@ -94,7 +95,9 @@ class AppTheme {
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: RevokeRadii.controlRadius,
-        borderSide: BorderSide(color: onSurface.withValues(alpha: 0.10)),
+        borderSide: BorderSide(
+          color: isDark ? RevokePalette.borderDark : RevokePalette.borderLight,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: RevokeRadii.controlRadius,
@@ -111,7 +114,9 @@ class AppTheme {
         fontWeight: FontWeight.w700,
       ),
       hintStyle: bodyMedium.copyWith(
-        color: onSurface.withValues(alpha: 0.55),
+        color: isDark
+            ? RevokePalette.textMutedDark
+            : RevokePalette.textMutedLight,
         letterSpacing: 0.2,
         fontWeight: FontWeight.w500,
       ),
@@ -127,36 +132,42 @@ class AppTheme {
 
     // Fixed neutral surfaces. Avoid Material seed tinting.
     final Color background = isDark
-        ? const Color(0xFF000000)
-        : const Color(0xFFF2F2F7);
+        ? RevokePalette.backgroundDark
+        : RevokePalette.backgroundLight;
     final Color surface = isDark
-        ? const Color(0xFF10131A)
-        : const Color(0xFFFFFFFF);
+        ? RevokePalette.surfaceDark
+        : RevokePalette.surfaceLight;
     final Color surfaceElevated = isDark
-        ? const Color(0xFF141923)
-        : const Color(0xFFFFFFFF);
+        ? RevokePalette.elevatedDark
+        : RevokePalette.elevatedLight;
     final Color surfaceSubtle = isDark
-        ? const Color(0xFF0D1117)
-        : const Color(0xFFF2F2F7);
+        ? RevokePalette.subtleDark
+        : RevokePalette.subtleLight;
     final Color onSurface = isDark
-        ? const Color(0xFFFFFFFF)
-        : const Color(0xFF000000);
-    final Color textSecondary = onSurface.withValues(
-      alpha: isDark ? 0.70 : 0.75,
-    );
-    final Color danger = const Color(0xFFFF3B30);
-    final Color success = const Color(0xFF34C759);
-    final Color warning = const Color(0xFFFFCC00);
+        ? RevokePalette.textPrimaryDark
+        : RevokePalette.textPrimaryLight;
+    final Color textSecondary = isDark
+        ? RevokePalette.textSecondaryDark
+        : RevokePalette.textSecondaryLight;
+    final Color danger = isDark
+        ? RevokePalette.destructiveDark
+        : RevokePalette.destructive;
+    final Color success = isDark
+        ? RevokePalette.successDark
+        : RevokePalette.success;
+    final Color warning = isDark
+        ? RevokePalette.warningDark
+        : RevokePalette.warning;
     final Color enforcement = isDark
-        ? const Color(0xFFFF915A)
-        : const Color(0xFFC2410C);
+        ? RevokePalette.enforcementDark
+        : RevokePalette.enforcementLight;
     final Color textMuted = isDark
-        ? const Color(0xFF6E7888)
-        : onSurface.withValues(alpha: 0.55);
+        ? RevokePalette.textMutedDark
+        : RevokePalette.textMutedLight;
     final Color borderSubtle = isDark
-        ? const Color(0xFF273142)
-        : onSurface.withValues(alpha: 0.10);
-    final Color disabled = onSurface.withValues(alpha: 0.38);
+        ? RevokePalette.borderDark
+        : RevokePalette.borderLight;
+    final Color disabled = onSurface.withValues(alpha: 0.42);
 
     final ColorScheme seedScheme = ColorScheme.fromSeed(
       seedColor: safeAccent,
@@ -255,6 +266,67 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         titleTextStyle: h2.copyWith(color: onSurface),
         iconTheme: IconThemeData(color: onSurface),
+      ),
+
+      dividerTheme: DividerThemeData(
+        color: borderSubtle,
+        thickness: RevokeBorders.subtle,
+        space: RevokeSpacing.lg,
+      ),
+
+      dialogTheme: DialogThemeData(
+        backgroundColor: surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        elevation: RevokeElevation.raised,
+        shape: const RoundedRectangleBorder(
+          borderRadius: RevokeRadii.largeRadius,
+        ),
+        titleTextStyle: sectionTitle.copyWith(color: onSurface),
+        contentTextStyle: body.copyWith(color: textSecondary),
+      ),
+
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: surfaceElevated,
+        elevation: RevokeElevation.raised,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(RevokeRadii.large),
+          ),
+        ),
+      ),
+
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: surfaceElevated,
+        contentTextStyle: bodySecondary.copyWith(color: onSurface),
+        actionTextColor: safeAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: const RoundedRectangleBorder(
+          borderRadius: RevokeRadii.controlRadius,
+        ),
+      ),
+
+      chipTheme: ChipThemeData(
+        backgroundColor: surfaceSubtle,
+        selectedColor: safeAccent.withValues(alpha: 0.14),
+        disabledColor: disabled.withValues(alpha: 0.08),
+        side: BorderSide(color: borderSubtle, width: RevokeBorders.subtle),
+        shape: const RoundedRectangleBorder(
+          borderRadius: RevokeRadii.pillRadius,
+        ),
+        labelStyle: label.copyWith(color: onSurface),
+        secondaryLabelStyle: label.copyWith(color: textSecondary),
+        padding: const EdgeInsets.symmetric(
+          horizontal: RevokeSpacing.md,
+          vertical: RevokeSpacing.xs,
+        ),
+      ),
+
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: safeAccent,
+        linearTrackColor: borderSubtle,
+        circularTrackColor: borderSubtle,
       ),
 
       // Buttons

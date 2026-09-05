@@ -33,9 +33,9 @@ class SquadService {
       await callable.call();
     } on FirebaseFunctionsException catch (error) {
       final message = (error.message ?? '').trim();
-      throw Exception(message.isEmpty
-          ? 'Circle creation requires Premium.'
-          : message);
+      throw Exception(
+        message.isEmpty ? 'Circle creation requires Premium.' : message,
+      );
     }
   }
 

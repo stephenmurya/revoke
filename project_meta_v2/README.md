@@ -45,6 +45,7 @@ Accountability Circles are optional and use granular permissions. Commitment Cre
 - `product/onboarding.md`: deterministic onboarding, Commitment creation, paywall, and activation.
 - `product/monetization.md`: Premium and Commitment Credits product model.
 - `product/metrics.md`: direct Today evidence and metric semantics; Focus Score retirement.
+- `product/insights.md`: Phase 9 Insights hierarchy, metric definitions, range support, provenance, and deferred analysis.
 - `product/open-questions.md`: genuinely unresolved product and policy decisions.
 
 ### Architecture
@@ -76,6 +77,7 @@ Accountability Circles are optional and use granular permissions. Commitment Cre
 
 - `audits/2026-09-04-revival-audit.md`: source-verified reconstruction of the repository as of 2026-09-04.
 - `audits/2026-09-04-design-system-audit.md`: source-verified current Flutter/native UI and design-system audit.
+- `audits/2026-09-05-visual-polish-audit.md`: point-in-time Phase 10 visual consistency and native alignment audit.
 
 The Phase 1 implementation review is [review/docs/phase-1-implementation.md](review/docs/phase-1-implementation.md). It records the implemented shell/foundation boundary and the UI intentionally deferred to later phases.
 
@@ -86,6 +88,12 @@ The Phase 4 onboarding review is [review/docs/phase-4-onboarding-implementation.
 The Phase 5 Circle and Override Authority review is [review/docs/phase-5-circle-override-implementation.md](review/docs/phase-5-circle-override-implementation.md). It records the least-privilege Circle projection, explicit authority policy, fixed quorum, server resolution boundary, and durable native approval delivery.
 
 The Phase 6 Premium implementation review is [review/docs/phase-6-premium-implementation.md](review/docs/phase-6-premium-implementation.md). It records the prepaid Play entitlement boundary, disclosure requirement, server verification/grant projection, capability gates, and remaining Play Console lifecycle work.
+
+The Phase 8 commercial onboarding review is [review/docs/phase-8-commercial-onboarding.md](review/docs/phase-8-commercial-onboarding.md). It records the draft-first first-run journey, capability resolution, authority/Circle/Premium/Credit branches, coordinated activation, migration, and resume boundaries.
+
+The Phase 9 Insights review is [review/docs/phase-9-insights-implementation.md](review/docs/phase-9-insights-implementation.md). It records the direct usage-evidence hierarchy, Free/Premium range boundary, Reduce and override analysis, chart architecture, Focus Score cleanup, and deferred metrics.
+
+The Phase 10 visual polish review is [review/docs/phase-10-implementation.md](review/docs/phase-10-implementation.md). It records semantic theme refinement, shared component states, native resource alignment, accessibility/code review, and intentionally deferred device-level visual verification.
 
 ### Archive
 

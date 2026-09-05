@@ -2,7 +2,7 @@
 
 Status: Accepted target mobile information architecture. Phase 1 implemented the global labels and shell destinations; Phase 3 provides the user-facing Commitments management and creation layer; Phase 5 provides the optional Circle and Override Authority surface while retaining legacy persistence and compatibility routes beneath it.
 
-On first entry, the v2 onboarding route is a deterministic state-machine surface. It is not a Circle gate and it does not require all enforcement permissions before the user can see the Reality Check. After a first Commitment is saved, onboarding completes the enforcement-permission and intervention explanation stages before returning the user to Today.
+On first entry, the v2 onboarding route is a deterministic state-machine surface. It is not a Circle gate and it does not require all enforcement permissions before the user can see the Reality Check. The first Commitment remains a persisted semantic draft until the authority, commercial, and optional Credit decisions are complete; only then is it activated and followed by Today.
 
 ## Primary navigation
 

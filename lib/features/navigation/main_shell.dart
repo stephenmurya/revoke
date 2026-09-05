@@ -97,7 +97,11 @@ class _MainShellState extends State<MainShell> {
               surfaceTintColor: Colors.transparent,
               elevation: RevokeElevation.none,
               automaticallyImplyLeading: false,
-              title: Text(_pageTitle(location)),
+              title: Text(
+                _pageTitle(location),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               actions: [
                 ValueListenableBuilder(
                   valueListenable: CreditService.instance.wallet,

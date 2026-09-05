@@ -6,6 +6,8 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../core/services/settings_sync_service.dart';
 import '../../core/services/theme_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/revoke_tokens.dart';
+import '../../core/utils/theme_extensions.dart';
 
 class AppearanceScreen extends StatelessWidget {
   const AppearanceScreen({super.key});
@@ -27,19 +29,24 @@ class AppearanceScreen extends StatelessWidget {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(8, 12, 8, 24),
+          padding: const EdgeInsets.fromLTRB(
+            RevokeSpacing.lg,
+            RevokeSpacing.sm,
+            RevokeSpacing.lg,
+            RevokeSpacing.xl,
+          ),
           children: [
             _PreviewCard(scheme: scheme),
             const SizedBox(height: 16),
             _Section(
-              title: 'Schedule Mode',
-              subtitle: 'Day Shift vs Night Shift. Or obey the system.',
+              title: 'Theme',
+              subtitle: 'Choose light, dark, or follow the system.',
               child: _ThemeModePicker(scheme: scheme),
             ),
             const SizedBox(height: 16),
             _Section(
-              title: 'System Accent',
-              subtitle: 'Choose a Revoke accent.',
+              title: 'Accent',
+              subtitle: 'Choose a contrast-tested Revoke accent.',
               child: _AccentPicker(scheme: scheme),
             ),
           ],
@@ -67,15 +74,15 @@ class _Section extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.onSurface.withValues(alpha: 0.10)),
+        borderRadius: RevokeRadii.cardRadius,
+        border: Border.all(color: context.colors.borderSubtle),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      padding: const EdgeInsets.all(RevokeSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: AppTheme.lgMedium),
-          const SizedBox(height: 6),
+          const SizedBox(height: RevokeSpacing.xs),
           Text(
             subtitle,
             style: AppTheme.bodySmall.copyWith(
@@ -83,7 +90,7 @@ class _Section extends StatelessWidget {
               height: 1.35,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: RevokeSpacing.md),
           child,
         ],
       ),
@@ -101,45 +108,45 @@ class _PreviewCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.onSurface.withValues(alpha: 0.10)),
+        borderRadius: RevokeRadii.cardRadius,
+        border: Border.all(color: context.colors.borderSubtle),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      padding: const EdgeInsets.all(RevokeSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Preview', style: AppTheme.smBold.copyWith(letterSpacing: 1.1)),
-          const SizedBox(height: 10),
+          Text('Preview', style: context.text.label),
+          const SizedBox(height: RevokeSpacing.sm),
           Container(
             decoration: BoxDecoration(
               color: Theme.of(context).scaffoldBackgroundColor,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: RevokeRadii.cardRadius,
               border: Border.all(color: scheme.primary.withValues(alpha: 0.45)),
             ),
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            padding: const EdgeInsets.all(RevokeSpacing.md),
             child: Row(
               children: [
                 Container(
-                  width: 42,
-                  height: 42,
+                  width: RevokeTouchTargets.minimum,
+                  height: RevokeTouchTargets.minimum,
                   decoration: BoxDecoration(
                     color: scheme.primary,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: RevokeRadii.controlRadius,
                   ),
                   child: Icon(PhosphorIcons.shield, color: scheme.onPrimary),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: RevokeSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Focus Score', style: AppTheme.baseMedium),
-                      const SizedBox(height: 2),
-                      Text('842', style: AppTheme.xlBold),
+                      Text('Usage Insights', style: AppTheme.baseMedium),
+                      const SizedBox(height: RevokeSpacing.xs),
+                      Text('7-day view', style: context.text.sectionTitle),
                     ],
                   ),
                 ),
-                ElevatedButton(onPressed: () {}, child: const Text('ENFORCE')),
+                ElevatedButton(onPressed: () {}, child: const Text('Insights')),
               ],
             ),
           ),
@@ -180,7 +187,7 @@ class _ThemeModePicker extends StatelessWidget {
               selected: mode == ThemeMode.system,
               onTap: () => setMode(ThemeMode.system),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: RevokeSpacing.sm),
             _ModeCard(
               scheme: scheme,
               title: 'Day Shift',
@@ -189,7 +196,7 @@ class _ThemeModePicker extends StatelessWidget {
               selected: mode == ThemeMode.light,
               onTap: () => setMode(ThemeMode.light),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: RevokeSpacing.sm),
             _ModeCard(
               scheme: scheme,
               title: 'Night Shift',
@@ -228,14 +235,14 @@ class _ModeCard extends StatelessWidget {
       color: selected
           ? scheme.primary.withValues(alpha: 0.14)
           : Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: RevokeRadii.cardRadius,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: RevokeRadii.cardRadius,
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: RevokeRadii.cardRadius,
             border: Border.all(
               color: selected
                   ? scheme.primary.withValues(alpha: 0.75)
@@ -252,7 +259,7 @@ class _ModeCard extends StatelessWidget {
                   color: selected
                       ? scheme.primary
                       : scheme.onSurface.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: RevokeRadii.controlRadius,
                 ),
                 child: Icon(
                   icon,
@@ -261,7 +268,7 @@ class _ModeCard extends StatelessWidget {
                       : scheme.onSurface.withValues(alpha: 0.85),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: RevokeSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,42 +372,47 @@ class _AccentSwatch extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Material(
-            color: Colors.transparent,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onTap,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  border: Border.all(
-                    color: selected
-                        ? scheme.onSurface.withValues(alpha: 0.85)
-                        : scheme.onSurface.withValues(alpha: 0.18),
-                    width: selected ? 2.5 : 1.5,
+          Semantics(
+            button: true,
+            selected: selected,
+            label: '$label accent${selected ? ', selected' : ''}',
+            child: Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onTap,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color,
+                    border: Border.all(
+                      color: selected
+                          ? scheme.onSurface.withValues(alpha: 0.85)
+                          : scheme.onSurface.withValues(alpha: 0.18),
+                      width: selected ? 2.5 : 1.5,
+                    ),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.45),
+                              blurRadius: 18,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
                   ),
-                  boxShadow: selected
-                      ? [
-                          BoxShadow(
-                            color: color.withValues(alpha: 0.45),
-                            blurRadius: 18,
-                            spreadRadius: 1,
-                          ),
-                        ]
+                  child: selected
+                      ? Icon(PhosphorIcons.check, color: checkColor, size: 24)
                       : null,
                 ),
-                child: selected
-                    ? Icon(PhosphorIcons.check, color: checkColor, size: 24)
-                    : null,
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: RevokeSpacing.sm),
           Text(
             label,
             textAlign: TextAlign.center,

@@ -41,6 +41,9 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
   Color get actionPrimary => accent;
   Color get actionSecondary => surfaceElevated;
 
+  /// Semantic alias used by enforcement and intervention surfaces.
+  Color get blocked => enforcement;
+
   @override
   AppColorsExtension copyWith({
     Color? accent,

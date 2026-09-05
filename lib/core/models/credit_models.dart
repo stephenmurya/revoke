@@ -19,7 +19,10 @@ enum CreditPurchaseProduct {
 }
 
 class CreditWallet {
-  const CreditWallet({required this.availableCredits, required this.lockedCredits});
+  const CreditWallet({
+    required this.availableCredits,
+    required this.lockedCredits,
+  });
 
   const CreditWallet.empty() : availableCredits = 0, lockedCredits = 0;
 
@@ -31,22 +34,29 @@ class CreditWallet {
   factory CreditWallet.fromFirestore(Map<String, dynamic>? data) {
     final source = data ?? const <String, dynamic>{};
     return CreditWallet(
-      availableCredits: (((source['availableCredits'] ?? source['available_credits']) as num?)
-                  ?.toInt()
-                  .clamp(0, 100000000) ??
-              0)
-          .toInt(),
-      lockedCredits: (((source['lockedCredits'] ?? source['locked_credits']) as num?)
-                  ?.toInt()
-                  .clamp(0, 100000000) ??
-              0)
-          .toInt(),
+      availableCredits:
+          (((source['availableCredits'] ?? source['available_credits']) as num?)
+                      ?.toInt()
+                      .clamp(0, 100000000) ??
+                  0)
+              .toInt(),
+      lockedCredits:
+          (((source['lockedCredits'] ?? source['locked_credits']) as num?)
+                      ?.toInt()
+                      .clamp(0, 100000000) ??
+                  0)
+              .toInt(),
     );
   }
 
-  CreditWallet copyWith({int? availableCredits, int? lockedCredits}) => CreditWallet(
-        availableCredits: (availableCredits ?? this.availableCredits).clamp(0, 100000000).toInt(),
-        lockedCredits: (lockedCredits ?? this.lockedCredits).clamp(0, 100000000).toInt(),
+  CreditWallet copyWith({int? availableCredits, int? lockedCredits}) =>
+      CreditWallet(
+        availableCredits: (availableCredits ?? this.availableCredits)
+            .clamp(0, 100000000)
+            .toInt(),
+        lockedCredits: (lockedCredits ?? this.lockedCredits)
+            .clamp(0, 100000000)
+            .toInt(),
       );
 }
 
@@ -65,7 +75,10 @@ class CreditLedgerEntry {
   final DateTime? createdAt;
   final String? description;
 
-  factory CreditLedgerEntry.fromFirestore(String id, Map<String, dynamic> data) {
+  factory CreditLedgerEntry.fromFirestore(
+    String id,
+    Map<String, dynamic> data,
+  ) {
     final rawDate = data['createdAt'];
     final createdAt = rawDate is Timestamp
         ? rawDate.toDate()
@@ -97,7 +110,10 @@ class CreditBackingSummary {
   final String status;
   final DateTime? endAt;
 
-  factory CreditBackingSummary.fromFirestore(String id, Map<String, dynamic> data) {
+  factory CreditBackingSummary.fromFirestore(
+    String id,
+    Map<String, dynamic> data,
+  ) {
     DateTime? readDate(Object? value) {
       if (value is Timestamp) return value.toDate();
       if (value is String) return DateTime.tryParse(value);

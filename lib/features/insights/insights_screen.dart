@@ -1,581 +1,535 @@
-import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
-import '../../core/models/schedule_model.dart';
+import '../../core/models/insights_models.dart';
 import '../../core/models/usage_insights_model.dart';
-import '../../core/services/app_discovery_service.dart';
-import '../../core/services/schedule_service.dart';
-import '../../core/services/taper_plan_service.dart';
-import '../../core/services/usage_insights_service.dart';
-import '../../core/theme/app_theme.dart';
-import '../../core/utils/schedule_block_validator.dart';
+import '../../core/services/insights_repository.dart';
+import '../../core/services/premium_entitlement_service.dart';
+import '../../core/theme/revoke_tokens.dart';
 import '../../core/utils/theme_extensions.dart';
+import '../../core/widgets/revoke_components.dart';
 import '../monitor/widgets/single_app_icon.dart';
+import 'widgets/usage_trend_chart.dart';
 
 class InsightsScreen extends StatelessWidget {
   const InsightsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: SafeArea(top: false, child: _InsightsBody()));
-  }
+  Widget build(BuildContext context) => const _InsightsBody();
 }
 
 class AppInsightsScreen extends StatelessWidget {
-  final String packageName;
-
   const AppInsightsScreen({super.key, required this.packageName});
+
+  final String packageName;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<AppInfo>(
-      future: AppDiscoveryService.getAppDetails(packageName),
-      builder: (context, snapshot) {
-        final app = snapshot.data;
-        final title = app?.name ?? packageName;
-        return Scaffold(
-          appBar: AppBar(
-            titleSpacing: 0,
-            title: Row(
-              children: [
-                SingleAppIcon(packageName: packageName, size: 30),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.lgMedium,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          body: SafeArea(
-            top: false,
-            child: _InsightsBody(packageName: packageName),
-          ),
-        );
-      },
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_displayPackageName(packageName)),
+        leading: BackButton(onPressed: () => context.pop()),
+      ),
+      body: SafeArea(
+        top: false,
+        child: _InsightsBody(packageName: packageName),
+      ),
     );
   }
 }
 
-enum _InsightsTab { today, week, trend }
-
-extension on _InsightsTab {
-  String get label {
-    return switch (this) {
-      _InsightsTab.today => 'Today',
-      _InsightsTab.week => 'This Week',
-      _InsightsTab.trend => 'Trend',
-    };
-  }
-
-  String get mode {
-    return switch (this) {
-      _InsightsTab.today => 'day',
-      _InsightsTab.week => 'week',
-      _InsightsTab.trend => 'trend',
-    };
-  }
-}
-
 class _InsightsBody extends StatefulWidget {
-  final String? packageName;
-
   const _InsightsBody({this.packageName});
+
+  final String? packageName;
 
   @override
   State<_InsightsBody> createState() => _InsightsBodyState();
 }
 
 class _InsightsBodyState extends State<_InsightsBody> {
-  _InsightsTab _selectedTab = _InsightsTab.today;
-  DateTime _selectedDay = _startOfDay(DateTime.now());
-  DateTime _selectedWeekAnchor = _startOfDay(DateTime.now());
-  int _trendPeriodDays = 30;
-  UsageInsightsSnapshot? _snapshot;
+  InsightsOverview? _overview;
+  InsightsAdvancedData? _advanced;
   bool _loading = true;
+  bool _loadingAdvanced = false;
   bool _refreshing = false;
-  int _dailyGoalMinutes = 0;
+  String? _error;
+  int _periodDays = 7;
+  late bool _hasPremium;
 
   bool get _isAppDetail => widget.packageName?.trim().isNotEmpty == true;
 
   @override
   void initState() {
     super.initState();
-    _loadDailyGoal();
-    _loadInsights();
+    _hasPremium = PremiumEntitlementService.instance.hasPremium;
+    PremiumEntitlementService.instance.state.addListener(_onEntitlementChanged);
+    _load();
   }
 
-  Future<void> _loadDailyGoal() async {
-    if (_isAppDetail) return;
-    try {
-      final activePlan = await TaperPlanService.getActivePlan();
-      if (!mounted) return;
-      if (activePlan != null) {
-        setState(() {
-          _dailyGoalMinutes = activePlan.limitFor(DateTime.now());
-        });
-        return;
-      }
+  @override
+  void dispose() {
+    PremiumEntitlementService.instance.state.removeListener(
+      _onEntitlementChanged,
+    );
+    super.dispose();
+  }
 
-      final schedules = await ScheduleService.getSchedules();
-      final caps =
-          schedules
-              .where(_isUsageLimitSessionActive)
-              .map((schedule) => schedule.durationLimit?.inMinutes ?? 0)
-              .where((minutes) => minutes > 0)
-              .toList()
-            ..sort();
+  void _onEntitlementChanged() {
+    final next = PremiumEntitlementService.instance.hasPremium;
+    if (!mounted || next == _hasPremium) return;
+    setState(() {
+      _hasPremium = next;
+      if (!next) _periodDays = 7;
+    });
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final periodDays = _hasPremium ? _periodDays : 7;
+    if (mounted) {
+      setState(() {
+        _refreshing = _overview != null;
+        _loading = _overview == null;
+        _error = null;
+        _advanced = null;
+      });
+    }
+    try {
+      final overview = _isAppDetail
+          ? InsightsOverview(
+              snapshot: await InsightsRepository.loadPackageOverview(
+                packageName: widget.packageName!,
+                periodDays: periodDays,
+              ),
+              appNames: const <String, String>{},
+            )
+          : await InsightsRepository.loadOverview(periodDays: periodDays);
       if (!mounted) return;
       setState(() {
-        _dailyGoalMinutes = caps.isEmpty ? 0 : caps.first;
+        _overview = overview;
+        _loading = false;
+        _refreshing = false;
       });
+      if (_hasPremium && !_isAppDetail) {
+        unawaited(_loadAdvanced(periodDays));
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _dailyGoalMinutes = 0;
-      });
-    }
-  }
-
-  bool _isUsageLimitSessionActive(ScheduleModel schedule) {
-    if (!schedule.isActive || schedule.type != ScheduleType.usageLimit) {
-      return false;
-    }
-    if (!schedule.days.contains(DateTime.now().weekday)) {
-      return false;
-    }
-    if (schedule.blocks.isEmpty) return true;
-    final now = TimeOfDay.fromDateTime(DateTime.now());
-    final nowMin = now.hour * 60 + now.minute;
-    return ScheduleBlockValidator.isMinuteWithinBlocks(schedule.blocks, nowMin);
-  }
-
-  DateTime get _activeAnchorDate {
-    return switch (_selectedTab) {
-      _InsightsTab.today => _selectedDay,
-      _InsightsTab.week => _selectedWeekAnchor,
-      _InsightsTab.trend => DateTime.now(),
-    };
-  }
-
-  int? get _activePeriodDays {
-    return _selectedTab == _InsightsTab.trend ? _trendPeriodDays : null;
-  }
-
-  Future<void> _loadInsights({bool forceLoading = false}) async {
-    final mode = _selectedTab.mode;
-    final anchor = _activeAnchorDate;
-    final periodDays = _activePeriodDays;
-    if (forceLoading && mounted) {
-      setState(() {
-        _loading = true;
-      });
-    }
-
-    final cached = await UsageInsightsService.readCache(
-      mode: mode,
-      anchorDate: anchor,
-      packageName: widget.packageName,
-      periodDays: periodDays,
-    );
-    if (!mounted) return;
-    if (cached != null) {
-      setState(() {
-        _snapshot = cached;
         _loading = false;
+        _refreshing = false;
+        _error =
+            'Insights could not be refreshed. Your last view is still available.';
       });
     }
+  }
 
-    setState(() {
-      _refreshing = true;
-      _loading = cached == null;
-    });
-
+  Future<void> _loadAdvanced(int periodDays) async {
+    if (!mounted) return;
+    setState(() => _loadingAdvanced = true);
     try {
-      final fresh = await UsageInsightsService.refresh(
-        mode: mode,
-        anchorDate: anchor,
-        packageName: widget.packageName,
+      final advanced = await InsightsRepository.loadAdvanced(
         periodDays: periodDays,
       );
       if (!mounted) return;
-      setState(() {
-        _snapshot = fresh;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _snapshot ??= UsageInsightsSnapshot.empty(
-          mode: mode,
-          packageName: widget.packageName ?? '',
-          periodDays: periodDays ?? 1,
-        );
-        _loading = false;
-      });
+      setState(() => _advanced = advanced);
     } finally {
-      if (mounted) {
-        setState(() {
-          _refreshing = false;
-        });
-      }
+      if (mounted) setState(() => _loadingAdvanced = false);
     }
   }
 
-  void _selectTab(_InsightsTab tab) {
-    if (tab == _selectedTab) return;
-    setState(() {
-      _selectedTab = tab;
-      _snapshot = null;
-    });
-    _loadInsights(forceLoading: true);
-  }
-
-  void _shiftDay(int delta) {
-    final today = _startOfDay(DateTime.now());
-    final next = _startOfDay(_selectedDay.add(Duration(days: delta)));
-    if (next.isAfter(today)) return;
-    setState(() {
-      _selectedDay = next;
-      _snapshot = null;
-    });
-    _loadInsights(forceLoading: true);
-  }
-
-  void _shiftWeek(int deltaWeeks) {
-    final currentWeek = _startOfWeek(DateTime.now());
-    final next = _startOfWeek(
-      _selectedWeekAnchor.add(Duration(days: deltaWeeks * 7)),
-    );
-    if (next.isAfter(currentWeek)) return;
-    setState(() {
-      _selectedWeekAnchor = next;
-      _snapshot = null;
-    });
-    _loadInsights(forceLoading: true);
-  }
-
-  void _toggleTrendPeriod() {
-    setState(() {
-      _trendPeriodDays = _trendPeriodDays == 30 ? 14 : 30;
-      _snapshot = null;
-    });
-    _loadInsights(forceLoading: true);
+  Future<void> _selectPeriod(int periodDays) async {
+    if (periodDays == _periodDays) return;
+    if (periodDays > 7 && !_hasPremium) {
+      await context.push(
+        '/premium',
+        extra: 'Understand how your Commitments change your habits over time.',
+      );
+      if (!mounted) return;
+      final nowPremium = PremiumEntitlementService.instance.hasPremium;
+      if (!nowPremium) return;
+      setState(() => _hasPremium = true);
+    }
+    if (!mounted) return;
+    setState(() => _periodDays = periodDays);
+    await _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final overview = _overview;
     return RefreshIndicator(
-      color: context.scheme.primary,
-      onRefresh: () => _loadInsights(forceLoading: true),
+      color: context.colors.accent,
+      onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(8, 10, 8, 110),
+        padding: const EdgeInsets.fromLTRB(
+          RevokeSpacing.lg,
+          RevokeSpacing.sm,
+          RevokeSpacing.lg,
+          RevokeSpacing.xxl,
+        ),
         children: [
-          _buildTabs(),
-          const SizedBox(height: 10),
-          _buildSelector(),
-          const SizedBox(height: 10),
-          if (_loading)
-            Padding(
-              padding: const EdgeInsets.only(top: 60),
-              child: Center(
-                child: CircularProgressIndicator(color: context.scheme.primary),
+          if (_isAppDetail)
+            Text(
+              'Usage evidence for this app.',
+              style: context.text.bodySecondary.copyWith(
+                color: context.colors.textSecondary,
               ),
             )
-          else
-            _buildContent(_snapshot ?? UsageInsightsSnapshot.empty()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabs() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: context.scheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: context.scheme.outlineVariant.withValues(alpha: 0.7),
-        ),
-      ),
-      child: Row(
-        children: [
-          for (final tab in _InsightsTab.values)
-            Expanded(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => _selectTab(tab),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: tab == _selectedTab
-                        ? context.scheme.primary.withValues(alpha: 0.14)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    tab.label,
-                    textAlign: TextAlign.center,
-                    style: AppTheme.smBold.copyWith(
-                      color: tab == _selectedTab
-                          ? context.scheme.primary
-                          : context.colors.textSecondary,
-                    ),
-                  ),
-                ),
+          else ...[
+            Text(
+              'Understand how your usage is changing.',
+              style: context.text.bodySecondary.copyWith(
+                color: context.colors.textSecondary,
               ),
             ),
+            const SizedBox(height: RevokeSpacing.lg),
+            _buildPeriodSelector(),
+          ],
+          const SizedBox(height: RevokeSpacing.xl),
+          if (_refreshing) ...[
+            LinearProgressIndicator(
+              minHeight: RevokeBorders.subtle,
+              color: context.colors.accent,
+              backgroundColor: context.colors.borderSubtle,
+            ),
+            const SizedBox(height: RevokeSpacing.md),
+          ],
+          if (overview == null && _loading)
+            const SizedBox(
+              height: 260,
+              child: RevokeLoadingState(label: 'Loading Insights'),
+            )
+          else if (overview == null)
+            RevokeErrorState(
+              message: _error ?? 'Insights are unavailable.',
+              onRetry: _load,
+            )
+          else ...[
+            if (_error != null) _buildInlineError(_error!),
+            _buildOverview(overview),
+            if (overview.snapshot.hasUsageAccess) ...[
+              const SizedBox(height: RevokeSpacing.xl),
+              _buildTopApps(overview),
+              if (!_isAppDetail && _hasPremium) ...[
+                const SizedBox(height: RevokeSpacing.xl),
+                if (_loadingAdvanced && _advanced == null)
+                  const RevokeLoadingState(label: 'Loading Commitment insights')
+                else ...[
+                  if (_advanced?.reduceInsights.isNotEmpty == true)
+                    _buildReduceSection(_advanced!.reduceInsights, overview),
+                  if (_advanced?.overrideSummary != null) ...[
+                    const SizedBox(height: RevokeSpacing.xl),
+                    _buildOverrideSection(_advanced!.overrideSummary!),
+                  ],
+                ],
+              ] else if (!_isAppDetail) ...[
+                const SizedBox(height: RevokeSpacing.xl),
+                _buildPremiumPreview(),
+              ],
+            ] else ...[
+              const SizedBox(height: RevokeSpacing.xl),
+              _buildPermissionState(),
+            ],
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildSelector() {
-    final canForward = switch (_selectedTab) {
-      _InsightsTab.today => _startOfDay(
-        _selectedDay,
-      ).isBefore(_startOfDay(DateTime.now())),
-      _InsightsTab.week => _startOfWeek(
-        _selectedWeekAnchor,
-      ).isBefore(_startOfWeek(DateTime.now())),
-      _InsightsTab.trend => true,
-    };
-
-    return Row(
-      children: [
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          onPressed: _selectedTab == _InsightsTab.trend
-              ? _toggleTrendPeriod
-              : () {
-                  if (_selectedTab == _InsightsTab.today) {
-                    _shiftDay(-1);
-                  } else {
-                    _shiftWeek(-1);
-                  }
-                },
-          icon: Icon(PhosphorIcons.caretLeft),
-        ),
-        Expanded(
-          child: Text(
-            _selectorLabel(),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTheme.baseBold.copyWith(color: context.scheme.onSurface),
-          ),
-        ),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          onPressed: !canForward
-              ? null
-              : _selectedTab == _InsightsTab.trend
-              ? _toggleTrendPeriod
-              : () {
-                  if (_selectedTab == _InsightsTab.today) {
-                    _shiftDay(1);
-                  } else {
-                    _shiftWeek(1);
-                  }
-                },
-          icon: Icon(PhosphorIcons.caretRight),
-        ),
-      ],
-    );
-  }
-
-  String _selectorLabel() {
-    return switch (_selectedTab) {
-      _InsightsTab.today => _dayLabel(_selectedDay),
-      _InsightsTab.week => _weekLabel(_selectedWeekAnchor),
-      _InsightsTab.trend =>
-        _trendPeriodDays == 30 ? 'Last 1 Month' : 'Last 2 Weeks',
-    };
-  }
-
-  Widget _buildContent(UsageInsightsSnapshot snapshot) {
-    if (!snapshot.hasUsageAccess) {
-      return _buildPermissionState();
-    }
-    return switch (_selectedTab) {
-      _InsightsTab.today => _buildToday(snapshot),
-      _InsightsTab.week => _buildWeek(snapshot),
-      _InsightsTab.trend => _buildTrend(snapshot),
-    };
-  }
-
-  Widget _buildToday(UsageInsightsSnapshot snapshot) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_isAppDetail)
-          _buildAppMetricCard(
-            title: 'App use today',
-            minutes: snapshot.totalMinutes,
-          )
-        else
-          _UsageHeroCard(
-            snapshot: snapshot,
-            dailyGoalMinutes: _dailyGoalMinutes,
-            isRefreshing: _refreshing,
-            onOpenApp: _openAppInsights,
-          ),
-        const SizedBox(height: 10),
-        _UsageLineChartCard(
-          title: 'Usage by time',
-          snapshot: snapshot,
-          averageMinutes: null,
-          showPeak: true,
-        ),
-        if (!_isAppDetail) ...[
-          const SizedBox(height: 10),
-          _MostUsedAppsCard(apps: snapshot.topApps, onTap: _openAppInsights),
-          const SizedBox(height: 10),
-          _FocusCards(snapshot: snapshot),
+  Widget _buildPeriodSelector() {
+    return Semantics(
+      label: 'Insights period',
+      child: Row(
+        children: [
+          Expanded(child: _periodOption(7, '7 days')),
+          const SizedBox(width: RevokeSpacing.sm),
+          Expanded(child: _periodOption(30, '30 days')),
         ],
-      ],
+      ),
     );
   }
 
-  Widget _buildWeek(UsageInsightsSnapshot snapshot) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildAppMetricCard(
-          title: _isAppDetail ? 'Average app use' : 'Average screen time',
-          minutes: snapshot.averageDailyMinutes,
-        ),
-        const SizedBox(height: 10),
-        _UsageLineChartCard(
-          title: 'Week view',
-          snapshot: snapshot,
-          averageMinutes: snapshot.averageDailyMinutes,
-          showPeak: false,
-        ),
-        if (!_isAppDetail) ...[
-          const SizedBox(height: 10),
-          _MostUsedAppsCard(apps: snapshot.topApps, onTap: _openAppInsights),
-          const SizedBox(height: 10),
-          _FocusCards(snapshot: snapshot),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildTrend(UsageInsightsSnapshot snapshot) {
-    final isLess = snapshot.trendDeltaMinutes < 0;
-    final isMore = snapshot.trendDeltaMinutes > 0;
-    final color = isLess
-        ? context.colors.success
-        : isMore
-        ? context.colors.danger
-        : context.colors.textSecondary;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
-          decoration: _cardDecoration(context),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+  Widget _periodOption(int days, String label) {
+    final selected = days == _periodDays;
+    final premiumOnly = days > 7 && !_hasPremium;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: premiumOnly ? '$label, Premium' : label,
+      child: InkWell(
+        onTap: () => _selectPeriod(days),
+        borderRadius: RevokeRadii.controlRadius,
+        child: AnimatedContainer(
+          duration: RevokeMotion.state,
+          constraints: const BoxConstraints(
+            minHeight: RevokeTouchTargets.minimum,
+          ),
+          padding: const EdgeInsets.symmetric(vertical: RevokeSpacing.md),
+          decoration: BoxDecoration(
+            color: selected ? context.colors.accentSoft : Colors.transparent,
+            borderRadius: RevokeRadii.controlRadius,
+            border: Border.all(
+              color: selected
+                  ? context.colors.accent
+                  : context.colors.borderSubtle,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                _formatSignedMinutes(snapshot.trendDeltaMinutes),
-                textAlign: TextAlign.center,
-                style: AppTheme.size5xlBold.copyWith(
-                  color: context.scheme.onSurface,
-                  height: 0.95,
+                label,
+                style: context.text.label.copyWith(
+                  color: selected
+                      ? context.colors.accent
+                      : context.colors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 8),
+              if (premiumOnly) ...[
+                const SizedBox(width: RevokeSpacing.xs),
+                Icon(
+                  PhosphorIcons.lock,
+                  size: RevokeIconSizes.compact,
+                  color: context.colors.textMuted,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverview(InsightsOverview overview) {
+    final snapshot = overview.snapshot;
+    final comparison = snapshot.comparisonAvailable
+        ? _comparisonText(snapshot)
+        : 'Comparison will appear when both periods contain reliable data.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        RevokeSectionHeader(
+          title: 'Usage overview',
+          action: Text(
+            'Last ${snapshot.periodDays} complete days',
+            style: context.text.caption.copyWith(
+              color: context.colors.textMuted,
+            ),
+          ),
+        ),
+        const SizedBox(height: RevokeSpacing.md),
+        RevokeSurface(
+          padding: const EdgeInsets.all(RevokeSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                isLess
-                    ? 'Less Screen Time Per Day'
-                    : isMore
-                    ? 'More Screen Time Per Day'
-                    : 'No Change Per Day',
-                style: AppTheme.baseMedium.copyWith(
-                  color: context.colors.textSecondary,
-                ),
+                _formatMinutes(snapshot.averageDailyMinutes),
+                style: context.text.numericDisplay,
               ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isLess
-                          ? Icons.arrow_downward
-                          : isMore
-                          ? Icons.arrow_upward
-                          : Icons.remove,
-                      size: 15,
-                      color: color,
+              const SizedBox(height: RevokeSpacing.xs),
+              Text('Average daily usage', style: context.text.bodySecondary),
+              const SizedBox(height: RevokeSpacing.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: _overviewStat(
+                      'Total',
+                      _formatMinutes(snapshot.totalMinutes),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${isLess
-                          ? '-'
-                          : isMore
-                          ? '+'
-                          : ''}${snapshot.trendPercent}% change in this period',
-                      style: AppTheme.xsBold.copyWith(color: color),
+                  ),
+                  Expanded(
+                    child: _overviewStat(
+                      'Recorded',
+                      '${snapshot.observedDays} days',
                     ),
-                  ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: RevokeSpacing.md),
+              Text(
+                comparison,
+                style: context.text.bodySecondary.copyWith(
+                  color: snapshot.comparisonAvailable
+                      ? context.colors.textPrimary
+                      : context.colors.textMuted,
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 10),
-        _UsageLineChartCard(
-          title: 'Daily trend',
-          snapshot: snapshot,
-          averageMinutes: snapshot.averageDailyMinutes,
-          showPeak: false,
-          dottedAverage: true,
+        const SizedBox(height: RevokeSpacing.md),
+        RevokeSurface(
+          padding: const EdgeInsets.fromLTRB(
+            RevokeSpacing.md,
+            RevokeSpacing.md,
+            RevokeSpacing.md,
+            RevokeSpacing.sm,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Daily usage', style: context.text.sectionTitle),
+              const SizedBox(height: RevokeSpacing.sm),
+              UsageTrendChart(buckets: snapshot.buckets),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildAppMetricCard({required String title, required int minutes}) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 18, 14, 18),
-      decoration: _cardDecoration(context),
-      child: Column(
-        children: [
-          Text(
-            title,
-            style: AppTheme.smBold.copyWith(
-              color: context.colors.textSecondary,
+  Widget _overviewStat(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value, style: context.text.numericStat),
+        const SizedBox(height: RevokeSpacing.xs),
+        Text(
+          label,
+          style: context.text.caption.copyWith(color: context.colors.textMuted),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTopApps(InsightsOverview overview) {
+    final apps = overview.snapshot.topApps.take(6).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const RevokeSectionHeader(title: 'Where your time went'),
+        const SizedBox(height: RevokeSpacing.md),
+        if (apps.isEmpty)
+          const RevokeEmptyState(
+            title: 'No app usage recorded',
+            message:
+                'Revoke needs a little more usage history before this insight is available.',
+          )
+        else
+          RevokeSurface(
+            padding: const EdgeInsets.symmetric(horizontal: RevokeSpacing.lg),
+            child: Column(
+              children: [
+                for (var i = 0; i < apps.length; i++) ...[
+                  _AppUsageRow(
+                    app: apps[i],
+                    name:
+                        overview.appNames[apps[i].packageName] ??
+                        _displayPackageName(apps[i].packageName),
+                    onTap: () => context.push(
+                      '/insights/app?packageName=${Uri.encodeComponent(apps[i].packageName)}',
+                    ),
+                  ),
+                  if (i < apps.length - 1) const RevokeDivider(),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _buildReduceSection(
+    List<ReduceInsight> insights,
+    InsightsOverview overview,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const RevokeSectionHeader(title: 'Reduce Commitments'),
+        const SizedBox(height: RevokeSpacing.md),
+        for (var i = 0; i < insights.length; i++) ...[
+          _ReduceInsightSurface(
+            insight: insights[i],
+            appNames: overview.appNames,
+          ),
+          if (i < insights.length - 1) const SizedBox(height: RevokeSpacing.md),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildOverrideSection(OverrideInsightSummary summary) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const RevokeSectionHeader(title: 'Override behavior'),
+        const SizedBox(height: RevokeSpacing.md),
+        RevokeSurface(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${summary.total} recorded requests',
+                style: context.text.numericStat,
+              ),
+              const SizedBox(height: RevokeSpacing.md),
+              Text(
+                '${summary.approved} approved · ${summary.rejected} not approved',
+                style: context.text.bodySecondary,
+              ),
+              if (summary.approvedMinutes > 0) ...[
+                const SizedBox(height: RevokeSpacing.xs),
+                Text(
+                  '${summary.approvedMinutes}m temporary access',
+                  style: context.text.bodySecondary,
+                ),
+              ],
+              const SizedBox(height: RevokeSpacing.lg),
+              for (final entry in summary.byAuthority.entries)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: RevokeSpacing.xs),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          entry.key,
+                          style: context.text.bodySecondary,
+                        ),
+                      ),
+                      Text('${entry.value}', style: context.text.label),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: RevokeSpacing.sm),
+              RevokeButton(
+                label: 'View Override History',
+                variant: RevokeButtonVariant.tertiary,
+                expand: false,
+                onPressed: () => context.push('/override-history'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPremiumPreview() {
+    return RevokeSurface(
+      color: context.colors.surfaceSubtle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Go deeper with Premium', style: context.text.cardTitle),
+          const SizedBox(height: RevokeSpacing.sm),
           Text(
-            _formatMinutes(minutes),
-            textAlign: TextAlign.center,
-            style: AppTheme.size5xlBold.copyWith(
-              color: context.scheme.onSurface,
-              height: 0.95,
+            'See how your Commitments change your usage, where overrides happen, and how your habits move over time.',
+            style: context.text.bodySecondary,
+          ),
+          const SizedBox(height: RevokeSpacing.lg),
+          RevokeButton(
+            label: 'Explore Premium',
+            onPressed: () => context.push(
+              '/premium',
+              extra:
+                  'Understand how your Commitments change your habits over time.',
             ),
           ),
         ],
@@ -584,710 +538,225 @@ class _InsightsBodyState extends State<_InsightsBody> {
   }
 
   Widget _buildPermissionState() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(context),
+    return RevokeSurface(
+      color: context.colors.warning.withValues(alpha: 0.08),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Enable Usage Access', style: AppTheme.xlBold),
-          const SizedBox(height: 8),
+          Text('Usage Access is needed', style: context.text.cardTitle),
+          const SizedBox(height: RevokeSpacing.sm),
           Text(
-            'Insights need Usage Access to calculate screen time, app lists, focus periods, and charts.',
-            style: AppTheme.baseRegular.copyWith(
-              color: context.colors.textSecondary,
-              height: 1.35,
-            ),
+            'Revoke needs Usage Access to measure app time and show reliable Insights.',
+            style: context.text.bodySecondary,
           ),
-          const SizedBox(height: 14),
-          ElevatedButton(
+          const SizedBox(height: RevokeSpacing.lg),
+          RevokeButton(
+            label: 'Open permissions',
+            variant: RevokeButtonVariant.secondary,
             onPressed: () => context.push('/permissions'),
-            child: const Text('Open permissions'),
           ),
         ],
       ),
     );
   }
 
-  void _openAppInsights(UsageInsightApp app) {
-    if (app.packageName.trim().isEmpty) return;
-    context.push(
-      '/insights/app?packageName=${Uri.encodeComponent(app.packageName)}',
+  Widget _buildInlineError(String message) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: RevokeSpacing.md),
+      child: Text(
+        message,
+        style: context.text.caption.copyWith(color: context.colors.warning),
+      ),
+    );
+  }
+
+  String _comparisonText(UsageInsightsSnapshot snapshot) {
+    final delta = snapshot.trendDeltaMinutes;
+    if (delta == 0) {
+      return 'No change from the previous ${snapshot.periodDays} days';
+    }
+    final direction = delta < 0 ? 'less' : 'more';
+    return '${_formatMinutes(delta.abs())} $direction than the previous ${snapshot.periodDays} days';
+  }
+}
+
+class _AppUsageRow extends StatelessWidget {
+  const _AppUsageRow({
+    required this.app,
+    required this.name,
+    required this.onTap,
+  });
+
+  final UsageInsightApp app;
+  final String name;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '$name, ${_formatMinutes(app.minutes)}',
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: RevokeSpacing.md),
+          child: Row(
+            children: [
+              SingleAppIcon(
+                packageName: app.packageName,
+                size: RevokeIconSizes.emphasis,
+              ),
+              const SizedBox(width: RevokeSpacing.md),
+              Expanded(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.body,
+                ),
+              ),
+              Text(_formatMinutes(app.minutes), style: context.text.label),
+              const SizedBox(width: RevokeSpacing.sm),
+              Icon(
+                PhosphorIcons.caretRight,
+                size: RevokeIconSizes.compact,
+                color: context.colors.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _UsageHeroCard extends StatelessWidget {
-  final UsageInsightsSnapshot snapshot;
-  final int dailyGoalMinutes;
-  final bool isRefreshing;
-  final ValueChanged<UsageInsightApp> onOpenApp;
+class _ReduceInsightSurface extends StatelessWidget {
+  const _ReduceInsightSurface({required this.insight, required this.appNames});
 
-  const _UsageHeroCard({
-    required this.snapshot,
-    required this.dailyGoalMinutes,
-    required this.isRefreshing,
-    required this.onOpenApp,
-  });
+  final ReduceInsight insight;
+  final Map<String, String> appNames;
 
   @override
   Widget build(BuildContext context) {
-    final progress = dailyGoalMinutes <= 0
-        ? 0.0
-        : snapshot.totalMinutes / dailyGoalMinutes;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
-      decoration: _cardDecoration(context),
+    final plan = insight.plan;
+    final usage = insight.usage;
+    final currentAllowance = plan.limitFor(DateTime.now());
+    final currentActual = usage.averageDailyMinutes;
+    final week = (plan.dayIndexFor(DateTime.now()) ~/ 7) + 1;
+    final planned = usage.buckets
+        .map(
+          (bucket) => plan.limitFor(
+            DateTime.fromMillisecondsSinceEpoch(bucket.startMs),
+          ),
+        )
+        .toList(growable: false);
+    return RevokeSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(plan.name, style: context.text.cardTitle),
+          const SizedBox(height: RevokeSpacing.xs),
+          Text(
+            plan.targetApps
+                .map((app) => appNames[app] ?? _displayPackageName(app))
+                .join(', '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: context.text.caption.copyWith(
+              color: context.colors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: RevokeSpacing.lg),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Screen time today',
-                      style: AppTheme.smBold.copyWith(
-                        color: context.colors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        _formatMinutes(snapshot.totalMinutes),
-                        style: AppTheme.size5xlBold.copyWith(
-                          color: context.scheme.onSurface,
-                          height: 0.95,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Daily goal ${dailyGoalMinutes <= 0 ? '-' : _formatMinutes(dailyGoalMinutes)}',
-                      style: AppTheme.baseMedium.copyWith(
-                        color: context.colors.textSecondary,
-                      ),
-                    ),
-                  ],
+                child: _stat(
+                  context,
+                  'Baseline',
+                  _formatMinutes(plan.baselineDailyMinutes),
                 ),
               ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 118,
-                height: 118,
-                child: CustomPaint(
-                  painter: _RadialUsagePainter(
-                    progress: progress,
-                    baseColor: context.scheme.primary,
-                    overflowColor: context.colors.warning,
-                    trackColor: context.scheme.onSurface.withValues(
-                      alpha: 0.08,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      dailyGoalMinutes <= 0
-                          ? '-'
-                          : '${(progress * 100).round()}%',
-                      style: AppTheme.smBold.copyWith(
-                        color: context.scheme.onSurface,
-                      ),
-                    ),
-                  ),
+              Expanded(
+                child: _stat(
+                  context,
+                  'Current use',
+                  _formatMinutes(currentActual),
                 ),
               ),
-              if (isRefreshing)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: context.scheme.primary,
-                    ),
-                  ),
+              Expanded(
+                child: _stat(
+                  context,
+                  'Goal',
+                  _formatMinutes(plan.targetDailyMinutes),
                 ),
+              ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: RevokeSpacing.md),
           Text(
-            'Top apps',
-            style: AppTheme.smBold.copyWith(
-              color: context.colors.textSecondary,
-            ),
+            'Week $week of ${(plan.durationDays / 7).ceil()} · Today allowance ${_formatMinutes(currentAllowance)}',
+            style: context.text.bodySecondary,
           ),
-          const SizedBox(height: 8),
-          if (snapshot.topApps.isEmpty)
-            Text(
-              'No app usage yet.',
-              style: AppTheme.smRegular.copyWith(
-                color: context.colors.textSecondary,
-              ),
-            )
-          else
-            for (final app in snapshot.topApps.take(3)) ...[
-              _CompactAppUsageRow(app: app, onTap: () => onOpenApp(app)),
-              if (app != snapshot.topApps.take(3).last)
-                Divider(
-                  height: 12,
-                  color: context.scheme.outlineVariant.withValues(alpha: 0.35),
-                ),
-            ],
-        ],
-      ),
-    );
-  }
-}
-
-class _UsageLineChartCard extends StatelessWidget {
-  final String title;
-  final UsageInsightsSnapshot snapshot;
-  final int? averageMinutes;
-  final bool showPeak;
-  final bool dottedAverage;
-
-  const _UsageLineChartCard({
-    required this.title,
-    required this.snapshot,
-    required this.averageMinutes,
-    required this.showPeak,
-    this.dottedAverage = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final peakLabel = (snapshot.peak['label'] as String?)?.trim();
-    final peakMinutes = switch (snapshot.peak['minutes']) {
-      num() => snapshot.peak['minutes'].toInt(),
-      String() => int.tryParse(snapshot.peak['minutes']) ?? 0,
-      _ => 0,
-    };
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      decoration: _cardDecoration(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+          const SizedBox(height: RevokeSpacing.md),
+          UsageTrendChart(
+            buckets: usage.buckets,
+            plannedMinutes: planned,
+            height: 160,
+          ),
           Row(
             children: [
-              Expanded(child: Text(title, style: AppTheme.lgBold)),
-              if (showPeak && peakLabel != null && peakMinutes > 0)
-                Text(
-                  'Peak $peakLabel',
-                  style: AppTheme.xsBold.copyWith(
-                    color: context.scheme.primary,
-                  ),
-                )
-              else if (averageMinutes != null && averageMinutes! > 0)
-                Text(
-                  'Avg ${_formatMinutes(averageMinutes!)}',
-                  style: AppTheme.xsBold.copyWith(
-                    color: context.colors.textSecondary,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 172,
-            width: double.infinity,
-            child: CustomPaint(
-              painter: _UsageLineChartPainter(
-                buckets: snapshot.buckets,
-                peakIndex: switch (snapshot.peak['index']) {
-                  num() => snapshot.peak['index'].toInt(),
-                  String() => int.tryParse(snapshot.peak['index']),
-                  _ => null,
-                },
-                averageMinutes: averageMinutes,
-                dottedAverage: dottedAverage,
-                lineColor: context.scheme.primary,
-                mutedColor: context.colors.textSecondary,
-                borderColor: context.scheme.outlineVariant.withValues(
-                  alpha: 0.55,
-                ),
-                fillColor: context.scheme.primary.withValues(alpha: 0.10),
+              _legend(context, context.colors.accent, 'Actual use'),
+              const SizedBox(width: RevokeSpacing.lg),
+              _legend(
+                context,
+                context.colors.textSecondary,
+                'Planned allowance',
               ),
-            ),
+            ],
           ),
         ],
       ),
     );
   }
-}
 
-class _MostUsedAppsCard extends StatelessWidget {
-  final List<UsageInsightApp> apps;
-  final ValueChanged<UsageInsightApp> onTap;
-
-  const _MostUsedAppsCard({required this.apps, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-      decoration: _cardDecoration(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Most used apps', style: AppTheme.lgBold),
-          const SizedBox(height: 6),
-          if (apps.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                'No app usage yet.',
-                style: AppTheme.smRegular.copyWith(
-                  color: context.colors.textSecondary,
-                ),
-              ),
-            )
-          else
-            for (final app in apps.take(10)) ...[
-              _AppUsageListRow(app: app, onTap: () => onTap(app)),
-              if (app != apps.take(10).last)
-                Divider(
-                  height: 1,
-                  color: context.scheme.outlineVariant.withValues(alpha: 0.35),
-                ),
-            ],
-        ],
-      ),
-    );
-  }
-}
-
-class _CompactAppUsageRow extends StatelessWidget {
-  final UsageInsightApp app;
-  final VoidCallback onTap;
-
-  const _CompactAppUsageRow({required this.app, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          children: [
-            SingleAppIcon(packageName: app.packageName, size: 28),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FutureBuilder<AppInfo>(
-                future: AppDiscoveryService.getAppDetails(app.packageName),
-                builder: (context, snapshot) {
-                  final name = snapshot.data?.name ?? app.packageName;
-                  return Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.smMedium,
-                  );
-                },
-              ),
-            ),
-            Text(
-              _formatMinutes(app.minutes),
-              style: AppTheme.smBold.copyWith(color: context.scheme.onSurface),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AppUsageListRow extends StatelessWidget {
-  final UsageInsightApp app;
-  final VoidCallback onTap;
-
-  const _AppUsageListRow({required this.app, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            SingleAppIcon(packageName: app.packageName, size: 38),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FutureBuilder<AppInfo>(
-                future: AppDiscoveryService.getAppDetails(app.packageName),
-                builder: (context, snapshot) {
-                  final name = snapshot.data?.name ?? app.packageName;
-                  return Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.baseMedium,
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(_formatMinutes(app.minutes), style: AppTheme.baseBold),
-            const SizedBox(width: 8),
-            Icon(
-              PhosphorIcons.caretRight,
-              size: 16,
-              color: context.colors.textSecondary,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FocusCards extends StatelessWidget {
-  final UsageInsightsSnapshot snapshot;
-
-  const _FocusCards({required this.snapshot});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
+  Widget _stat(BuildContext context, String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: _SummaryMetricCard(
-            label: 'Longest Focus',
-            value: _formatMs(snapshot.longestFocusMs),
-          ),
+        Text(value, style: context.text.numericStat),
+        const SizedBox(height: RevokeSpacing.xs),
+        Text(
+          label,
+          style: context.text.caption.copyWith(color: context.colors.textMuted),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _SummaryMetricCard(
-            label: 'Continuous Use',
-            value: _formatMs(snapshot.longestContinuousUseMs),
-          ),
-        ),
+      ],
+    );
+  }
+
+  Widget _legend(BuildContext context, Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 18, height: 2, color: color),
+        const SizedBox(width: RevokeSpacing.xs),
+        Text(label, style: context.text.caption),
       ],
     );
   }
 }
 
-class _SummaryMetricCard extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _SummaryMetricCard({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 108,
-      padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: AppTheme.smBold.copyWith(
-              color: context.colors.textSecondary,
-            ),
-          ),
-          const Spacer(),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: AppTheme.xxlBold.copyWith(color: context.scheme.onSurface),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RadialUsagePainter extends CustomPainter {
-  final double progress;
-  final Color baseColor;
-  final Color overflowColor;
-  final Color trackColor;
-
-  const _RadialUsagePainter({
-    required this.progress,
-    required this.baseColor,
-    required this.overflowColor,
-    required this.trackColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final maxRadius = math.min(size.width, size.height) / 2 - 8;
-    final trackPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 8
-      ..color = trackColor;
-
-    canvas.drawCircle(center, maxRadius, trackPaint);
-
-    final safeProgress = progress.isFinite
-        ? progress.clamp(0, 6).toDouble()
-        : 0.0;
-    var remaining = safeProgress;
-    var radius = maxRadius;
-    var ring = 0;
-    while (remaining > 0 && radius > 18) {
-      final segment = remaining.clamp(0, 1).toDouble();
-      final paint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = ring == 0 ? 8 : 6
-        ..color = ring == 0
-            ? baseColor
-            : Color.lerp(
-                overflowColor,
-                Colors.redAccent,
-                (ring - 1) / 4,
-              )!.withValues(alpha: 0.92);
-      final rect = Rect.fromCircle(center: center, radius: radius);
-      canvas.drawArc(rect, -math.pi / 2, math.pi * 2 * segment, false, paint);
-      remaining -= 1;
-      radius -= 10;
-      ring += 1;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _RadialUsagePainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.baseColor != baseColor ||
-        oldDelegate.overflowColor != overflowColor ||
-        oldDelegate.trackColor != trackColor;
-  }
-}
-
-class _UsageLineChartPainter extends CustomPainter {
-  final List<UsageInsightBucket> buckets;
-  final int? peakIndex;
-  final int? averageMinutes;
-  final bool dottedAverage;
-  final Color lineColor;
-  final Color mutedColor;
-  final Color borderColor;
-  final Color fillColor;
-
-  const _UsageLineChartPainter({
-    required this.buckets,
-    required this.peakIndex,
-    required this.averageMinutes,
-    required this.dottedAverage,
-    required this.lineColor,
-    required this.mutedColor,
-    required this.borderColor,
-    required this.fillColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final chartRect = Rect.fromLTWH(0, 8, size.width, size.height - 26);
-    final activeBuckets = buckets.where((bucket) => !bucket.isFuture).toList();
-    final maxBaseMinutes = [
-      ...activeBuckets.map((bucket) => bucket.minutes),
-      averageMinutes ?? 0,
-      10,
-    ].fold<int>(10, (maxValue, value) => math.max(maxValue, value).toInt());
-    final maxMinutes = maxBaseMinutes * 1.18;
-
-    final gridPaint = Paint()
-      ..color = borderColor
-      ..strokeWidth = 1;
-    for (var i = 0; i < 4; i++) {
-      final y = chartRect.top + (chartRect.height * i / 3);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    if (activeBuckets.isEmpty) return;
-
-    Offset pointFor(UsageInsightBucket bucket) {
-      final divisor = math.max(1, buckets.length - 1);
-      final x = chartRect.left + (chartRect.width * bucket.index / divisor);
-      final y =
-          chartRect.bottom -
-          ((bucket.minutes / maxMinutes).clamp(0, 1).toDouble() *
-              chartRect.height);
-      return Offset(x, y);
-    }
-
-    if (averageMinutes != null && averageMinutes! > 0) {
-      final averageY =
-          chartRect.bottom -
-          ((averageMinutes! / maxMinutes).clamp(0, 1).toDouble() *
-              chartRect.height);
-      final avgPaint = Paint()
-        ..color = mutedColor.withValues(alpha: 0.55)
-        ..strokeWidth = 1.5
-        ..style = PaintingStyle.stroke;
-      if (dottedAverage) {
-        var x = 0.0;
-        while (x < size.width) {
-          canvas.drawLine(
-            Offset(x, averageY),
-            Offset(x + 6, averageY),
-            avgPaint,
-          );
-          x += 12;
-        }
-      } else {
-        canvas.drawLine(
-          Offset(0, averageY),
-          Offset(size.width, averageY),
-          avgPaint,
-        );
-      }
-    }
-
-    final path = Path();
-    final fillPath = Path();
-    for (var i = 0; i < activeBuckets.length; i++) {
-      final point = pointFor(activeBuckets[i]);
-      if (i == 0) {
-        path.moveTo(point.dx, point.dy);
-        fillPath.moveTo(point.dx, chartRect.bottom);
-        fillPath.lineTo(point.dx, point.dy);
-      } else {
-        path.lineTo(point.dx, point.dy);
-        fillPath.lineTo(point.dx, point.dy);
-      }
-    }
-    fillPath.lineTo(pointFor(activeBuckets.last).dx, chartRect.bottom);
-    fillPath.close();
-
-    canvas.drawPath(
-      fillPath,
-      Paint()
-        ..color = fillColor
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = lineColor
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..style = PaintingStyle.stroke,
-    );
-
-    final dotPaint = Paint()..color = lineColor;
-    for (final bucket in activeBuckets) {
-      canvas.drawCircle(pointFor(bucket), 2.5, dotPaint);
-    }
-
-    UsageInsightBucket? peakBucket;
-    if (peakIndex != null) {
-      for (final bucket in activeBuckets) {
-        if (bucket.index == peakIndex) {
-          peakBucket = bucket;
-          break;
-        }
-      }
-    }
-    if (peakBucket != null && peakBucket.minutes > 0) {
-      final point = pointFor(peakBucket);
-      canvas.drawCircle(
-        point,
-        6,
-        Paint()
-          ..color = lineColor
-          ..style = PaintingStyle.fill,
-      );
-      canvas.drawCircle(
-        point,
-        9,
-        Paint()
-          ..color = lineColor.withValues(alpha: 0.18)
-          ..style = PaintingStyle.fill,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _UsageLineChartPainter oldDelegate) {
-    return oldDelegate.buckets != buckets ||
-        oldDelegate.peakIndex != peakIndex ||
-        oldDelegate.averageMinutes != averageMinutes ||
-        oldDelegate.dottedAverage != dottedAverage ||
-        oldDelegate.lineColor != lineColor ||
-        oldDelegate.mutedColor != mutedColor ||
-        oldDelegate.borderColor != borderColor ||
-        oldDelegate.fillColor != fillColor;
-  }
-}
-
-BoxDecoration _cardDecoration(BuildContext context) {
-  return BoxDecoration(
-    color: context.scheme.surface,
-    borderRadius: BorderRadius.circular(18),
-    border: Border.all(
-      color: context.scheme.outlineVariant.withValues(alpha: 0.7),
-    ),
-    boxShadow: [
-      BoxShadow(
-        color: context.scheme.onSurface.withValues(alpha: 0.04),
-        blurRadius: 16,
-        offset: const Offset(0, 6),
-      ),
-    ],
-  );
-}
-
-DateTime _startOfDay(DateTime value) {
-  return DateTime(value.year, value.month, value.day);
-}
-
-DateTime _startOfWeek(DateTime value) {
-  final day = _startOfDay(value);
-  return day.subtract(Duration(days: day.weekday - DateTime.monday));
-}
-
-String _dayLabel(DateTime value) {
-  final today = _startOfDay(DateTime.now());
-  final day = _startOfDay(value);
-  if (day == today) return 'Today';
-  return DateFormat('EEEE MMMM d').format(day);
-}
-
-String _weekLabel(DateTime value) {
-  final currentWeek = _startOfWeek(DateTime.now());
-  final week = _startOfWeek(value);
-  if (week == currentWeek) return 'This Week';
-  final end = week.add(const Duration(days: 6));
-  return '${DateFormat('MMM d').format(week)} - ${DateFormat('MMM d').format(end)}';
-}
-
 String _formatMinutes(int minutes) {
   final safe = minutes.clamp(0, 100000).toInt();
   final hours = safe ~/ 60;
-  final mins = safe % 60;
-  if (hours <= 0) return '${mins}m';
-  if (mins == 0) return '${hours}h';
-  return '${hours}h ${mins}m';
+  final remainder = safe % 60;
+  if (hours == 0) return '${remainder}m';
+  return remainder == 0 ? '${hours}h' : '${hours}h ${remainder}m';
 }
 
-String _formatMs(int ms) {
-  return _formatMinutes(((ms + 59999) / 60000).floor());
-}
-
-String _formatSignedMinutes(int minutes) {
-  if (minutes == 0) return '0m';
-  final prefix = minutes < 0 ? '-' : '+';
-  return '$prefix${_formatMinutes(minutes.abs())}';
+String _displayPackageName(String packageName) {
+  final normalized = packageName.trim();
+  if (normalized.isEmpty) return 'Unknown app';
+  final last = normalized.split('.').last;
+  if (last.isEmpty) return normalized;
+  return last[0].toUpperCase() + last.substring(1);
 }

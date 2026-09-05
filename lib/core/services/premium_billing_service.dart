@@ -208,14 +208,20 @@ class PremiumBillingService {
   Future<bool> purchaseCredits(String productId) async {
     final uid = _uid ?? FirebaseAuth.instance.currentUser?.uid;
     final normalized = productId.trim();
-    final matching = creditProducts.value.where((item) => item.id == normalized);
+    final matching = creditProducts.value.where(
+      (item) => item.id == normalized,
+    );
     final product = matching.isEmpty ? null : matching.first;
     if (uid == null || uid.isEmpty) {
-      state.value = state.value.copyWith(error: 'Sign in before buying Credits.');
+      state.value = state.value.copyWith(
+        error: 'Sign in before buying Credits.',
+      );
       return false;
     }
     if (product == null) {
-      state.value = state.value.copyWith(error: 'This Credit product is not available yet.');
+      state.value = state.value.copyWith(
+        error: 'This Credit product is not available yet.',
+      );
       return false;
     }
     state.value = state.value.copyWith(
@@ -258,11 +264,15 @@ class PremiumBillingService {
     final matching = plans.value.where((item) => item.plan == plan);
     final option = matching.isEmpty ? null : matching.first;
     if (uid == null || uid.isEmpty) {
-      state.value = state.value.copyWith(error: 'Sign in before purchasing Premium.');
+      state.value = state.value.copyWith(
+        error: 'Sign in before purchasing Premium.',
+      );
       return false;
     }
     if (option == null) {
-      state.value = state.value.copyWith(error: 'This Premium plan is not available yet.');
+      state.value = state.value.copyWith(
+        error: 'This Premium plan is not available yet.',
+      );
       return false;
     }
 
@@ -359,7 +369,9 @@ class PremiumBillingService {
           await _clearPendingFlowForCurrentUser();
           state.value = state.value.copyWith(
             isPurchasing: false,
-            error: purchase.error?.message ?? 'Google Play could not complete the purchase.',
+            error:
+                purchase.error?.message ??
+                'Google Play could not complete the purchase.',
           );
         case PurchaseStatus.canceled:
           _activePurchaseFlowId = null;
@@ -392,7 +404,8 @@ class PremiumBillingService {
     try {
       await _functions.httpsCallable('verifyPremiumPurchase').call({
         'purchaseToken': token,
-        if (_activePurchaseFlowId != null && purchase.status == PurchaseStatus.purchased)
+        if (_activePurchaseFlowId != null &&
+            purchase.status == PurchaseStatus.purchased)
           'purchaseFlowId': _activePurchaseFlowId,
       });
       await PremiumEntitlementService.instance.refresh();

@@ -10,9 +10,14 @@ import '../../core/utils/theme_extensions.dart';
 import '../../core/widgets/revoke_components.dart';
 
 class PremiumPaywallScreen extends StatefulWidget {
-  const PremiumPaywallScreen({super.key, this.reason});
+  const PremiumPaywallScreen({
+    super.key,
+    this.reason,
+    this.onboardingMode = false,
+  });
 
   final String? reason;
+  final bool onboardingMode;
 
   @override
   State<PremiumPaywallScreen> createState() => _PremiumPaywallScreenState();
@@ -41,141 +46,173 @@ class _PremiumPaywallScreenState extends State<PremiumPaywallScreen> {
           icon: Icon(PhosphorIcons.x),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          RevokeSpacing.lg,
-          RevokeSpacing.md,
-          RevokeSpacing.lg,
-          RevokeSpacing.xxl,
-        ),
-        children: [
-          Text(
-            _entitlement.hasPremium ? 'Extend Premium' : 'Make more room to change',
-            style: context.text.pageTitle,
+      body: AnimatedBuilder(
+        animation: _entitlement.state,
+        builder: (context, _) => ListView(
+          padding: const EdgeInsets.fromLTRB(
+            RevokeSpacing.lg,
+            RevokeSpacing.md,
+            RevokeSpacing.lg,
+            RevokeSpacing.xxl,
           ),
-          const SizedBox(height: RevokeSpacing.sm),
-          Text(
-            widget.reason ??
-                'Premium gives you the tools to make a deeper, more supported Commitment.',
-            style: context.text.bodySecondary.copyWith(
-              color: context.colors.textSecondary,
+          children: [
+            if (widget.onboardingMode && _entitlement.hasPremium) ...[
+              RevokeSurface(
+                color: context.colors.success.withValues(alpha: 0.10),
+                child: Row(
+                  children: [
+                    Icon(
+                      PhosphorIcons.checkCircle,
+                      color: context.colors.success,
+                    ),
+                    const SizedBox(width: RevokeSpacing.md),
+                    const Expanded(
+                      child: Text(
+                        'Premium is active. Return to finish your Commitment.',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: RevokeSpacing.md),
+              RevokeButton(
+                label: 'Return to Commitment',
+                onPressed: () => context.pop(true),
+              ),
+              const SizedBox(height: RevokeSpacing.xl),
+            ],
+            Text(
+              _entitlement.hasPremium
+                  ? 'Extend Premium'
+                  : 'Make more room to change',
+              style: context.text.pageTitle,
             ),
-          ),
-          const SizedBox(height: RevokeSpacing.xl),
-          const _PremiumBenefits(),
-          const SizedBox(height: RevokeSpacing.xxl),
-          Text('Choose prepaid access', style: context.text.sectionTitle),
-          const SizedBox(height: RevokeSpacing.sm),
-          ValueListenableBuilder<List<PremiumPlanOption>>(
-            valueListenable: _billing.plans,
-            builder: (context, plans, _) {
-              if (plans.isEmpty) {
-                return ValueListenableBuilder<PremiumBillingState>(
-                  valueListenable: _billing.state,
-                  builder: (context, state, _) => RevokeSurface(
-                    padding: const EdgeInsets.all(RevokeSpacing.lg),
-                    child: Row(
-                      children: [
-                        if (state.isLoading)
-                          SizedBox(
-                            width: RevokeIconSizes.standard,
-                            height: RevokeIconSizes.standard,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: context.colors.accent,
+            const SizedBox(height: RevokeSpacing.sm),
+            Text(
+              widget.reason ??
+                  'Premium gives you the tools to make a deeper, more supported Commitment.',
+              style: context.text.bodySecondary.copyWith(
+                color: context.colors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: RevokeSpacing.xl),
+            const _PremiumBenefits(),
+            const SizedBox(height: RevokeSpacing.xxl),
+            Text('Choose prepaid access', style: context.text.sectionTitle),
+            const SizedBox(height: RevokeSpacing.sm),
+            ValueListenableBuilder<List<PremiumPlanOption>>(
+              valueListenable: _billing.plans,
+              builder: (context, plans, _) {
+                if (plans.isEmpty) {
+                  return ValueListenableBuilder<PremiumBillingState>(
+                    valueListenable: _billing.state,
+                    builder: (context, state, _) => RevokeSurface(
+                      padding: const EdgeInsets.all(RevokeSpacing.lg),
+                      child: Row(
+                        children: [
+                          if (state.isLoading)
+                            SizedBox(
+                              width: RevokeIconSizes.standard,
+                              height: RevokeIconSizes.standard,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: context.colors.accent,
+                              ),
+                            )
+                          else
+                            Icon(
+                              PhosphorIcons.storefront,
+                              color: context.colors.textMuted,
+                              size: RevokeIconSizes.emphasis,
                             ),
-                          )
-                        else
-                          Icon(
-                            PhosphorIcons.storefront,
-                            color: context.colors.textMuted,
-                            size: RevokeIconSizes.emphasis,
+                          const SizedBox(width: RevokeSpacing.md),
+                          Expanded(
+                            child: Text(
+                              state.isLoading
+                                  ? 'Loading localized plans…'
+                                  : state.error ??
+                                        state.message ??
+                                        'Premium plans are not available yet.',
+                              style: context.text.bodySecondary,
+                            ),
                           ),
-                        const SizedBox(width: RevokeSpacing.md),
-                        Expanded(
-                          child: Text(
-                            state.isLoading
-                                ? 'Loading localized plans…'
-                                : state.error ??
-                                    state.message ??
-                                    'Premium plans are not available yet.',
-                            style: context.text.bodySecondary,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final option in plans) ...[
+                      _PremiumPlanTile(
+                        option: option,
+                        selected: _selected == option.plan,
+                        onTap: () => setState(() => _selected = option.plan),
+                      ),
+                      if (option != plans.last)
+                        const SizedBox(height: RevokeSpacing.sm),
+                    ],
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: RevokeSpacing.md),
+            Text(
+              'Prepaid access. It does not renew automatically. Google Play shows the final localized price before confirmation.',
+              style: context.text.caption.copyWith(
+                color: context.colors.textMuted,
+              ),
+            ),
+            const SizedBox(height: RevokeSpacing.xl),
+            ValueListenableBuilder<PremiumBillingState>(
+              valueListenable: _billing.state,
+              builder: (context, state, _) {
+                PremiumPlanOption? option;
+                for (final item in _billing.plans.value) {
+                  if (item.plan == _selected) option = item;
+                }
+                return RevokeButton(
+                  label: option == null
+                      ? 'Choose a plan'
+                      : 'Continue with ${option.price}',
+                  icon: PhosphorIcons.arrowRight,
+                  loading: state.isPurchasing,
+                  onPressed: option == null || state.isPurchasing
+                      ? null
+                      : () => _purchase(_selected),
+                );
+              },
+            ),
+            const SizedBox(height: RevokeSpacing.sm),
+            RevokeButton(
+              label: 'Restore purchases',
+              variant: RevokeButtonVariant.tertiary,
+              onPressed: _billing.state.value.isPurchasing
+                  ? null
+                  : _billing.restorePurchases,
+            ),
+            ValueListenableBuilder<PremiumBillingState>(
+              valueListenable: _billing.state,
+              builder: (context, state, _) {
+                if (state.error == null && state.message == null) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: RevokeSpacing.md),
+                  child: Text(
+                    state.error ?? state.message!,
+                    textAlign: TextAlign.center,
+                    style: context.text.caption.copyWith(
+                      color: state.error == null
+                          ? context.colors.textSecondary
+                          : context.colors.destructive,
                     ),
                   ),
                 );
-              }
-              return Column(
-                children: [
-                  for (final option in plans) ...[
-                    _PremiumPlanTile(
-                      option: option,
-                      selected: _selected == option.plan,
-                      onTap: () => setState(() => _selected = option.plan),
-                    ),
-                    if (option != plans.last)
-                      const SizedBox(height: RevokeSpacing.sm),
-                  ],
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: RevokeSpacing.md),
-          Text(
-            'Prepaid access. It does not renew automatically. Google Play shows the final localized price before confirmation.',
-            style: context.text.caption.copyWith(color: context.colors.textMuted),
-          ),
-          const SizedBox(height: RevokeSpacing.xl),
-          ValueListenableBuilder<PremiumBillingState>(
-            valueListenable: _billing.state,
-            builder: (context, state, _) {
-              PremiumPlanOption? option;
-              for (final item in _billing.plans.value) {
-                if (item.plan == _selected) option = item;
-              }
-              return RevokeButton(
-                label: option == null
-                    ? 'Choose a plan'
-                    : 'Continue with ${option.price}',
-                icon: PhosphorIcons.arrowRight,
-                loading: state.isPurchasing,
-                onPressed: option == null || state.isPurchasing
-                    ? null
-                    : () => _purchase(_selected),
-              );
-            },
-          ),
-          const SizedBox(height: RevokeSpacing.sm),
-          RevokeButton(
-            label: 'Restore purchases',
-            variant: RevokeButtonVariant.tertiary,
-            onPressed: _billing.state.value.isPurchasing
-                ? null
-                : _billing.restorePurchases,
-          ),
-          ValueListenableBuilder<PremiumBillingState>(
-            valueListenable: _billing.state,
-            builder: (context, state, _) {
-              if (state.error == null && state.message == null) {
-                return const SizedBox.shrink();
-              }
-              return Padding(
-                padding: const EdgeInsets.only(top: RevokeSpacing.md),
-                child: Text(
-                  state.error ?? state.message!,
-                  textAlign: TextAlign.center,
-                  style: context.text.caption.copyWith(
-                    color: state.error == null
-                        ? context.colors.textSecondary
-                        : context.colors.destructive,
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -310,9 +347,7 @@ class _PremiumPlanTile extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                selected
-                    ? PhosphorIcons.radioButton
-                    : PhosphorIcons.circle,
+                selected ? PhosphorIcons.radioButton : PhosphorIcons.circle,
                 color: selected
                     ? context.colors.accent
                     : context.colors.textMuted,
@@ -323,7 +358,10 @@ class _PremiumPlanTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(option.plan.displayLabel, style: context.text.cardTitle),
+                    Text(
+                      option.plan.displayLabel,
+                      style: context.text.cardTitle,
+                    ),
                     const SizedBox(height: RevokeSpacing.xs),
                     Text(
                       '${option.plan.durationLabel} · prepaid',

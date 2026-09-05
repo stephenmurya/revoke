@@ -4,13 +4,25 @@ Last canonical update: 2026-09-05
 
 Source baseline: ../audits/2026-09-04-revival-audit.md.
 
-This file answers what exists now, not what Revoke 2.0 intends to build. The current repository has a Phase 7 Credit-v2 code boundary layered over the Phase 6 Premium foundation; live Google Play configuration, evidence-device proof, and production verification remain incomplete.
+This file answers what exists now, not what Revoke 2.0 intends to build. The current repository has a Phase 8 commercial onboarding boundary layered over the Phase 3 Commitment, Phase 5 Circle/Override Authority, Phase 6 Premium, and Phase 7 Credit foundations; live Google Play configuration, evidence-device proof, and production verification remain incomplete.
 
 ## Phase 1 mobile foundation implemented
 
 The Flutter design-system foundation and global mobile shell are now implemented without changing native enforcement or backend behavior. `AppTheme`, `ColorScheme`, and `AppColorsExtension` expose semantic surfaces, state colors, typography roles, and restrained component styling. `ThemeService` preserves persisted theme/accent preferences while mapping users to a curated safe accent palette. Shared primitives live under `lib/core/widgets/`. The shell exposes Today, Commitments, Circle, and Insights, with global server-derived Credits, Notifications, and Profile actions.
 
-The Commitments management screen was migrated in Phase 3; Insights, Settings, and native overlay visuals retain their legacy implementations until their dedicated phases.
+The Commitments management screen was migrated in Phase 3; Settings and native overlay visuals retain their legacy implementations until their dedicated phases.
+
+## Phase 9 Insights implementation
+
+`InsightsScreen` now presents a repository-backed direct-evidence surface. `InsightsRepository` coordinates one bounded native usage overview, installed-app metadata, active local Reduce plans, and a single bounded current-user override-history read. The native `UsageInsightsCalculator` supports 7-day and 30-day complete-period aggregation and accepts a package set for grouped Reduce analysis. Flutter renders a tokenized accessible trend chart, usage overview, top apps, and Premium-only Reduce/recorded-override sections.
+
+Free users receive a useful 7-day view. Premium users can access 30 days and the advanced sections when data exists. Focus Score is removed from `/insights` and the Appearance preview; legacy storage, admin paths, legacy Home compatibility, and `/focus-score` remain for migration. No universal adherence, verified outcomes, recovery, grace, or time-of-day analysis is fabricated.
+
+## Phase 10 native visual alignment and app-wide polish
+
+The active Flutter theme now uses the documented tinted semantic light/dark neutrals and fixed state colors, with governed defaults for dialogs, sheets, snackbars, chips, dividers, progress indicators, and inputs. `RevokeSettingRow` and `RevokeStatusBanner` extend the shared primitive vocabulary. Profile, Appearance, permission repair, notifications, and the global shell received focused token/copy/accessibility refinements; permission polling no longer rebuilds when state is unchanged.
+
+The Kotlin blocker/reminder palette now resolves through `values/revoke_colors.xml`, `values-night/revoke_colors.xml`, and `revoke_dimens.xml`, with native content descriptions for app/logo imagery. Native remains Kotlin-owned and uses controlled Android sans typography; no enforcement logic changed. Physical-device, large-text, TalkBack, OEM, and screenshot verification remain Phase 11/release-hardening work.
 
 ## Phase 2 Today experience implemented
 
@@ -28,7 +40,7 @@ Persistence and enforcement remain unchanged at the compatibility boundary: Prot
 
 `OnboardingState` and `OnboardingStateService` provide a versioned, user-scoped local state machine with exact-step resume and conservative migration. `AppRouter` now uses explicit onboarding completion rather than nickname, Circle membership, or global Android permission checks. Completed users can reach the app after permission loss and use the existing permission repair surface; incomplete users resume `/onboarding`.
 
-The new onboarding journey preserves Firebase/Google authentication, collects identity, requests Usage Access before the Reality Check, presents measured usage where available, collects Reduce/Protect intent, reuses `CreateCommitmentScreen` for a real first Commitment, then requests enforcement permissions and explains intervention before review/completion. The first Commitment persists through the existing `ScheduleService`/`TaperPlanService` local-first boundary and native synchronization. No new Commitment backend, Credits, Premium, Circle permissions, or native engine was added.
+The Phase 4 journey remains the compatibility path for older in-progress records. Phase 8 adds a nested persisted `CommitmentDraft`, commercial/authority branches, and coordinated activation. New users keep configuration out of `ScheduleService`/`TaperPlanService` until final activation; `CreateCommitmentScreen(onboardingMode: true)` returns the draft, then `OnboardingActivationCoordinator` materializes the existing schedule/taper rule, synchronizes native enforcement, persists non-Self authority through the existing server boundary, and optionally enters the Phase 7 backing flow. No new Commitment backend or native engine was added.
 
 ## Phase 5 Accountability Circle and Override Authority implementation
 
@@ -68,8 +80,7 @@ Code is complete for the repository boundary, but Play Console products/base pla
 
 ## Broken or release-blocking behavior
 
-- remote/cross-device onboarding hydration is not implemented;
-- nested onboarding Commitment drafts are not persisted until activation;
+- remote/cross-device onboarding hydration remains unavailable; the nested draft is device-local;
 - Launch Count is not enforced;
 - FCM/native delivery still depends on a valid current token and cannot be device-tested from this repository alone; Flutter listener fallback remains for compatibility;
 - taper plans are integrated into the first-Commitment flow but remain incompletely remotely hydrated;
@@ -88,6 +99,16 @@ Android `CreditEvidenceStore` provides the append-only SQLite journal with seque
 
 Repository code is present, but Google Play product configuration, licensed-device purchase/consumption/reversal testing, RTDN delivery, physical-device evidence coverage, signing/Integrity configuration, legal/policy review, and production operational readiness are not verified.
 
+## Phase 8 Commercial Onboarding integration
+
+`OnboardingState` now persists semantic states for Commitment draft, enforcement permissions, intervention, Override Authority, optional Circle setup, Commitment review, Premium, optional Credit backing, ready-to-activate, and completion. `CommitmentDraft` stores the Reduce/Protect configuration required to resume after process death without creating an active schedule early.
+
+The final sequence is Reality Check -> Commitment draft -> enforcement permissions -> intervention -> Override Authority -> optional Circle setup -> Commitment review -> Premium when required -> optional Credit backing -> coordinated activation -> Today. Reduce, AI Architect, Circle authority, additional Protect capacity, and Credit backing use the existing Premium capability boundary. A Free user can complete one Protect Commitment with Self authority; declining Premium offers an explicit valid Free fallback.
+
+`OnboardingActivationCoordinator` preserves the compatibility architecture. Behavioral persistence remains local-first and best-effort remote/native synchronization; non-Self authority requires the existing server policy boundary; Credit backing is opened only after the behavioral Commitment exists and is validated by the Phase 7 server callable. If backing is declined or fails, the behavioral Commitment is retained and the user is returned to an explicit recovery choice. This is coordinated activation, not global atomicity.
+
+Phase 4 users with an existing `firstCommitmentId` are migrated without creating a duplicate. Completed users are not returned to onboarding. Premium, Circle membership, Android permissions, and Credit availability remain external authorities and are re-read at their decision points.
+
 ## V2 product concepts not implemented
 
 - native/server Commitment domain object and immutable activation lease;
@@ -97,6 +118,7 @@ Repository code is present, but Google Play product configuration, licensed-devi
 - production-ready Premium entitlement/paywall lifecycle (repository code exists; Play setup and live verification remain);
 - complete device signing and Play Integrity signals;
 - complete v2 adherence, slip/recovery, and verification-health cards;
+- verified Commitment outcome history, universal adherence, recovery/grace history, Protect violation history, and time-of-day Insights aggregation;
 - category analytics and Danger Zone analysis;
 - Social Regimes/community marketplace;
 - complete Launch Count enforcement.
@@ -120,8 +142,8 @@ Repository code is present, but Google Play product configuration, licensed-devi
 7. complete device/FCM proof of durable override delivery and permission migration/backfill;
 8. configure and prove Premium on licensed Play devices, including RTDN/refunds;
 9. implement Credit ledger/purchase lineage only after evidence and policy gates;
-10. replace Focus Score UI with direct cards;
-11. expand advanced insights later.
+10. replace remaining Focus Score UI outside Insights and Appearance compatibility surfaces;
+11. expand advanced Insights only when authoritative history exists.
 
 ## Rule
 

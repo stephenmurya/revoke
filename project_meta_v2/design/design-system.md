@@ -1,6 +1,6 @@
 # Revoke 2.0 Mobile Design-System Contract
 
-Status: Canonical implementation contract. Phase 1 implements the Flutter token foundation, shared primitives, global shell, and constrained accent mapping described below. Phase 7 extends the shell with the server-derived Credits pill and Credits detail boundary. Feature-screen migration and native resource mapping remain later work.
+Status: Canonical implementation contract. Phase 1 implements the Flutter token foundation, shared primitives, global shell, and constrained accent mapping described below. Phase 7 extends the shell with the server-derived Credits pill and Credits detail boundary. Phase 10 adds governed Flutter state defaults, setting/status primitives, and the first native semantic resource map. Feature-screen migration and device-level native visual verification remain later work.
 
 ## Phase 1 implementation mapping
 
@@ -22,7 +22,7 @@ Use a small semantic vocabulary. Feature code should request meaning (`surface`,
 
 ## Color tokens
 
-The existing Flutter and native values provide the starting palette. The implementation pass should expose these as semantic tokens and validate contrast for every light/dark and accent combination.
+The existing Flutter and native values provide the starting palette. Flutter now exposes these as semantic tokens and the native blocker resolves the corresponding dark intervention palette through Android resources. The implementation pass should validate contrast for every light/dark and accent combination.
 
 | Token | Light starting value | Dark starting value | Meaning |
 |---|---|---|---|

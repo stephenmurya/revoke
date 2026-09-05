@@ -204,7 +204,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 key: 'shameAlerts',
                 fallback: userModel.wantsShameAlerts,
               );
-              final wantsPleaRequests = _resolveValue(
+              final wantsOverrideRequests = _resolveValue(
                 key: 'pleaRequests',
                 fallback: userModel.wantsPleaRequests,
               );
@@ -218,8 +218,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 children: [
                   _NotificationToggleRow(
                     icon: PhosphorIcons.warningCircle,
-                    title: 'Shame Alerts',
-                    subtitle: 'When someone shames you.',
+                    title: 'Accountability alerts',
+                    subtitle:
+                        'When Circle members send an accountability update.',
                     value: wantsShameAlerts,
                     activeColor: context.colors.accent,
                     isSaving: _savingKeys.contains('shameAlerts'),
@@ -227,17 +228,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   _NotificationToggleRow(
                     icon: PhosphorIcons.handsPraying,
-                    title: 'Begging Requests',
-                    subtitle: 'When a squad mate begs for time.',
-                    value: wantsPleaRequests,
+                    title: 'Override Requests',
+                    subtitle: 'When a Circle member requests access.',
+                    value: wantsOverrideRequests,
                     activeColor: context.colors.accent,
                     isSaving: _savingKeys.contains('pleaRequests'),
                     onChanged: (value) => _updatePref('pleaRequests', value),
                   ),
                   _NotificationToggleRow(
                     icon: PhosphorIcons.gavel,
-                    title: 'Conclave Verdicts',
-                    subtitle: 'Whether time was granted or denied.',
+                    title: 'Request decisions',
+                    subtitle: 'When an Override Request is resolved.',
                     value: wantsVerdicts,
                     activeColor: context.colors.accent,
                     isSaving: _savingKeys.contains('verdicts'),

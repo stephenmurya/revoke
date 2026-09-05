@@ -413,7 +413,7 @@ class _NotificationTile extends StatelessWidget {
       case 'support':
         return context.colors.success;
       case 'system':
-        return Colors.cyanAccent;
+        return context.colors.accent;
       default:
         return context.colors.textSecondary;
     }

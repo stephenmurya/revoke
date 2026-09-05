@@ -13,22 +13,32 @@ class UsageInsightsService {
     required String mode,
     required DateTime anchorDate,
     String? packageName,
+    List<String>? packageNames,
     int? periodDays,
   }) {
     final uid = AuthService.currentUser?.uid.trim();
     final userKey = uid == null || uid.isEmpty ? 'anonymous' : uid;
     final day = DateTime(anchorDate.year, anchorDate.month, anchorDate.day);
-    final packageKey = packageName == null || packageName.trim().isEmpty
-        ? 'all'
-        : packageName.trim();
+    final packageKey = <String>[
+      if (packageNames != null && packageNames.isNotEmpty)
+        ...packageNames
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty),
+      if (packageNames == null || packageNames.isEmpty)
+        if (packageName == null || packageName.trim().isEmpty)
+          'all'
+        else
+          packageName.trim(),
+    ]..sort();
     final periodKey = periodDays ?? 0;
-    return '$_cachePrefix:$userKey:$mode:${day.millisecondsSinceEpoch}:$periodKey:$packageKey';
+    return '$_cachePrefix:$userKey:$mode:${day.millisecondsSinceEpoch}:$periodKey:${packageKey.join(',')}';
   }
 
   static Future<UsageInsightsSnapshot?> readCache({
     required String mode,
     required DateTime anchorDate,
     String? packageName,
+    List<String>? packageNames,
     int? periodDays,
   }) async {
     final prefs = await SharedPreferences.getInstance();
@@ -37,6 +47,7 @@ class UsageInsightsService {
         mode: mode,
         anchorDate: anchorDate,
         packageName: packageName,
+        packageNames: packageNames,
         periodDays: periodDays,
       ),
     );
@@ -54,6 +65,7 @@ class UsageInsightsService {
     required String mode,
     required DateTime anchorDate,
     String? packageName,
+    List<String>? packageNames,
     int? periodDays,
   }) async {
     final raw = await NativeBridge.getUsageInsights(
@@ -64,6 +76,7 @@ class UsageInsightsService {
         anchorDate.day,
       ).millisecondsSinceEpoch,
       packageName: packageName,
+      packageNames: packageNames,
       periodDays: periodDays,
     );
     final snapshot = UsageInsightsSnapshot.fromJson(raw);
@@ -73,6 +86,7 @@ class UsageInsightsService {
         mode: mode,
         anchorDate: anchorDate,
         packageName: packageName,
+        packageNames: packageNames,
         periodDays: periodDays,
       ),
       jsonEncode(snapshot.toJson()),

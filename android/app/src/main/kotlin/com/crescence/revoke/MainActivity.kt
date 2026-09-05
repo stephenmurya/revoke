@@ -362,6 +362,10 @@ class MainActivity : FlutterActivity() {
                             ?: System.currentTimeMillis()
                     val insightPackageName =
                         args?.get("packageName")?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                    val insightPackageNames =
+                        (args?.get("packageNames") as? List<*>)
+                            ?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+                            ?.toSet()
                     val periodDays =
                         (args?.get("periodDays") as? Number)?.toInt() ?: 14
                     Thread {
@@ -371,6 +375,7 @@ class MainActivity : FlutterActivity() {
                                 mode = mode,
                                 anchorDateMs = anchorDateMs,
                                 packageName = insightPackageName,
+                                packageNames = insightPackageNames,
                                 periodDays = periodDays,
                             )
                         runOnUiThread {

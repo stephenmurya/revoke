@@ -25,18 +25,18 @@ import android.widget.TextView
 
 object BlockerOverlayController {
     private const val PREFS_NAME = "RevokeConfig"
-    private const val COLOR_BG = "#06070A"
-    private const val COLOR_SURFACE = "#10131A"
-    private const val COLOR_SURFACE_ALT = "#141923"
-    private const val COLOR_STROKE = "#273142"
-    private const val COLOR_STROKE_SOFT = "#1A2230"
-    private const val COLOR_TEXT_PRIMARY = "#F5F7FA"
-    private const val COLOR_TEXT_SECONDARY = "#96A2B4"
-    private const val COLOR_TEXT_MUTED = "#6E7888"
-    private const val COLOR_TEXT_STAT_VALUE = "#C7D0DE"
-    private const val COLOR_ORANGE = "#FF4500"
-    private const val COLOR_ORANGE_SOFT = "#FF915A"
-    private const val COLOR_BADGE_BG = "#1A1F28"
+    private const val COLOR_BG = R.color.revoke_background
+    private const val COLOR_SURFACE = R.color.revoke_surface
+    private const val COLOR_SURFACE_ALT = R.color.revoke_surface_elevated
+    private const val COLOR_STROKE = R.color.revoke_border_subtle
+    private const val COLOR_STROKE_SOFT = R.color.revoke_border_soft
+    private const val COLOR_TEXT_PRIMARY = R.color.revoke_text_primary
+    private const val COLOR_TEXT_SECONDARY = R.color.revoke_text_secondary
+    private const val COLOR_TEXT_MUTED = R.color.revoke_text_muted
+    private const val COLOR_TEXT_STAT_VALUE = R.color.revoke_text_stat
+    private const val COLOR_ORANGE = R.color.revoke_action_primary
+    private const val COLOR_ORANGE_SOFT = R.color.revoke_action_soft
+    private const val COLOR_BADGE_BG = R.color.revoke_badge_surface
 
     private data class OverlayViews(
         val root: View,
@@ -366,7 +366,7 @@ object BlockerOverlayController {
         val reminderFrequency = readSoftReminderFrequencyLabel(context)
         val root =
             FrameLayout(context).apply {
-                setBackgroundColor(Color.parseColor("#E906070A"))
+                setBackgroundColor(color(context, R.color.revoke_scrim_soft))
                 setPadding(dp(context, 24), dp(context, 32), dp(context, 24), dp(context, 32))
             }
         val card =
@@ -376,8 +376,8 @@ object BlockerOverlayController {
                 background =
                     roundedRect(
                         context = context,
-                        fill = Color.parseColor(COLOR_SURFACE),
-                        stroke = Color.parseColor(COLOR_STROKE),
+                        fill = color(context, COLOR_SURFACE),
+                        stroke = color(context, COLOR_STROKE),
                         radiusDp = 24,
                     )
                 elevation = dp(context, 8).toFloat()
@@ -386,7 +386,7 @@ object BlockerOverlayController {
         card.addView(buildReminderIcon(context, presentation, 78))
         card.addView(space(context, 18, false))
         card.addView(
-            buildText(context, "BE MINDFUL", 12f, COLOR_ORANGE_SOFT, true).apply {
+            buildText(context, "Take a moment", 12f, COLOR_ORANGE_SOFT, true).apply {
                 gravity = Gravity.CENTER
                 letterSpacing = 0.18f
             },
@@ -415,7 +415,7 @@ object BlockerOverlayController {
         card.addView(
             buildText(
                 context,
-                "${formatReminderMinutes(presentation.remainingMs)} remains. This reminder will reappear in $reminderFrequency.",
+                "${formatReminderMinutes(presentation.remainingMs)} remains. This reminder returns in $reminderFrequency.",
                 14f,
                 COLOR_TEXT_SECONDARY,
                 false,
@@ -427,7 +427,7 @@ object BlockerOverlayController {
         )
         card.addView(space(context, 24, false))
         card.addView(
-            buildPrimaryButton(context, "I AM MINDFUL") {
+            buildPrimaryButton(context, "Continue") {
                 hideReminder(context, "soft_reminder_dismissed")
             },
             LinearLayout.LayoutParams(
@@ -449,7 +449,7 @@ object BlockerOverlayController {
     private fun buildInterstitialReminderView(context: Context, presentation: ReminderPresentation): View {
         val root =
             FrameLayout(context).apply {
-                setBackgroundColor(Color.parseColor("#D906070A"))
+                setBackgroundColor(color(context, R.color.revoke_scrim_strong))
                 setPadding(dp(context, 24), dp(context, 32), dp(context, 24), dp(context, 32))
             }
         val card =
@@ -459,8 +459,8 @@ object BlockerOverlayController {
                 background =
                     roundedRect(
                         context = context,
-                        fill = Color.parseColor(COLOR_SURFACE),
-                        stroke = Color.parseColor(COLOR_STROKE),
+                        fill = color(context, COLOR_SURFACE),
+                        stroke = color(context, COLOR_STROKE),
                         radiusDp = 24,
                     )
                 setPadding(dp(context, 22), dp(context, 24), dp(context, 22), dp(context, 22))
@@ -468,7 +468,7 @@ object BlockerOverlayController {
         card.addView(buildReminderIcon(context, presentation, 72))
         card.addView(space(context, 18, false))
         card.addView(
-            buildText(context, "CHECK YOUR GOAL", 11f, COLOR_ORANGE_SOFT, true).apply {
+            buildText(context, "Review your boundary", 11f, COLOR_ORANGE_SOFT, true).apply {
                 gravity = Gravity.CENTER
                 letterSpacing = 0.18f
             },
@@ -495,7 +495,7 @@ object BlockerOverlayController {
         )
         card.addView(space(context, 22, false))
         card.addView(
-            buildPrimaryButton(context, "ACKNOWLEDGE") {
+            buildPrimaryButton(context, "Acknowledge") {
                 hideReminder(context, "interstitial_acknowledged")
             },
             LinearLayout.LayoutParams(
@@ -523,8 +523,8 @@ object BlockerOverlayController {
             background =
                 roundedRect(
                     context = context,
-                    fill = Color.parseColor(COLOR_SURFACE_ALT),
-                    stroke = Color.parseColor(COLOR_STROKE),
+                    fill = color(context, COLOR_SURFACE_ALT),
+                    stroke = color(context, COLOR_STROKE),
                     radiusDp = sizeDp / 3,
                 )
             addView(
@@ -532,6 +532,7 @@ object BlockerOverlayController {
                     presentation.appIcon?.let(::setImageDrawable)
                         ?: setImageResource(R.mipmap.ic_launcher)
                     scaleType = ImageView.ScaleType.FIT_CENTER
+                    contentDescription = presentation.appName
                 },
                 FrameLayout.LayoutParams(
                     dp(context, (sizeDp * 0.64f).toInt()),
@@ -548,7 +549,7 @@ object BlockerOverlayController {
     ): OverlayViews {
         val root =
             FrameLayout(context).apply {
-                setBackgroundColor(Color.parseColor(COLOR_BG))
+                setBackgroundColor(color(context, COLOR_BG))
                 clipChildren = false
                 clipToPadding = false
                 fitsSystemWindows = false
@@ -568,8 +569,8 @@ object BlockerOverlayController {
                         setColor(Color.TRANSPARENT)
                         colors =
                             intArrayOf(
-                                Color.parseColor("#3DFF6B2C"),
-                                Color.parseColor("#12FF6B2C"),
+                                color(context, R.color.revoke_glow_outer),
+                                color(context, R.color.revoke_glow_inner),
                                 Color.TRANSPARENT,
                             )
                         gradientRadius = dp(context, 170).toFloat()
@@ -696,6 +697,7 @@ object BlockerOverlayController {
             addView(
                 ImageView(context).apply {
                     setImageResource(R.drawable.ic_launcher_foreground)
+                    contentDescription = "Revoke"
                     layoutParams = LinearLayout.LayoutParams(dp(context, 52), dp(context, 52))
                 },
             )
@@ -703,7 +705,7 @@ object BlockerOverlayController {
                 TextView(context).apply {
                     text = "Revoke"
                     textSize = 18f
-                    setTextColor(Color.parseColor(COLOR_TEXT_PRIMARY))
+                    setTextColor(color(context, COLOR_TEXT_PRIMARY))
                     typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                     letterSpacing = 0.0f
                     gravity = Gravity.CENTER
@@ -735,8 +737,8 @@ object BlockerOverlayController {
                             setColor(Color.TRANSPARENT)
                             colors =
                                 intArrayOf(
-                                    Color.parseColor("#49FF6B2C"),
-                                    Color.parseColor("#18FF6B2C"),
+                                    color(context, R.color.revoke_glow_outer),
+                                    color(context, R.color.revoke_glow_inner),
                                     Color.TRANSPARENT,
                                 )
                             gradientRadius = dp(context, 110).toFloat()
@@ -751,8 +753,8 @@ object BlockerOverlayController {
                     background =
                         GradientDrawable().apply {
                             shape = GradientDrawable.OVAL
-                            setColor(Color.parseColor("#0C1016"))
-                            setStroke(dp(context, 1), Color.parseColor("#2B3B50"))
+                            setColor(color(context, R.color.revoke_hero_surface))
+                            setStroke(dp(context, 1), color(context, COLOR_STROKE))
                         }
                 },
                 FrameLayout.LayoutParams(dp(context, 182), dp(context, 182), Gravity.CENTER),
@@ -768,8 +770,8 @@ object BlockerOverlayController {
                             background =
                                 roundedRect(
                                     context = context,
-                                    fill = Color.parseColor(COLOR_SURFACE_ALT),
-                                    stroke = Color.parseColor("#33424F62"),
+                                    fill = color(context, COLOR_SURFACE_ALT),
+                                    stroke = color(context, COLOR_STROKE),
                                     radiusDp = 32,
                                 )
                             elevation = dp(context, 6).toFloat()
@@ -778,6 +780,7 @@ object BlockerOverlayController {
                         presentation.appIcon?.let(::setImageDrawable)
                             ?: setImageResource(R.mipmap.ic_launcher)
                         scaleType = ImageView.ScaleType.FIT_CENTER
+                        contentDescription = presentation.appName
                     }
                     appTile.addView(
                         appIconView,
@@ -794,15 +797,15 @@ object BlockerOverlayController {
                             background =
                                 GradientDrawable().apply {
                                     shape = GradientDrawable.OVAL
-                                    setColor(Color.parseColor(COLOR_BADGE_BG))
-                                    setStroke(dp(context, 2), Color.parseColor(COLOR_ORANGE))
+                                    setColor(color(context, COLOR_BADGE_BG))
+                                    setStroke(dp(context, 2), color(context, COLOR_ORANGE))
                                 }
                             elevation = dp(context, 14).toFloat()
                         }
                     badge.addView(
                         ImageView(context).apply {
                             setImageResource(R.drawable.ic_lock_premium)
-                            setColorFilter(Color.parseColor(COLOR_ORANGE_SOFT))
+                            setColorFilter(color(context, COLOR_ORANGE_SOFT))
                         },
                         FrameLayout.LayoutParams(dp(context, 20), dp(context, 20), Gravity.CENTER),
                     )
@@ -849,14 +852,14 @@ object BlockerOverlayController {
             background =
                 roundedRect(
                     context = context,
-                    fill = Color.parseColor("#090C11"),
-                    stroke = Color.parseColor(COLOR_STROKE_SOFT),
+                    fill = color(context, R.color.revoke_stat_surface),
+                    stroke = color(context, COLOR_STROKE_SOFT),
                     radiusDp = 18,
                 )
             alpha = 0.9f
             setPadding(dp(context, 10), dp(context, 9), dp(context, 10), dp(context, 9))
             addView(
-                buildText(context, chip.label, 10f, "#596371", false).apply {
+                buildText(context, chip.label, 10f, COLOR_TEXT_MUTED, false).apply {
                     letterSpacing = 0.1f
                     gravity = Gravity.CENTER
                     maxLines = 1
@@ -931,8 +934,8 @@ object BlockerOverlayController {
             background =
                 roundedRect(
                     context = context,
-                    fill = Color.parseColor("#0D1117"),
-                    stroke = Color.parseColor(COLOR_STROKE_SOFT),
+                    fill = color(context, R.color.revoke_surface_subtle),
+                    stroke = color(context, COLOR_STROKE_SOFT),
                     radiusDp = 18,
                 )
             setPadding(dp(context, 18), dp(context, 16), dp(context, 18), dp(context, 16))
@@ -952,14 +955,14 @@ object BlockerOverlayController {
         Button(context).apply {
             this.text = text
             transformationMethod = null
-            setTextColor(Color.WHITE)
+            setTextColor(color(context, COLOR_TEXT_PRIMARY))
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             background =
                 roundedRect(
                     context = context,
-                    fill = Color.parseColor(COLOR_ORANGE),
-                    stroke = Color.parseColor("#55FFB082"),
+                    fill = color(context, COLOR_ORANGE),
+                    stroke = color(context, COLOR_ORANGE_SOFT),
                     radiusDp = 18,
                 )
             setOnClickListener { onClick() }
@@ -974,14 +977,14 @@ object BlockerOverlayController {
         Button(context).apply {
             this.text = text
             transformationMethod = null
-            setTextColor(Color.parseColor(COLOR_TEXT_PRIMARY))
+            setTextColor(color(context, COLOR_TEXT_PRIMARY))
             textSize = 14f
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             background =
                 roundedRect(
                     context = context,
-                    fill = Color.parseColor("#171B24"),
-                    stroke = Color.parseColor(COLOR_STROKE),
+                    fill = color(context, COLOR_SURFACE_ALT),
+                    stroke = color(context, COLOR_STROKE),
                     radiusDp = 18,
                 )
             setOnClickListener { onClick() }
@@ -1032,20 +1035,23 @@ object BlockerOverlayController {
         context: Context,
         text: String,
         sizeSp: Float,
-        colorHex: String,
+        colorRes: Int,
         bold: Boolean,
     ): TextView =
         TextView(context).apply {
             this.text = text
             textSize = sizeSp
-            setTextColor(Color.parseColor(colorHex))
+            setTextColor(color(context, colorRes))
             typeface =
                 if (bold) {
-                    Typeface.create("sans-serif-black", Typeface.NORMAL)
-                } else {
                     Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                } else {
+                    Typeface.create("sans-serif", Typeface.NORMAL)
                 }
         }
+
+    private fun color(context: Context, colorRes: Int): Int =
+        androidx.core.content.ContextCompat.getColor(context, colorRes)
 
     private fun roundedRect(
         context: Context,

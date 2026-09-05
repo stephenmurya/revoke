@@ -57,9 +57,15 @@ class _CreditDetailsScreenState extends State<CreditDetailsScreen> {
                 children: [
                   Text('Available Credits', style: context.text.label),
                   const SizedBox(height: RevokeSpacing.xs),
-                  Text('${wallet.availableCredits}', style: context.text.numericDisplay),
+                  Text(
+                    '${wallet.availableCredits}',
+                    style: context.text.numericDisplay,
+                  ),
                   const SizedBox(height: RevokeSpacing.md),
-                  Text('Locked Credits  ${wallet.lockedCredits}', style: context.text.bodySecondary),
+                  Text(
+                    'Locked Credits  ${wallet.lockedCredits}',
+                    style: context.text.bodySecondary,
+                  ),
                 ],
               ),
             ),
@@ -79,7 +85,10 @@ class _CreditDetailsScreenState extends State<CreditDetailsScreen> {
               return Column(
                 children: [
                   for (final product in products) ...[
-                    _ProductRow(product: product, onTap: () => _confirmPurchase(product)),
+                    _ProductRow(
+                      product: product,
+                      onTap: () => _confirmPurchase(product),
+                    ),
                     if (product != products.last) const RevokeDivider(),
                   ],
                 ],
@@ -119,7 +128,10 @@ class _CreditDetailsScreenState extends State<CreditDetailsScreen> {
             builder: (context, snapshot) {
               final entries = snapshot.data ?? const <CreditLedgerEntry>[];
               if (entries.isEmpty) {
-                return Text('Credit activity will appear here.', style: context.text.bodySecondary);
+                return Text(
+                  'Credit activity will appear here.',
+                  style: context.text.bodySecondary,
+                );
               }
               return RevokeSurface(
                 padding: EdgeInsets.zero,
@@ -129,7 +141,9 @@ class _CreditDetailsScreenState extends State<CreditDetailsScreen> {
                       ListTile(
                         title: Text(_label(entries[i].type)),
                         subtitle: Text(entries[i].description ?? ''),
-                        trailing: Text('${entries[i].amount > 0 ? '+' : ''}${entries[i].amount}'),
+                        trailing: Text(
+                          '${entries[i].amount > 0 ? '+' : ''}${entries[i].amount}',
+                        ),
                       ),
                       if (i < entries.length - 1) const RevokeDivider(),
                     ],
@@ -145,11 +159,10 @@ class _CreditDetailsScreenState extends State<CreditDetailsScreen> {
 
   Future<void> _confirmPurchase(ProductDetails product) async {
     var confirmed = false;
-    confirmed = await showDialog<bool>(
+    confirmed =
+        await showDialog<bool>(
           context: context,
-          builder: (context) => _CreditPurchaseDisclosure(
-            product: product,
-          ),
+          builder: (context) => _CreditPurchaseDisclosure(product: product),
         ) ??
         false;
     if (!confirmed || !mounted) return;
@@ -164,14 +177,16 @@ class _CreditDetailsScreenState extends State<CreditDetailsScreen> {
       await _creditService.redeem(amount);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$amount Credits redeemed for Premium access.')),
+          SnackBar(
+            content: Text('$amount Credits redeemed for Premium access.'),
+          ),
         );
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) setState(() => _redeeming = false);
@@ -179,14 +194,14 @@ class _CreditDetailsScreenState extends State<CreditDetailsScreen> {
   }
 
   String _label(String type) => switch (type) {
-        'CREDIT_PURCHASE' => 'Credits purchased',
-        'CREDIT_LOCK' => 'Credits locked',
-        'CREDIT_RELEASE' => 'Credits returned',
-        'CREDIT_FORFEITURE' => 'Credits forfeited',
-        'PREMIUM_REDEMPTION' => 'Premium redeemed',
-        'PURCHASE_REVERSAL' => 'Purchase reversed',
-        _ => 'Credit activity',
-      };
+    'CREDIT_PURCHASE' => 'Credits purchased',
+    'CREDIT_LOCK' => 'Credits locked',
+    'CREDIT_RELEASE' => 'Credits returned',
+    'CREDIT_FORFEITURE' => 'Credits forfeited',
+    'PREMIUM_REDEMPTION' => 'Premium redeemed',
+    'PURCHASE_REVERSAL' => 'Purchase reversed',
+    _ => 'Credit activity',
+  };
 }
 
 class _ProductRow extends StatelessWidget {
@@ -196,7 +211,8 @@ class _ProductRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final credits = CreditPurchaseProduct.fromProductId(product.id)?.amount ?? 0;
+    final credits =
+        CreditPurchaseProduct.fromProductId(product.id)?.amount ?? 0;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text('$credits Credits', style: context.text.cardTitle),
@@ -211,7 +227,8 @@ class _CreditPurchaseDisclosure extends StatefulWidget {
   final ProductDetails product;
 
   @override
-  State<_CreditPurchaseDisclosure> createState() => _CreditPurchaseDisclosureState();
+  State<_CreditPurchaseDisclosure> createState() =>
+      _CreditPurchaseDisclosureState();
 }
 
 class _CreditPurchaseDisclosureState extends State<_CreditPurchaseDisclosure> {
@@ -247,7 +264,10 @@ class _CreditPurchaseDisclosureState extends State<_CreditPurchaseDisclosure> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: _understood ? () => Navigator.pop(context, true) : null,
           child: Text('Continue for ${widget.product.price}'),
