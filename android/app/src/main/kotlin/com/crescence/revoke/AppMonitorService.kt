@@ -42,6 +42,13 @@ class AppMonitorService : Service() {
             }
             return true
         }
+
+        fun stopForAccountSwitch(context: Context) {
+            currentInstance?.suppressAutoRestart = true
+            context.applicationContext.stopService(
+                Intent(context.applicationContext, AppMonitorService::class.java),
+            )
+        }
     }
 
     private data class TimeWindow(val startTotalMin: Int, val endTotalMin: Int)

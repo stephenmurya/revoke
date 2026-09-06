@@ -62,6 +62,9 @@ Accountability Circles are optional and use granular permissions. Commitment Cre
 - `engineering/status.md`: current implementation reality versus v2 target.
 - `engineering/implementation-principles.md`: revival and authority constraints.
 - `engineering/google-play-setup.md`: manual Play Console, licensed-device, RTDN, and production readiness runbook.
+- `engineering/release-readiness.md`: repository evidence and external release gates.
+- `engineering/migration.md`: account isolation, sign-out/delete, reinstall risk, and remaining migration boundary.
+- `engineering/device-test-matrix.md`: required Android/OEM/device scenario matrix.
 
 ### Design
 
@@ -94,6 +97,8 @@ The Phase 8 commercial onboarding review is [review/docs/phase-8-commercial-onbo
 The Phase 9 Insights review is [review/docs/phase-9-insights-implementation.md](review/docs/phase-9-insights-implementation.md). It records the direct usage-evidence hierarchy, Free/Premium range boundary, Reduce and override analysis, chart architecture, Focus Score cleanup, and deferred metrics.
 
 The Phase 10 visual polish review is [review/docs/phase-10-implementation.md](review/docs/phase-10-implementation.md). It records semantic theme refinement, shared component states, native resource alignment, accessibility/code review, and intentionally deferred device-level visual verification.
+
+The Phase 11 hardening review is [review/docs/phase-11-hardening.md](review/docs/phase-11-hardening.md). The final adversarial review handoff is [review/final-review-handoff.md](review/final-review-handoff.md). These records distinguish repository validation from external device, Play, signing, policy, and operational gates.
 
 ### Archive
 

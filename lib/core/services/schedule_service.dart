@@ -33,9 +33,9 @@ class ScheduleService {
     return normalized;
   }
 
-  static String _localSchedulesKey() {
+  static String? _localSchedulesKey() {
     final uid = _uidOrNull();
-    if (uid == null) return _legacyKey;
+    if (uid == null) return null;
     return '$_keyPrefix$uid';
   }
 
@@ -151,6 +151,7 @@ class ScheduleService {
   static Future<List<ScheduleModel>> _readLocalSchedules() async {
     final prefs = await SharedPreferences.getInstance();
     final key = _localSchedulesKey();
+    if (key == null) return <ScheduleModel>[];
     String? data = prefs.getString(key);
 
     // One-time migration from the legacy global key to per-user key.
@@ -179,9 +180,12 @@ class ScheduleService {
   static Future<void> _writeLocalSchedules(
     List<ScheduleModel> schedules,
   ) async {
+    if (_uidOrNull() == null) return;
     final prefs = await SharedPreferences.getInstance();
+    final key = _localSchedulesKey();
+    if (key == null) return;
     final data = jsonEncode(schedules.map((s) => s.toJson()).toList());
-    await prefs.setString(_localSchedulesKey(), data);
+    await prefs.setString(key, data);
   }
 
   static Future<void> _pushSingleToCloudInBackground(
@@ -231,6 +235,7 @@ class ScheduleService {
   }
 
   static Future<List<ScheduleModel>> getSchedules() async {
+    if (_uidOrNull() == null) return <ScheduleModel>[];
     final local = await _readLocalSchedules();
     // Retry any missed cloud sync attempts.
     unawaited(_flushPendingCloudSyncInBackground());
@@ -258,6 +263,10 @@ class ScheduleService {
   }
 
   static Stream<List<ScheduleModel>> watchSchedules() async* {
+    if (_uidOrNull() == null) {
+      yield const <ScheduleModel>[];
+      return;
+    }
     final local = await _readLocalSchedules();
     yield local;
 
@@ -272,6 +281,7 @@ class ScheduleService {
   }
 
   static Future<void> saveSchedule(ScheduleModel schedule) async {
+    if (_uidOrNull() == null) return;
     final schedules = await _readLocalSchedules();
     final index = schedules.indexWhere((s) => s.id == schedule.id);
     final existing = index == -1 ? null : schedules[index];
@@ -292,6 +302,7 @@ class ScheduleService {
   }
 
   static Future<void> deleteSchedule(String id) async {
+    if (_uidOrNull() == null) return;
     final schedules = await _readLocalSchedules();
     schedules.removeWhere((s) => s.id == id);
     await _writeLocalSchedules(schedules);
@@ -302,6 +313,7 @@ class ScheduleService {
   }
 
   static Future<void> toggleSchedule(String id) async {
+    if (_uidOrNull() == null) return;
     final schedules = await _readLocalSchedules();
     final index = schedules.indexWhere((s) => s.id == id);
     if (index == -1) return;
@@ -322,6 +334,10 @@ class ScheduleService {
   }
 
   static Future<void> syncWithNative() async {
+    if (_uidOrNull() == null) {
+      await NativeBridge.syncSchedules('[]');
+      return;
+    }
     final schedules = await _readLocalSchedules();
     final normalizedSchedules = <ScheduleModel>[];
     var schedulesChanged = false;
@@ -338,8 +354,9 @@ class ScheduleService {
       await _writeLocalSchedules(normalizedSchedules);
     }
 
-    final activeSchedules =
-        normalizedSchedules.where((s) => s.isActive).toList();
+    final activeSchedules = normalizedSchedules
+        .where((s) => s.isActive)
+        .toList();
     final nextWakeupMs =
         RegimeWakeupCalculator.computeNextWakeupTimestampMs(activeSchedules) ??
         0;

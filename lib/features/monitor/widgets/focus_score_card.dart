@@ -35,7 +35,10 @@ class _FocusScoreCardState extends State<FocusScoreCard>
 
   Future<void> _loadScore() async {
     final prefs = await SharedPreferences.getInstance();
-    final score = prefs.getInt('focus_score') ?? 500;
+    final uid = AuthService.currentUser?.uid.trim();
+    final score = uid == null || uid.isEmpty
+        ? 500
+        : prefs.getInt('focus_score_$uid') ?? 500;
 
     _animation = IntTween(
       begin: 0,

@@ -182,6 +182,13 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
     }
 
     if (nextUid != null && nextUid.isNotEmpty) {
+      // Bind native state before any account-scoped service can publish
+      // schedules, backings, or evidence. This prevents an account switch
+      // race from briefly syncing the new account into the old native context.
+      try {
+        await NativeBridge.syncNativeUserId(nextUid);
+      } catch (_) {}
+      unawaited(ScheduleService.syncWithNative());
       unawaited(PremiumEntitlementService.instance.initializeForUser(nextUid));
       unawaited(PremiumBillingService.instance.initializeForUser(nextUid));
       unawaited(CreditService.instance.initializeForUser(nextUid));
@@ -193,6 +200,10 @@ class _GlobalAppServicesState extends State<GlobalAppServices>
       );
     }
     if (nextUid == null || nextUid.isEmpty) {
+      try {
+        await NativeBridge.syncNativeUserId(null);
+      } catch (_) {}
+      unawaited(ScheduleService.syncWithNative());
       unawaited(PremiumEntitlementService.instance.reset());
       unawaited(PremiumBillingService.instance.initializeForUser(null));
       unawaited(CreditService.instance.reset());

@@ -454,6 +454,11 @@ const MARKED_FOR_DELETION_TTL_MS = 10 * 60 * 1000;
 const CLEANUP_BATCH_LIMIT = 100;
 
 const PREMIUM_DISCLOSURE_VERSION = "premium-purchase-v1";
+// Credit-backed Commitments remain disabled until native evidence can be
+// server-verified (for example through the planned signing/integrity seam).
+// Set this only as part of a reviewed production rollout; never enable it by
+// client payload or by assuming monitoring-health booleans are proof.
+const CREDIT_BACKING_ENABLED = process.env.REVOKE_CREDIT_BACKING_ENABLED === "true";
 
 function _creditError(error) {
   if (error instanceof HttpsError) return error;
@@ -511,6 +516,12 @@ exports.createCreditBacking = onCall({
 }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
   try {
+    if (!CREDIT_BACKING_ENABLED) {
+      throw new HttpsError(
+          "failed-precondition",
+          "Credit-backed Commitments are not enabled until evidence verification is available.",
+      );
+    }
     await _assertPremiumEntitled(request.auth.uid);
     return await creditLedger.createBacking(request.auth.uid, request.data || {});
   } catch (error) {

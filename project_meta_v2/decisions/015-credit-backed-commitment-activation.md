@@ -14,5 +14,7 @@ The server remains authoritative for evidence outcomes, the 24-hour default reco
 - Backing terms and rule snapshots are auditable and tied to one Commitment.
 - Incomplete native checkpoint coverage can produce `UNVERIFIABLE`, which releases locked Credits without consuming grace.
 - Full server-created Commitment leases, device signing, Play Integrity policy, retry linking, and physical-device validation remain follow-up hardening.
+- Phase 11 adds a fail-closed operational gate: `createCreditBacking` is disabled by default until server-verifiable evidence exists. Client-originated evidence is retained for reconciliation but cannot become trusted merely through callable input.
+- Local `FAILURE_VERIFIED_LOCAL` projections may update the visible local Credit projection offline and queue durable reconciliation; the server remains the canonical ledger authority. Wipe/reinstall before upload may lose the pending event and is an accepted v2 risk.
 
 See `../architecture/credit-backed-commitments.md` and `../architecture/commitment-verification.md`.

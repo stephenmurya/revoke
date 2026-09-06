@@ -51,3 +51,12 @@ Use a Play license tester and a real configured application package to verify:
 | Credit consume/reversal lifecycle | NOT RUN |
 | Credit evidence device coverage | NOT RUN |
 | Production release readiness | NOT READY until manual gates pass |
+
+## Phase 11 release-hardening additions
+
+- Verify the final signed artifact, package identity, target SDK 36, version code/name, mapping files, and Play App Signing/upload-key arrangement in the release environment.
+- Keep production service credentials in deployment configuration/Secret Manager. The repository’s local `key.properties`, upload keystore, and Firebase client configuration are not production proof.
+- Execute the Android/OEM lifecycle matrix in `device-test-matrix.md`, including service death, force-stop, reboot, permission loss, exact-alarm denial, Flutter process death, and native FCM approval while Flutter is dead.
+- Do not enable Credit-backed Commitment creation until a server-verifiable evidence path and reviewed Integrity/signing policy exist. The code default is fail-closed.
+- Re-run the Firestore emulator suite in an uncontested environment; the Phase 11 local run was blocked by port 8080 occupancy.
+- Complete Play policy, Data Safety, Accessibility API declaration, privacy/retention, subscription/prepaid catalog, RTDN, refund/revocation, and support/incident runbooks before release.

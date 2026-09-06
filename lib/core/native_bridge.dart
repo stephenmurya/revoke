@@ -110,6 +110,12 @@ class NativeBridge {
     await _channel.invokeMethod('syncNativeUserId', {'uid': uid?.trim() ?? ''});
   }
 
+  /// Removes account-bound native state after logout or before switching users.
+  /// Evidence rows remain durable for reconciliation, but are UID-filtered.
+  static Future<void> clearUserBoundNativeState() async {
+    await _channel.invokeMethod('clearUserBoundNativeState');
+  }
+
   /// Returns whether the Accessibility fast path is currently enabled.
   static Future<bool> checkAccessibilityPermission() async {
     final result = await _channel.invokeMethod('checkAccessibilityPermission');

@@ -37,12 +37,16 @@ test("evidence waits for the reconciliation window and fails safe", () => {
       EVIDENCE_OUTCOMES.UNVERIFIABLE,
   );
   assert.equal(
-      evaluateEvidence([{eventType: "RULE_VIOLATION_OBSERVED"}], end + 24 * 60 * 60 * 1000, end),
+      evaluateEvidence([{eventType: "RULE_VIOLATION_OBSERVED", trusted: true}], end + 24 * 60 * 60 * 1000, end),
       EVIDENCE_OUTCOMES.FAILURE,
   );
   assert.equal(
-      evaluateEvidence([{eventType: "CHECKPOINT_COMPLIANT", monitoringHealthy: true}], end + 24 * 60 * 60 * 1000, end),
+      evaluateEvidence([{eventType: "CHECKPOINT_COMPLIANT", monitoringHealthy: true, trusted: true}], end + 24 * 60 * 60 * 1000, end),
       EVIDENCE_OUTCOMES.SUCCESS,
+  );
+  assert.equal(
+      evaluateEvidence([{eventType: "RULE_VIOLATION_OBSERVED"}], end + 24 * 60 * 60 * 1000, end),
+      EVIDENCE_OUTCOMES.UNVERIFIABLE,
   );
 });
 

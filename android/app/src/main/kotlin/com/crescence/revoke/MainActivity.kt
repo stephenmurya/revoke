@@ -284,11 +284,19 @@ class MainActivity : FlutterActivity() {
                 }
                 "syncNativeUserId" -> {
                     val uid = call.argument<String>("uid")?.trim().orEmpty()
-                    getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+                    val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+                    val previousUid = prefs.getString("revoke_uid", "")?.trim().orEmpty()
+                    if (previousUid.isNotEmpty() && previousUid != uid) {
+                        clearUserBoundNativeState()
+                    }
+                    prefs
                         .edit()
                         .putString("revoke_uid", uid)
                         .apply()
                     result.success(true)
+                }
+                "clearUserBoundNativeState" -> {
+                    result.success(clearUserBoundNativeState())
                 }
                 "getAppDetails" -> {
                     val packageName = call.argument<String>("packageName")
@@ -507,6 +515,25 @@ class MainActivity : FlutterActivity() {
         } else {
             true
         }
+    }
+
+    private fun clearUserBoundNativeState(): Boolean {
+        val prefs = getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+        prefs.edit()
+            .remove("schedules")
+            .remove("temp_unlocks")
+            .remove("amnesty_expiry")
+            .remove("revoke_uid")
+            .remove("whitelist_packages")
+            .remove("overlay_has_squad")
+            .remove("next_regime_wakeup_ms")
+            .apply()
+
+        CreditBackingStore.clearAll(this)
+        EnforcementEngine.syncSchedules(this, "[]")
+        AlarmScheduler.cancelNextRegimeWakeup(this)
+        AppMonitorService.stopForAccountSwitch(this)
+        return true
     }
 
     private fun syncReminderConfigToNative(args: Map<*, *>?): Map<String, Any> {

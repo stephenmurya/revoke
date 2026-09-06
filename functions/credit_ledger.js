@@ -30,6 +30,23 @@ const EVIDENCE_OUTCOMES = Object.freeze({
   CANCELLED: "CANCELLED_PRE_START",
 });
 
+// Evidence submitted through a callable is client-originated. It is useful
+// for reconciliation and diagnostics, but it is not sufficient by itself to
+// create a financial outcome until a server-verifiable evidence path marks it
+// trusted. This prevents a forged client success/failure event from moving
+// the canonical wallet.
+const CLIENT_EVIDENCE_EVENT_TYPES = new Set([
+  "FOREGROUND_OBSERVED",
+  "RULE_VIOLATION_OBSERVED",
+  "POSITIVE_FAILURE",
+  "CHECKPOINT_COMPLIANT",
+  "MONITORING_HEALTH",
+  "SERVICE_HEALTH",
+  "PERMISSION_LOST",
+  "BOOT",
+  "LOCAL_FAILURE_SIGNAL",
+]);
+
 function normalizeString(value) {
   return (value || "").toString().trim();
 }
@@ -125,9 +142,11 @@ function normalizeProductPurchase(raw) {
 function evaluateEvidence(evidence, nowMs, endAtMs, windowHours = RESOLUTION_WINDOW_HOURS) {
   if (nowMs < endAtMs + windowHours * 60 * 60 * 1000) return null;
   const rows = Array.isArray(evidence) ? evidence : [];
-  if (rows.some((row) => row?.eventType === "RULE_VIOLATION_OBSERVED" ||
-      row?.eventType === "POSITIVE_FAILURE")) return EVIDENCE_OUTCOMES.FAILURE;
-  if (rows.some((row) => row?.eventType === "CHECKPOINT_COMPLIANT" &&
+  if (rows.some((row) => row?.trusted === true &&
+      (row?.eventType === "RULE_VIOLATION_OBSERVED" ||
+       row?.eventType === "POSITIVE_FAILURE"))) return EVIDENCE_OUTCOMES.FAILURE;
+  if (rows.some((row) => row?.trusted === true &&
+      row?.eventType === "CHECKPOINT_COMPLIANT" &&
       row?.monitoringHealthy === true)) return EVIDENCE_OUTCOMES.SUCCESS;
   if (rows.some((row) => row?.eventType === "CANCELLED_PRE_START")) {
     return EVIDENCE_OUTCOMES.CANCELLED;
@@ -506,24 +525,83 @@ function createCreditLedgerService({
       error.code = "not-found";
       throw error;
     }
-    const batch = db.batch();
-    let count = 0;
-    for (const entry of entries) {
-      const eventId = normalizeString(entry.eventId) || hashToken(JSON.stringify(entry));
-      const ref = userRef(uid).collection("creditEvidence").doc(eventId);
-      batch.set(ref, {
-        ...entry,
-        eventId,
-        uid,
-        backingId,
-        commitmentId: normalizeString(backingSnap.data()?.commitmentId),
-        receivedAt: serverTimestamp(),
-      }, {merge: true});
-      count++;
+    const backingStatus = normalizeString(backingSnap.data()?.status);
+    if (!["LOCKED", "GRACE"].includes(backingStatus)) {
+      // A retry arriving after finalization is harmless and must not mutate
+      // the finalized backing or append late evidence.
+      return {success: true, accepted: 0, finalized: true};
     }
-    batch.set(backingRef, {lastEvidenceAt: serverTimestamp(), updatedAt: serverTimestamp()}, {merge: true});
-    await batch.commit();
-    return {success: true, accepted: count};
+
+    const commitmentId = normalizeString(backingSnap.data()?.commitmentId);
+    const normalizedEntries = entries.map((entry) => {
+      const source = entry && typeof entry === "object" ? entry : {};
+      const eventId = normalizeString(source.eventId) || hashToken(JSON.stringify(source));
+      const eventType = normalizeString(source.eventType).toUpperCase();
+      if (!/^[a-zA-Z0-9_-]{1,200}$/.test(eventId) ||
+          !CLIENT_EVIDENCE_EVENT_TYPES.has(eventType)) {
+        const error = new Error("Evidence event is invalid.");
+        error.code = "invalid-argument";
+        throw error;
+      }
+      return {
+        eventId,
+        eventType,
+        backingId,
+        commitmentId,
+        uid,
+        sequence: Math.max(0, Math.floor(Number(source.sequence) || 0)),
+        bootSessionId: normalizeString(source.bootSessionId).slice(0, 160),
+        elapsedRealtimeMs: Math.max(0, Math.floor(Number(source.elapsedRealtimeMs) || 0)),
+        observedWallClockMs: Math.max(0, Math.floor(Number(source.observedWallClockMs || source.observedAtMs) || 0)),
+        packageName: normalizeString(source.packageName).slice(0, 180),
+        monitoringHealthy: source.monitoringHealthy === true,
+        eventHash: normalizeString(source.eventHash).slice(0, 128),
+        previousHash: normalizeString(source.previousHash).slice(0, 128),
+      };
+    });
+
+    const accepted = await db.runTransaction(async (tx) => {
+      let transactionAccepted = 0;
+      const latestBacking = await tx.get(backingRef);
+      if (!latestBacking.exists || !["LOCKED", "GRACE"].includes(
+          normalizeString(latestBacking.data()?.status))) {
+        return 0;
+      }
+      const refs = normalizedEntries.map((entry) =>
+        userRef(uid).collection("creditEvidence").doc(entry.eventId));
+      const existing = await Promise.all(refs.map((ref) => tx.get(ref)));
+      normalizedEntries.forEach((entry, index) => {
+        const existingData = existing[index].data();
+        if (existingData) {
+          const sameEvent = normalizeString(existingData.eventHash) === entry.eventHash &&
+            normalizeString(existingData.eventType) === entry.eventType &&
+            Number(existingData.sequence || 0) === entry.sequence;
+          if (!sameEvent) {
+            const error = new Error("Evidence event ID was reused with different data.");
+            error.code = "failed-precondition";
+            throw error;
+          }
+          return;
+        }
+        // Never copy arbitrary client fields, especially trusted/server-owned
+        // flags. A future signed verifier may promote an event separately.
+        tx.create(refs[index], {
+          ...entry,
+          trusted: false,
+          source: "client_evidence_upload",
+          receivedAt: serverTimestamp(),
+        });
+        transactionAccepted++;
+      });
+      if (transactionAccepted > 0) {
+        tx.set(backingRef, {
+          lastEvidenceAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }, {merge: true});
+      }
+      return transactionAccepted;
+    });
+    return {success: true, accepted, trusted: false};
   }
 
   async function submitPendingLocalForfeiture(uid, payload) {
@@ -596,45 +674,64 @@ function createCreditLedgerService({
     const holdRef = userRef(uid).collection("creditHolds").doc(backingId);
     const backingSnap = await backingRef.get();
     if (!backingSnap.exists) return null;
-    const backing = backingSnap.data() || {};
-    if (!["LOCKED", "GRACE"].includes(backing.status)) return {status: backing.status};
-    const endAtMs = timestampToMillis(backing.endAt);
-    const evidenceSnap = await userRef(uid).collection("creditEvidence")
-        .where("backingId", "==", backingId).limit(500).get();
-    const evidence = evidenceSnap.docs.map((doc) => doc.data());
-    const outcome = evaluateEvidence(evidence, now(), endAtMs, Number(backing.resolutionWindowHours) || RESOLUTION_WINDOW_HOURS);
-    if (!outcome) return {status: backing.status, pending: true};
-    if (outcome === EVIDENCE_OUTCOMES.FAILURE && Number(backing.graceRemaining) > 0) {
-      await backingRef.set({status: "GRACE", graceRemaining: Number(backing.graceRemaining) - 1, retryEndsAt: timestamp(now() + 24 * 60 * 60 * 1000), evidenceOutcome: outcome, updatedAt: serverTimestamp()}, {merge: true});
-      await holdRef.set({status: "GRACE", updatedAt: serverTimestamp()}, {merge: true});
-      return {status: "GRACE", outcome};
+    if (!["LOCKED", "GRACE"].includes(backingSnap.data()?.status)) {
+      return {status: backingSnap.data()?.status};
     }
-    const isFailure = outcome === EVIDENCE_OUTCOMES.FAILURE;
-    const eventType = isFailure ? LEDGER_EVENTS.FORFEITURE : LEDGER_EVENTS.RELEASE;
-    const settlement = isFailure ? "FORFEIT_FAILURE" : outcome === EVIDENCE_OUTCOMES.UNVERIFIABLE ? "RELEASE_UNVERIFIABLE" : "RELEASE_SUCCESS";
-    await db.runTransaction(async (tx) => {
-      const [latestBacking, latestHold, walletSnap] = await Promise.all([
+    const evidenceQuery = userRef(uid).collection("creditEvidence")
+        .where("backingId", "==", backingId).limit(500);
+    return db.runTransaction(async (tx) => {
+      const [latestBacking, latestHold, walletSnap, evidenceSnap] = await Promise.all([
         tx.get(backingRef), tx.get(holdRef), tx.get(walletRef(uid)),
+        tx.get(evidenceQuery),
       ]);
-      if (!latestBacking.exists || !["LOCKED", "GRACE"].includes(latestBacking.data()?.status) || !latestHold.exists) return;
+      if (!latestBacking.exists || !latestHold.exists) {
+        return {status: "MISSING"};
+      }
+      const latest = latestBacking.data() || {};
+      if (!["LOCKED", "GRACE"].includes(latest.status)) {
+        return {status: latest.status || "UNKNOWN", outcome: latest.evidenceOutcome, settlement: latest.settlement};
+      }
+      const outcome = evaluateEvidence(
+          evidenceSnap.docs.map((doc) => doc.data()),
+          now(),
+          timestampToMillis(latest.endAt),
+          Number(latest.resolutionWindowHours) || RESOLUTION_WINDOW_HOURS,
+      );
+      if (!outcome) return {status: latest.status, pending: true};
+      const isFailure = outcome === EVIDENCE_OUTCOMES.FAILURE;
+      const eventType = isFailure ? LEDGER_EVENTS.FORFEITURE : LEDGER_EVENTS.RELEASE;
+      const settlement = isFailure ? "FORFEIT_FAILURE" : outcome === EVIDENCE_OUTCOMES.UNVERIFIABLE ? "RELEASE_UNVERIFIABLE" : "RELEASE_SUCCESS";
+      const lockedCredits = Number(latest.lockedCredits) || 0;
+      const graceRemaining = Number(latest.graceRemaining) || 0;
+      if (outcome === EVIDENCE_OUTCOMES.FAILURE && graceRemaining > 0) {
+        tx.set(backingRef, {
+          status: "GRACE",
+          graceRemaining: graceRemaining - 1,
+          retryEndsAt: timestamp(now() + 24 * 60 * 60 * 1000),
+          evidenceOutcome: outcome,
+          updatedAt: serverTimestamp(),
+        }, {merge: true});
+        tx.set(holdRef, {status: "GRACE", updatedAt: serverTimestamp()}, {merge: true});
+        return {status: "GRACE", outcome};
+      }
       const current = walletSnap.data() || {availableCredits: 0, lockedCredits: 0};
-      const next = projectWallet(current, eventType, Number(backing.lockedCredits) || 0);
+      const next = projectWallet(current, eventType, lockedCredits);
       await appendLedgerEventTx(tx, uid, {
         id: `settle_${backingId}`,
         type: eventType,
-        amount: Number(backing.lockedCredits) || 0,
-        availableDelta: isFailure ? 0 : Number(backing.lockedCredits) || 0,
-        lockedDelta: isFailure ? -(Number(backing.lockedCredits) || 0) : -(Number(backing.lockedCredits) || 0),
+        amount: lockedCredits,
+        availableDelta: isFailure ? 0 : lockedCredits,
+        lockedDelta: -lockedCredits,
         sourceId: backingId,
-        commitmentId: backing.commitmentId,
+        commitmentId: latest.commitmentId,
         backingId,
         description: isFailure ? "Credits forfeited after verified failure" : "Credits returned after Commitment resolution",
       });
       tx.set(walletRef(uid), {...next, updatedAt: serverTimestamp()}, {merge: true});
       tx.set(holdRef, {status: isFailure ? "FORFEITED" : "RELEASED", settledAt: serverTimestamp(), settlement, updatedAt: serverTimestamp()}, {merge: true});
       tx.set(backingRef, {status: isFailure ? "FORFEITED" : "RELEASED", evidenceOutcome: outcome, settlement, settledAt: serverTimestamp(), updatedAt: serverTimestamp()}, {merge: true});
+      return {status: isFailure ? "FORFEITED" : "RELEASED", outcome, settlement};
     });
-    return {status: isFailure ? "FORFEITED" : "RELEASED", outcome, settlement};
   }
 
   async function resolveDue() {

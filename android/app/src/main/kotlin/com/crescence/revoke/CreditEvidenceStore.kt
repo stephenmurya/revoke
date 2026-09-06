@@ -15,12 +15,13 @@ class CreditEvidenceStore(private val appContext: Context) : SQLiteOpenHelper(
     appContext.applicationContext,
     "revoke_credit_evidence.db",
     null,
-    1,
+    2,
 ) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """CREATE TABLE evidence (
                 event_id TEXT PRIMARY KEY,
+                uid TEXT NOT NULL DEFAULT '',
                 backing_id TEXT NOT NULL,
                 commitment_id TEXT NOT NULL,
                 sequence INTEGER NOT NULL,
@@ -40,14 +41,21 @@ class CreditEvidenceStore(private val appContext: Context) : SQLiteOpenHelper(
         )
         db.execSQL("CREATE INDEX evidence_pending ON evidence(uploaded, created_at_ms)")
         db.execSQL("CREATE INDEX evidence_backing ON evidence(backing_id, sequence)")
+        db.execSQL("CREATE INDEX evidence_uid ON evidence(uid, uploaded, created_at_ms)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE evidence ADD COLUMN uid TEXT NOT NULL DEFAULT ''")
+            db.execSQL("CREATE INDEX IF NOT EXISTS evidence_uid ON evidence(uid, uploaded, created_at_ms)")
+        }
+    }
 
     @Synchronized
     fun append(payload: Map<String, Any?>): Map<String, Any?> {
         val backingId = payload["backingId"].toString().trim()
         val commitmentId = payload["commitmentId"].toString().trim()
+        val uid = payload["uid"]?.toString()?.trim().orEmpty()
         if (backingId.isEmpty() || commitmentId.isEmpty()) return mapOf("accepted" to false)
         val eventType = payload["eventType"].toString().trim().ifEmpty { "FOREGROUND_OBSERVED" }
         val packageName = payload["packageName"]?.toString()?.trim().orEmpty()
@@ -62,6 +70,7 @@ class CreditEvidenceStore(private val appContext: Context) : SQLiteOpenHelper(
         val body = JSONObject().apply {
             put("backingId", backingId)
             put("commitmentId", commitmentId)
+            put("uid", uid)
             put("sequence", sequence)
             put("eventType", eventType)
             put("bootSessionId", bootSessionId)
@@ -74,6 +83,7 @@ class CreditEvidenceStore(private val appContext: Context) : SQLiteOpenHelper(
         val hash = sha256("${previousHash.orEmpty()}|$eventId|$body")
         val values = ContentValues().apply {
             put("event_id", eventId)
+            put("uid", uid)
             put("backing_id", backingId)
             put("commitment_id", commitmentId)
             put("sequence", sequence)
@@ -106,6 +116,7 @@ class CreditEvidenceStore(private val appContext: Context) : SQLiteOpenHelper(
                 val row = JSONObject(cursor.getString(payload))
                 result += mapOf(
                     "eventId" to cursor.getString(eventId),
+                    "uid" to cursor.getString(cursor.getColumnIndexOrThrow("uid")),
                     "backingId" to row.optString("backingId"),
                     "commitmentId" to row.optString("commitmentId"),
                     "sequence" to row.optInt("sequence"),
@@ -170,7 +181,8 @@ object CreditBackingStore {
     @Synchronized
     fun sync(context: Context, backing: Map<String, Any?>) {
         val id = backing["backingId"]?.toString()?.trim().orEmpty()
-        if (id.isEmpty()) return
+        val backingUid = backing["uid"]?.toString()?.trim().orEmpty()
+        if (id.isEmpty() || !isBoundToUser(context, backingUid)) return
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val array = JSONArray(prefs.getString(KEY, "[]"))
         val next = JSONArray()
@@ -180,6 +192,16 @@ object CreditBackingStore {
         }
         next.put(JSONObject(backing))
         prefs.edit().putString(KEY, next.toString()).apply()
+    }
+
+    @Synchronized
+    fun isBoundToUser(context: Context, uid: String): Boolean {
+        val expectedUid = context.applicationContext
+            .getSharedPreferences("RevokeConfig", Context.MODE_PRIVATE)
+            .getString("revoke_uid", "")
+            ?.trim()
+            .orEmpty()
+        return expectedUid.isNotEmpty() && uid.trim().isNotEmpty() && expectedUid == uid.trim()
     }
 
     @Synchronized
@@ -200,11 +222,22 @@ object CreditBackingStore {
         }
         prefs.edit().putString(KEY, next.toString()).apply()
     }
+
+    @Synchronized
+    fun clearAll(context: Context) {
+        context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY)
+            .apply()
+    }
 }
 
 object CreditEvidenceRecorder {
     fun recordForeground(context: Context, packageName: String, violation: Boolean = false) {
         for (backing in CreditBackingStore.active(context)) {
+            val uid = backing.optString("uid").trim()
+            if (!CreditBackingStore.isBoundToUser(context, uid)) continue
             val apps = backing.optJSONArray("targetApps") ?: continue
             var targeted = false
             for (i in 0 until apps.length()) if (apps.optString(i) == packageName) targeted = true
@@ -214,6 +247,7 @@ object CreditEvidenceRecorder {
                     mapOf(
                         "backingId" to backing.optString("backingId"),
                         "commitmentId" to backing.optString("commitmentId"),
+                        "uid" to uid,
                         "eventType" to if (violation) "RULE_VIOLATION_OBSERVED" else "FOREGROUND_OBSERVED",
                         "packageName" to packageName,
                         "monitoringHealthy" to true,
@@ -225,6 +259,7 @@ object CreditEvidenceRecorder {
                         result["eventId"].toString(),
                         backing.optInt("lockedCredits", 0),
                         backing.optString("backingId"),
+                        uid,
                     )
                 }
             }
@@ -233,11 +268,14 @@ object CreditEvidenceRecorder {
 
     fun recordHealth(context: Context) {
         for (backing in CreditBackingStore.active(context)) {
+            val uid = backing.optString("uid").trim()
+            if (!CreditBackingStore.isBoundToUser(context, uid)) continue
             CreditEvidenceStore(context).use { store ->
                 store.append(
                     mapOf(
                         "backingId" to backing.optString("backingId"),
                         "commitmentId" to backing.optString("commitmentId"),
+                        "uid" to uid,
                         "eventType" to "MONITORING_HEALTH",
                         "monitoringHealthy" to true,
                     ),
@@ -252,7 +290,7 @@ object CreditLocalSettlement {
     private const val KEY = "pending_local_forfeitures"
 
     @Synchronized
-    fun record(context: Context, eventId: String, amount: Int, backingId: String) {
+    fun record(context: Context, eventId: String, amount: Int, backingId: String, uid: String) {
         if (eventId.isBlank() || backingId.isBlank() || amount <= 0) return
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val array = JSONArray(prefs.getString(KEY, "[]"))
@@ -262,6 +300,7 @@ object CreditLocalSettlement {
         array.put(JSONObject().apply {
             put("eventId", eventId)
             put("backingId", backingId)
+            put("uid", uid)
             put("amount", amount)
             put("state", "FAILURE_VERIFIED_LOCAL")
         })
@@ -277,6 +316,7 @@ object CreditLocalSettlement {
             mapOf(
                 "eventId" to item.optString("eventId"),
                 "backingId" to item.optString("backingId"),
+                "uid" to item.optString("uid"),
                 "amount" to item.optInt("amount"),
                 "state" to item.optString("state"),
             )

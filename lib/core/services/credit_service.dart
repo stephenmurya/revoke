@@ -289,6 +289,8 @@ class CreditService {
       final pending = await NativeBridge.getPendingCreditEvidence();
       final grouped = <String, List<Map<String, dynamic>>>{};
       for (final entry in pending) {
+        final entryUid = (entry['uid'] as String?)?.trim() ?? '';
+        if (_uid == null || entryUid.isEmpty || entryUid != _uid) continue;
         final backingId = (entry['backingId'] as String?)?.trim() ?? '';
         if (backingId.isEmpty) continue;
         grouped
@@ -321,7 +323,8 @@ class CreditService {
       for (final event in pending) {
         final backingId = (event['backingId'] as String?)?.trim() ?? '';
         final uid = _uid ?? FirebaseAuth.instance.currentUser?.uid;
-        if (uid == null || backingId.isEmpty) continue;
+        final eventUid = (event['uid'] as String?)?.trim() ?? '';
+        if (uid == null || backingId.isEmpty || eventUid != uid) continue;
         final backing = await _firestore
             .collection('users')
             .doc(uid)

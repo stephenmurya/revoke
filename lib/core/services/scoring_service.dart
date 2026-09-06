@@ -214,7 +214,7 @@ class ScoringService {
       final int focusScore =
           (snap.data()?['focusScore'] as num?)?.toInt() ?? _baselineScore;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('focus_score', focusScore);
+      await prefs.setInt('focus_score_$uid', focusScore);
     } catch (_) {}
   }
 

@@ -1,6 +1,6 @@
 # Engineering Status
 
-Last canonical update: 2026-09-05
+Last canonical update: 2026-09-06
 
 Source baseline: ../audits/2026-09-04-revival-audit.md.
 
@@ -148,3 +148,11 @@ Phase 4 users with an existing `firstCommitmentId` are migrated without creating
 ## Rule
 
 Do not mark a v2 feature implemented because a model, screen, or placeholder exists. Credit and Premium are repository code foundations with live Play, device, policy, and production gates still open. The server ledger remains canonical; the local wallet projection and `FAILURE_VERIFIED_LOCAL` state are provisional only.
+
+## Phase 11 reliability, security, migration, device, and release hardening
+
+Phase 11 hardened repository-verifiable boundaries without changing product scope or replacing the native enforcement architecture. Native and Flutter user-bound state now clears or scopes schedules, temporary unlocks, whitelist data, Credit backing snapshots, evidence, Tribunal outcome markers, and legacy Focus Score caches across account changes. Auth binds the native UID before account-scoped services publish state. Native evidence records carry a UID and client uploads are filtered to the current account.
+
+Credit evidence submission now uses an allowlisted client schema, rejects conflicting event-ID reuse, is idempotent for retries, and never accepts client-controlled trusted fields. Only server-trusted evidence may produce a final evidence outcome. Credit-backed Commitment creation is fail-closed by default through `REVOKE_CREDIT_BACKING_ENABLED` until a server-verifiable evidence path exists. Concurrent grace consumption and final settlement use one transaction over the latest backing, hold, and wallet state.
+
+The release APK and AAB build successfully and report compile/target SDK 36; resolved Billing Library is 8.0.0. `flutter analyze`, Android Kotlin compilation under JDK 17, and 11 pure backend tests pass. The Firestore emulator suite could not run because local port 8080 was occupied. Physical devices, OEM recovery, licensed Play lifecycle, RTDN, production signing, Play Integrity, policy/privacy, and operational gates remain unverified. Revoke is buildable and materially hardened, not production-ready. See `engineering/release-readiness.md`, `engineering/migration.md`, `engineering/device-test-matrix.md`, and `review/docs/phase-11-hardening.md`.

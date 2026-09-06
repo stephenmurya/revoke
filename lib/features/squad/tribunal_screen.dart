@@ -197,15 +197,20 @@ class _TribunalScreenState extends State<TribunalScreen> {
   }
 
   Future<bool> _hasAppliedOutcome(String pleaId) async {
+    final uid = AuthService.currentUser?.uid.trim();
+    if (uid == null || uid.isEmpty) return false;
     final prefs = await SharedPreferences.getInstance();
-    final ids = prefs.getStringList(_resolvedOutcomeKey) ?? const <String>[];
+    final ids =
+        prefs.getStringList('${_resolvedOutcomeKey}_$uid') ?? const <String>[];
     return ids.contains(pleaId);
   }
 
   Future<void> _markOutcomeApplied(String pleaId) async {
+    final uid = AuthService.currentUser?.uid.trim();
+    if (uid == null || uid.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final ids = List<String>.from(
-      prefs.getStringList(_resolvedOutcomeKey) ?? const <String>[],
+      prefs.getStringList('${_resolvedOutcomeKey}_$uid') ?? const <String>[],
     );
     if (!ids.contains(pleaId)) {
       ids.add(pleaId);
@@ -213,7 +218,7 @@ class _TribunalScreenState extends State<TribunalScreen> {
       if (ids.length > 200) {
         ids.removeRange(0, ids.length - 200);
       }
-      await prefs.setStringList(_resolvedOutcomeKey, ids);
+      await prefs.setStringList('${_resolvedOutcomeKey}_$uid', ids);
     }
   }
 

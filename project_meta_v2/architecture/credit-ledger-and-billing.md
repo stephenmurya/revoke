@@ -1,6 +1,6 @@
 # Commitment Credits, Ledger, and Google Play Billing
 
-Status: Canonical Revoke 2.0 architecture. Phase 7 repository code now implements the documented wallet, purchase, hold, backing, evidence-upload, settlement, reversal, and redemption boundary; live Google Play configuration and production proof remain incomplete. See `credit-backed-commitments.md` for implementation reality.
+Status: Canonical Revoke 2.0 architecture. Phase 7 repository code implements the documented wallet, purchase, hold, evidence-upload, settlement, reversal, and redemption boundary; Credit-backed Commitment activation is fail-closed by default pending server-verifiable evidence. Live Google Play configuration and production proof remain incomplete. See `credit-backed-commitments.md` for implementation reality.
 
 ## Product terminology and boundaries
 

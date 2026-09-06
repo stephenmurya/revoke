@@ -26,6 +26,9 @@ The Markdown files in this directory are the current review packet. The retained
 - [Phase 8 Commercial Onboarding](phase-8-commercial-onboarding.md): source implementation review for the coordinated first-run journey across Commitment drafting, authority, Circle, Premium, Credit backing, activation, migration, and resume behavior.
 - [Phase 9 Insights](phase-9-insights-implementation.md): source implementation review for direct usage evidence, supported ranges, Premium analysis, chart architecture, Focus Score cleanup, and deferred metrics.
 - [Phase 10 visual alignment and app-wide polish](phase-10-implementation.md): semantic Flutter refinement, native resource mapping, accessibility/code review, and deferred device verification.
+- [Phase 11 hardening](phase-11-hardening.md): reliability, account isolation, evidence trust, release artifacts, external gates, and adversarial review handoff.
+
+The final adversarial review handoff is [../final-review-handoff.md](../final-review-handoff.md). Release readiness, migration, and device gates are canonicalized under `project_meta_v2/engineering/`.
 
 ## Authority reminder
 

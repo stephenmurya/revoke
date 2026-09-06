@@ -1,6 +1,6 @@
 # Credit-backed Commitments — Phase 7 Boundary
 
-Status: Phase 7 repository implementation is present. Google Play configuration, licensed-device evidence testing, Play Integrity configuration, policy review, and production operational proof remain release gates.
+Status: Phase 7 repository implementation remains present, but Phase 11 has fail-closed Credit-backed Commitment activation until evidence can be server-verified. Google Play configuration, licensed-device evidence testing, Play Integrity configuration, policy review, and production operational proof remain release gates.
 
 ## Implemented boundary
 
@@ -12,9 +12,9 @@ The implementation uses the installed Google Publisher API's `purchases.products
 
 ## Backing and settlement
 
-`createCreditBacking` accepts only active Premium users, supported existing schedules, fixed initial lock amounts, healthy client preflight permissions, and an explicit backing-terms version. It snapshots the schedule rule and creates a hold and `CREDIT_LOCK` atomically with the wallet projection. It does not create a new native enforcement engine. `CreditBackingStore` synchronizes that snapshot to native Android so existing Accessibility enforcement can journal observations.
+The repository retains the `createCreditBacking` contract and its server-side ledger boundary, but the callable is disabled by default through `REVOKE_CREDIT_BACKING_ENABLED`. It must not be enabled merely because client preflight permissions or monitoring-health booleans are present. Once a reviewed server-verifiable evidence path exists, the existing callable can be re-evaluated against that gate. It does not create a new native enforcement engine. `CreditBackingStore` synchronizes a server snapshot to native Android so existing Accessibility enforcement can journal observations.
 
-`CreditEvidenceStore` is a durable SQLite append-only local journal with sequence and hash-chain fields. `RevokeAccessibilityService` records targeted foreground observations and positive block observations. Flutter uploads pending journal batches through `submitCreditEvidence`; the server never accepts a client-selected final outcome.
+`CreditEvidenceStore` is a durable, UID-bound SQLite append-only local journal with sequence and hash-chain fields. `RevokeAccessibilityService` records targeted foreground observations and positive block observations. Flutter uploads pending journal batches through `submitCreditEvidence`; the server allowlists client fields, marks them untrusted, and never accepts a client-selected final outcome.
 
 Settlement is server-canonical. The default resolver waits until the authoritative end plus 24 hours, remains configurable per backing, and then releases on success or uncertainty. Verified failure can consume configured grace before `CREDIT_FORFEITURE`. Offline native failure observations create a local `FAILURE_VERIFIED_LOCAL` projection and a durable pending reconciliation record; the server re-evaluates evidence before final settlement. Wipe/reinstall before synchronization may lose that local event and is an explicitly accepted v2 risk.
 
